@@ -1,6 +1,6 @@
 import os
 from flask import Blueprint, jsonify, request
-from bose_worker import BoseSoundTouchWorker
+from core.bose_worker import BoseSoundTouchWorker
 
 # Initialize the blueprint
 bose_control_bp = Blueprint('bose_control', __name__)
@@ -52,4 +52,11 @@ def get_status():
         "bose_source": now_playing.get("source", "UNKNOWN"),
         "track": now_playing.get("track", ""),
         "artist": now_playing.get("artist", "")
+    })
+
+@bose_control_bp.route("/is_on")
+def check_power():
+    """Returns a JSON payload indicating if the speaker is turned on."""
+    return jsonify({
+        "is_on": bose.is_on()
     })

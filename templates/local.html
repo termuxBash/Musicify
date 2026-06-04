@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Stream Station Pro</title>
+
+<style>
+:root{
+    --green:#1db954;
+    --bg:#0f0c29;
+    --panel:#121212;
+    --card:#1a1a1a;
+    --border:#2a2a2a;
+    --danger:#d32f2f;
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+}
+
+body{
+    font-family:-apple-system,sans-serif;
+    background:var(--bg);
+    color:white;
+    overflow-x:hidden;
+}
+
+/* NAV */
+nav{
+    position:fixed;
+    top:0;
+    width:100%;
+    height:60px;
+    background:rgba(0,0,0,0.9);
+    backdrop-filter:blur(10px);
+    display:flex;
+    align-items:center;
+    padding:0 15px;
+    border-bottom:1px solid var(--border);
+    z-index:1000;
+}
+
+.menu{
+    font-size:24px;
+    color:var(--green);
+    cursor:pointer;
+    margin-right:10px;
+}
+
+.brand{
+    font-weight:bold;
+    color:var(--green);
+}
+
+/* OVERLAY */
+.overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    display:none;
+    z-index:1500;
+}
+.overlay.show{display:block;}
+
+/* SIDE PANEL */
+.side-panel{
+    position:fixed;
+    top:0;
+    left:-300px;
+    width:280px;
+    height:100%;
+    background:var(--panel);
+    transition:0.3s ease;
+    z-index:2000;
+    padding:15px;
+    border-right:1px solid var(--border);
+}
+
+.side-panel.open{left:0;}
+
+.drawer-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+}
+
+/* MAIN */
+.main{
+    padding:80px 15px 160px; /* bottom space for player bar */
+    max-width:1200px;
+    margin:0 auto;
+    transition:margin-left 0.3s ease;
+}
+
+.main.shift{
+    margin-left:280px;
+}
+
+/* FILE GRID */
+.file-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+    gap:12px;
+}
+
+.file-card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:12px;
+    text-align:center;
+}
+
+.file-icon{
+    font-size:28px;
+    margin-bottom:8px;
+}
+
+.file-name{
+    font-size:12px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.btn{
+    margin-top:8px;
+    width:100%;
+    padding:7px;
+    border:none;
+    border-radius:20px;
+    background:#333;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.btn:hover{
+    background:var(--green);
+}
+
+/* PATH */
+.path{
+    margin-bottom:15px;
+    font-size:13px;
+    color:#aaa;
+}
+
+/* ---------------- PLAYER BAR (KEPT FROM YOUR FIRST DESIGN STYLE) ---------------- */
+.player-bar{
+    position:fixed;
+    bottom:0;
+    left:0;
+    width:100%;
+    background:#000;
+    border-top:2px solid var(--green);
+    padding:10px 15px;
+    z-index:1000;
+}
+
+/* TOP ROW */
+.player-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+}
+
+.now-playing{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    overflow:hidden;
+}
+
+.now-playing img{
+    width:45px;
+    height:45px;
+    border-radius:6px;
+    background:#222;
+}
+
+.now-playing h4{
+    font-size:0.8rem;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.now-playing p{
+    font-size:0.65rem;
+    color:var(--green);
+}
+
+.btn-group{
+    display:flex;
+    gap:8px;
+}
+
+.ctrl-btn{
+    border:none;
+    padding:8px 12px;
+    border-radius:18px;
+    font-weight:bold;
+    cursor:pointer;
+    font-size:0.75rem;
+}
+
+.skip{background:var(--green);color:white;}
+.power{background:var(--danger);color:white;}
+
+/* BOTTOM ROW */
+.player-bottom{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+}
+
+.volume{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:#111;
+    padding:5px 10px;
+    border-radius:20px;
+}
+
+.vol-btn{
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    border:none;
+    background:#333;
+    color:white;
+    cursor:pointer;
+}
+
+#vol{
+    width:100px;
+    accent-color:var(--green);
+}
+
+/* RESPONSIVE DRAWER FIX */
+@media(max-width:768px){
+    .side-panel{
+        width:100%;
+        left:-100%;
+    }
+
+    .main.shift{
+        margin-left:0;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+
+<!-- NAV -->
+<nav>
+    <div class="menu" onclick="toggleMenu()">☰</div>
+    <div class="brand">Stream Station</div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+
+    <div style="font-family:monospace;font-size:12px;color:#aaa;background:rgba(29,185,84,0.1);padding:5px 10px;border-radius:15px;">
+        CPU: <span id="cpu">0%</span>
+    </div>
+
+</div>
+</nav>
+
+<!-- SIDE -->
+<div class="side-panel" id="sidePanel">
+    <div class="drawer-header">
+        <h3>Library</h3>
+        <span onclick="toggleMenu()" style="cursor:pointer;font-size:22px">✕</span>
+    </div>
+    <p style="font-size:12px;color:#777;">Navigation</p>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="main">
+
+    <div class="path">
+        Explorer: /{{ current_path }}
+    </div>
+
+    {% if current_path != "" %}
+    <button class="btn" onclick="window.location.href='/browse/{{ parent or '' }}'">⬅ Back</button>
+    {% endif %}
+
+    <div style="margin:10px 0;">
+        <button class="btn" style="background:var(--green)" onclick="playCurrentFolder('{{ current_path }}')">
+            ▶ Play Folder
+        </button>
+    </div>
+
+    <div class="file-grid">
+        {% for item in items %}
+        <div class="file-card">
+            <div class="file-icon">
+                {{ "📁" if item.is_dir else "🎵" }}
+            </div>
+
+            <div class="file-name">
+                {% if item.is_dir %}
+                <a href="/browse/{{ item.rel_path }}" style="color:white;text-decoration:none">
+                    {{ item.name }}
+                </a>
+                {% else %}
+                    {{ item.name }}
+                {% endif %}
+            </div>
+
+            {% if not item.is_dir %}
+            <button class="btn" onclick="playNow('{{ item.rel_path }}')">Play</button>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<!-- PLAYER BAR (RESTORED) -->
+<div class="player-bar">
+
+    <div class="player-top">
+        <div class="now-playing">
+            <img id="thumb">
+            <div>
+                <p id="status">IDLE</p>
+                <h4 id="title">Ready</h4>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="ctrl-btn skip" onclick="send('next')">⏭</button>
+            <button class="ctrl-btn power" onclick="send('bose_power')">⏻</button>
+        </div>
+    </div>
+
+    <div class="player-bottom">
+        <div class="volume">
+            <button class="vol-btn" onclick="send('vol_down')">-</button>
+            <input id="vol" type="range" min="0" max="100" onchange="setVol(this.value)">
+            <button class="vol-btn" onclick="send('vol_up')">+</button>
+            <span id="vol-val">0%</span>
+        </div>
+        <span style="font-size:11px;color:#666;">SYSTEM</span>
+    </div>
+
+</div>
+
+<script>
+const panel=document.getElementById("sidePanel");
+const overlay=document.getElementById("overlay");
+const main=document.getElementById("main");
+
+function toggleMenu(){
+    panel.classList.toggle("open");
+    overlay.classList.toggle("show");
+
+    if(window.innerWidth>=768){
+        main.classList.toggle("shift");
+    }
+}
+
+/* API */
+const baseURL="{{ base_url }}";
+
+function send(c){ fetch(baseURL+'/control/'+c); }
+function setVol(v){ fetch(baseURL+'/set_volume/'+v); }
+
+function playNow(p){
+    fetch(baseURL+'/play_now',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({path:p})
+    });
+}
+
+function playCurrentFolder(p){
+    fetch(baseURL+'/play_folder',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({path:p})
+    });
+}
+
+setInterval(async () => {
+    try {
+        const res = await fetch(baseURL + "/get_status");
+        const data = await res.json();
+
+        document.getElementById("cpu").innerText = data.cpu + "%";
+        document.getElementById("volLabel").innerText = data.volume + "%";
+
+        // sync slider if needed
+        const vol = document.getElementById("vol");
+        if (document.activeElement !== vol) {
+            vol.value = data.volume;
+        }
+
+    } catch(e){}
+}, 1500);
+</script>
+
+</body>
+</html>
