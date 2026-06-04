@@ -1,12 +1,16 @@
+# core/session.py
+
 class StreamSession:
 
-    def __init__(self):
+    def __init__(self, owner, source_type, source):
 
-        self.owner = None
-        self.track = None
+        self.owner = owner
 
-        self.ffmpeg_process = None
+        self.source_type = source_type
+        # youtube | file
 
-        self.helper_processes = []
+        self.source = source
+
+        self.process = None
 
         self.started_at = None

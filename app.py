@@ -11,6 +11,8 @@ def create_app():
     app.register_blueprint(local_bp, url_prefix='/local')
     app.register_blueprint(youtube_bp, url_prefix='/youtube')
 
+    # Register the shared bose control routes under a unified prefix
+    app.register_blueprint(bose_control_bp, url_prefix='/bose')
     return app
 
 if __name__ == "__main__":
