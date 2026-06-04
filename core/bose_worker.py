@@ -79,6 +79,18 @@ class BoseSoundTouchWorker:
         """Sends the discrete MUTE keystroke sequence."""
         return self.send_key("MUTE")
 
+    def select_source(self, source_name):
+        """Selects an input source (BLUETOOTH, AUX, etc.)."""
+        url = f"{self.base_url}/sources"
+        headers = {'Content-Type': 'application/xml'}
+        source_xml = f'<source>{source_name}</source>'
+        try:
+            r = requests.post(url, data=source_xml, headers=headers, timeout=3)
+            return r.status_code == 200
+        except Exception as e:
+            print(f"[Bose Worker] Failed selecting source {source_name}: {e}")
+            return False
+
     def get_now_playing(self):
         """
         Retrieves the current source and metadata mapping.

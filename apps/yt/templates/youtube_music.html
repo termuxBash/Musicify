@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🎧 Musicify - YouTube</title>
+    <style>
+        :root {
+            --primary: #1db954;
+            --danger: #d32f2f;
+            --bg-dark: #0f0c29;
+            --panel-bg: #121212;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: 'Poppins', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: white;
+            overflow-x: hidden;
+            height: 100vh;
+            transition: opacity 0.3s ease;
+        }
+
+        /* --- Navigation --- */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            border-bottom: 1px solid #333;
+        }
+
+        .menu-toggle {
+            font-size: 24px;
+            cursor: pointer;
+            margin-right: 15px;
+            color: var(--primary);
+        }
+
+        .nav-title {
+            color: var(--primary);
+            font-weight: bold;
+            flex: 1;
+        }
+
+        .system-monitor {
+            margin-left: auto;
+            font-family: monospace;
+            font-size: 0.8rem;
+            background: rgba(29, 185, 84, 0.1);
+            padding: 5px 10px;
+            border-radius: 15px;
+            display: flex;
+            gap: 15px;
+        }
+
+        /* --- Side Panel --- */
+        .side-panel {
+            position: fixed;
+            top: 0;
+            left: -100%;
+            width: 300px;
+            height: 100%;
+            background: var(--panel-bg);
+            z-index: 2000;
+            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 20px;
+            box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            padding-top: 80px;
+        }
+
+        .side-panel.open {
+            left: 0;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1500;
+            display: none;
+        }
+
+        .overlay.show {
+            display: block;
+        }
+
+        .queue-list {
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .queue-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--primary);
+        }
+
+        .queue-item p {
+            font-size: 0.75rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        /* --- Main Content --- */
+        .main-content {
+            padding: 80px 20px 140px;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 30px;
+        }
+
+        .search-form input {
+            flex: 1;
+            padding: 12px 20px;
+            border-radius: 25px;
+            border: 1px solid #444;
+            background: #1a1a1a;
+            color: white;
+            outline: none;
+        }
+
+        .search-form button {
+            background: var(--primary);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .search-form button:hover {
+            background: #1fa847;
+            transform: translateY(-2px);
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 15px;
+        }
+
+        .song-card {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+
+        .song-card:hover {
+            background: #222;
+            border-left-color: var(--primary);
+            transform: translateY(-5px);
+        }
+
+        .song-card p {
+            font-size: 0.8rem;
+            margin: 10px 0;
+            height: 32px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .btn {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #1fa847;
+        }
+
+        .btn.queued {
+            background: #444;
+        }
+
+        /* --- Player Bar --- */
+        .player-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 110px;
+            background: #000;
+            border-top: 2px solid var(--primary);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 10px 15px;
+            z-index: 1000;
+        }
+
+        .player-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .now-playing {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .now-playing-info h4 {
+            font-size: 0.8rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--primary);
+        }
+
+        .now-playing-info p {
+            font-size: 0.65rem;
+            color: #aaa;
+        }
+
+        .player-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .volume-cluster {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #111;
+            padding: 5px 10px;
+            border-radius: 20px;
+        }
+
+        .vol-btn {
+            background: #333;
+            border: none;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .vol-btn:hover {
+            background: #444;
+        }
+
+        #vol-slider {
+            accent-color: var(--primary);
+            width: 80px;
+            cursor: pointer;
+        }
+
+        #vol-val {
+            font-family: monospace;
+            font-size: 0.75rem;
+            min-width: 35px;
+            text-align: center;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .skip-btn {
+            background: var(--primary);
+            border: none;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .power-btn {
+            background: var(--danger);
+            border: none;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        /* --- Modal --- */
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--panel-bg);
+            padding: 30px;
+            border-radius: 12px;
+            z-index: 3000;
+            min-width: 300px;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            display: none;
+            border: 2px solid var(--primary);
+        }
+
+        .modal.show {
+            display: block;
+        }
+
+        .modal h2 {
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+
+        .modal p {
+            margin-bottom: 10px;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+            background: var(--primary);
+            border: none;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .modal-actions .btn-alt {
+            background: #333;
+        }
+
+        @media (min-width: 1024px) {
+            .side-panel {
+                left: 0;
+                width: 350px;
+                position: relative;
+                height: auto;
+                background: transparent;
+                padding-top: 0;
+                margin-top: 60px;
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .menu-toggle {
+                display: none;
+            }
+
+            .player-bar {
+                flex-direction: row;
+                height: 90px;
+            }
+
+            #vol-slider {
+                width: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+
+    <nav>
+        <div class="menu-toggle" onclick="toggleMenu()">☰</div>
+        <h3 class="nav-title">🎵 Musicify - YouTube</h3>
+        <div class="system-monitor">
+            <div>CPU: <span id="cpu-load">0%</span></div>
+            <div>Memory: <span id="memory-load">0%</span></div>
+        </div>
+    </nav>
+
+    <div class="side-panel" id="sidePanel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3>Queue</h3>
+            <span onclick="toggleMenu()" style="cursor: pointer; font-size: 24px;">✕</span>
+        </div>
+        <div class="queue-list" id="queueList">
+            <p style="color: #666; text-align: center; margin-top: 40px;">No songs queued.</p>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <form class="search-form" id="searchForm">
+            <input type="text" name="query" placeholder="Search YouTube Music..." required>
+            <button type="submit">🔍</button>
+        </form>
+        <div class="results-grid" id="results"></div>
+    </div>
+
+    <!-- Player Bar -->
+    <div class="player-bar">
+        <div class="player-top">
+            <div class="now-playing">
+                <div class="now-playing-info">
+                    <h4 id="playing-title">Nothing playing</h4>
+                    <p id="playing-artist">YouTube</p>
+                </div>
+            </div>
+            <button class="skip-btn" onclick="stopPlayback()">Stop</button>
+        </div>
+        <div class="player-bottom">
+            <div class="volume-cluster">
+                <button class="vol-btn" onclick="volumeDown()">-</button>
+                <input type="range" id="vol-slider" min="0" max="100" value="50" onchange="setVolume(this.value)">
+                <button class="vol-btn" onclick="volumeUp()">+</button>
+                <span id="vol-val">50</span>
+            </div>
+            <div class="btn-group">
+                <button class="skip-btn" onclick="playOrPause()" id="play-btn">▶</button>
+                <button class="power-btn" onclick="toggleBosePower()">Power</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lock Conflict Modal -->
+    <div class="modal" id="lockModal">
+        <h2>⚠️ Streaming Conflict</h2>
+        <p id="lock-message"></p>
+        <div class="modal-actions">
+            <button class="btn-alt" onclick="closeLockModal()">Cancel</button>
+            <button onclick="takeLockControl()">Take Control</button>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = '/youtube';
+        let isPlaying = false;
+
+        // Toggle menu
+        function toggleMenu() {
+            const panel = document.getElementById('sidePanel');
+            const overlay = document.getElementById('overlay');
+            panel.classList.toggle('open');
+            overlay.classList.toggle('show');
+        }
+
+        // Search handler
+        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = e.target.querySelector('input[name="query"]').value;
+            
+            const result = await checkLockAndAcquire('youtube');
+            if (!result.acquired && result.owner !== 'youtube') {
+                showLockConflict(result.owner);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+                const data = await response.json();
+
+                if (data.results) {
+                    renderResults(data.results);
+                }
+            } catch (e) {
+                console.error('Search error:', e);
+            }
+        });
+
+        // Render search results
+        function renderResults(results) {
+            const container = document.getElementById('results');
+            container.innerHTML = '';
+
+            for (const result of results) {
+                const card = document.createElement('div');
+                card.className = 'song-card';
+                card.innerHTML = `
+                    <p><strong>${result.title}</strong></p>
+                    <p style="color: #aaa; font-size: 0.7rem;">${result.duration || ''}</p>
+                    <button class="btn" onclick="queueSong('${result.url}', '${result.title}')">+ Queue</button>
+                `;
+                container.appendChild(card);
+            }
+        }
+
+        // Queue song
+        async function queueSong(url, title) {
+            const result = await checkLockAndAcquire('youtube');
+            if (!result.acquired && result.owner !== 'youtube') {
+                showLockConflict(result.owner);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/play`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+                const data = await response.json();
+                updateStatus();
+            } catch (e) {
+                console.error('Queue error:', e);
+            }
+        }
+
+        // Check and acquire lock
+        async function checkLockAndAcquire(owner) {
+            try {
+                const response = await fetch(`/bose/lock/acquire?owner=${owner}`);
+                return await response.json();
+            } catch (e) {
+                console.error('Error acquiring lock:', e);
+                return { acquired: false };
+            }
+        }
+
+        // Force take control
+        async function takeLockControl() {
+            try {
+                const response = await fetch(`/bose/lock/force-acquire?owner=youtube`);
+                const data = await response.json();
+                if (data.acquired) {
+                    closeLockModal();
+                    updateStatus();
+                }
+            } catch (e) {
+                console.error('Error taking control:', e);
+            }
+        }
+
+        // Show lock conflict modal
+        function showLockConflict(currentOwner) {
+            const modal = document.getElementById('lockModal');
+            const message = document.getElementById('lock-message');
+            const appName = currentOwner === 'local' ? 'Local Music' : 'another app';
+            message.textContent = `The ${appName} is currently using the music player. Do you want to take control and interrupt their stream?`;
+            modal.classList.add('show');
+        }
+
+        // Close lock modal
+        function closeLockModal() {
+            document.getElementById('lockModal').classList.remove('show');
+        }
+
+        // Playback controls
+        async function playOrPause() {
+            try {
+                await fetch(`${BASE_URL}/toggle`, { method: 'POST' });
+                updateStatus();
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function stopPlayback() {
+            try {
+                await fetch(`${BASE_URL}/stop`, { method: 'POST' });
+                updateStatus();
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function volumeUp() {
+            try {
+                await fetch(`/bose/ctrl/vol_up`);
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function volumeDown() {
+            try {
+                await fetch(`/bose/ctrl/vol_down`);
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function setVolume(value) {
+            try {
+                await fetch(`/bose/set_volume/${value}`);
+                document.getElementById('vol-val').textContent = value;
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function toggleBosePower() {
+            try {
+                await fetch(`/bose/ctrl/bose_power`);
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        // Update status
+        async function updateStatus() {
+            try {
+                const response = await fetch(`${BASE_URL}/status`);
+                const data = await response.json();
+
+                document.getElementById('playing-title').textContent = data.current_title || 'Nothing playing';
+                isPlaying = data.is_playing;
+                document.getElementById('play-btn').textContent = isPlaying ? '⏸' : '▶';
+
+                // Update queue
+                const queueList = document.getElementById('queueList');
+                if (data.queue && data.queue.length > 0) {
+                    queueList.innerHTML = data.queue.map((item, i) => 
+                        `<div class="queue-item"><p>${i + 1}. ${item}</p></div>`
+                    ).join('');
+                } else {
+                    queueList.innerHTML = '<p style="color: #666; text-align: center;">No songs queued.</p>';
+                }
+            } catch (e) {
+                console.error('Error updating status:', e);
+            }
+        }
+
+        // Monitor system resources
+        async function updateMonitoring() {
+            try {
+                const response = await fetch('/core/system-monitor');
+                const data = await response.json();
+                document.getElementById('cpu-load').textContent = data.cpu + '%';
+                document.getElementById('memory-load').textContent = data.memory + '%';
+            } catch (e) {
+                console.error('Error updating monitoring:', e);
+            }
+        }
+
+        // Initialize
+        updateStatus();
+        setInterval(updateStatus, 1000);
+        setInterval(updateMonitoring, 2000);
+    </script>
+
+</body>
+</html>

@@ -1,6 +1,7 @@
 import os
 from flask import Blueprint, jsonify, request
-from bose_worker import BoseSoundTouchWorker
+from core.bose_worker import BoseSoundTouchWorker
+from core.lock_manager import ffmpeg_lock
 
 # Initialize the blueprint
 bose_control_bp = Blueprint('bose_control', __name__)
@@ -53,3 +54,35 @@ def get_status():
         "track": now_playing.get("track", ""),
         "artist": now_playing.get("artist", "")
     })
+
+
+# ========== Lock Management Endpoints ==========
+
+@bose_control_bp.route("/lock/acquire", methods=['GET'])
+def acquire_lock():
+    """Try to acquire FFmpeg worker lock"""
+    owner = request.args.get('owner', 'unknown')
+    result = ffmpeg_lock.acquire(owner)
+    return jsonify(result)
+
+
+@bose_control_bp.route("/lock/force-acquire", methods=['GET'])
+def force_acquire_lock():
+    """Force acquire the FFmpeg worker lock (user takeover)"""
+    owner = request.args.get('owner', 'unknown')
+    result = ffmpeg_lock.force_acquire(owner)
+    return jsonify(result)
+
+
+@bose_control_bp.route("/lock/release", methods=['GET'])
+def release_lock():
+    """Release the FFmpeg worker lock"""
+    owner = request.args.get('owner', 'unknown')
+    result = ffmpeg_lock.release(owner)
+    return jsonify(result)
+
+
+@bose_control_bp.route("/lock/status", methods=['GET'])
+def lock_status():
+    """Get current lock status"""
+    return jsonify(ffmpeg_lock.get_status())

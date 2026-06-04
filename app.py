@@ -1,7 +1,8 @@
 from flask import Flask
 from core.routes import core_bp
-from apps.local_music.routes import local_bp
-from apps.youtube_music.routes import youtube_bp
+from core.bose_routes import bose_control_bp
+from apps.local.routes import local_bp
+from apps.yt.routes import youtube_bp
 
 def create_app():
     app = Flask(__name__)

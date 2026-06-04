@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Musicify - Local</title>
+    <style>
+        :root {
+            --primary: #1DB954;
+            --danger: #d32f2f;
+            --bg-dark: #0f0c29;
+            --bg-panel: #121212;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Poppins', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- Navigation Bar --- */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            border-bottom: 1px solid #333;
+        }
+
+        .nav-title {
+            color: var(--primary);
+            font-weight: bold;
+            flex: 1;
+        }
+
+        .system-monitor {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-family: monospace;
+            font-size: 0.85rem;
+            background: rgba(29, 185, 84, 0.1);
+            padding: 8px 15px;
+            border-radius: 20px;
+        }
+
+        .monitor-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* --- Main Content --- */
+        .main-content {
+            padding: 80px 20px 150px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+
+        .breadcrumb a {
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumb span {
+            color: #aaa;
+        }
+
+        /* --- File Browser --- */
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .file-item:hover {
+            background: #222;
+            border-left-color: var(--primary);
+        }
+
+        .file-item.folder {
+            border-left-color: var(--primary);
+        }
+
+        .file-item-name {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .file-item-name span {
+            font-size: 1.2rem;
+        }
+
+        .file-item-name p {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-item-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #1fa847;
+            transform: translateY(-2px);
+        }
+
+        .btn-alt {
+            background: #333;
+        }
+
+        .btn-alt:hover {
+            background: #444;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+        }
+
+        .btn-danger:hover {
+            background: #b71c1c;
+        }
+
+        /* --- Player Bar --- */
+        .player-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 130px;
+            background: #000;
+            border-top: 2px solid var(--primary);
+            padding: 15px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .now-playing {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .now-playing-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .now-playing-info h4 {
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--primary);
+        }
+
+        .now-playing-info p {
+            font-size: 0.75rem;
+            color: #aaa;
+        }
+
+        .player-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #1a1a1a;
+            padding: 8px 12px;
+            border-radius: 20px;
+        }
+
+        #volume-slider {
+            width: 80px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        #volume-value {
+            font-family: monospace;
+            font-size: 0.8rem;
+            min-width: 35px;
+            text-align: center;
+        }
+
+        /* --- Sidebar Queue --- */
+        .sidebar {
+            position: fixed;
+            left: -300px;
+            top: 0;
+            width: 300px;
+            height: 100vh;
+            background: var(--bg-panel);
+            z-index: 1500;
+            transition: left 0.3s ease;
+            padding-top: 60px;
+            border-right: 1px solid #333;
+            overflow-y: auto;
+        }
+
+        .sidebar.open {
+            left: 0;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+
+        .sidebar-content {
+            padding: 15px;
+        }
+
+        .queue-item {
+            background: #1a1a1a;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 3px solid var(--primary);
+            font-size: 0.85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1400;
+            display: none;
+        }
+
+        .overlay.show {
+            display: block;
+        }
+
+        /* --- Modal --- */
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg-panel);
+            padding: 30px;
+            border-radius: 12px;
+            z-index: 2000;
+            min-width: 300px;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            display: none;
+            border: 2px solid var(--primary);
+        }
+
+        .modal.show {
+            display: block;
+        }
+
+        .modal h2 {
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+
+        .modal p {
+            margin-bottom: 10px;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+        }
+
+        @media (max-width: 768px) {
+            .system-monitor {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .player-bar {
+                height: auto;
+            }
+
+            .file-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .file-item-actions {
+                width: 100%;
+                margin-top: 10px;
+            }
+
+            .file-item-actions button {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navigation -->
+    <nav>
+        <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+            <button class="btn btn-alt" onclick="toggleSidebar()" style="width: 45px; padding: 0;">☰</button>
+            <h1 class="nav-title">🎵 Musicify - Local</h1>
+        </div>
+        <div class="system-monitor">
+            <div class="monitor-item">
+                <span>CPU:</span>
+                <span id="cpu-monitor">0%</span>
+            </div>
+            <div class="monitor-item">
+                <span>Memory:</span>
+                <span id="memory-monitor">0%</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar Queue -->
+    <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h3>Queue</h3>
+            <span onclick="toggleSidebar()" style="cursor: pointer; font-size: 24px;">✕</span>
+        </div>
+        <div class="sidebar-content">
+            <div id="queue-list">
+                <p style="color: #666; text-align: center;">Queue is empty</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="breadcrumb" id="breadcrumb">
+            <span>📁 Folder:</span>
+            <a onclick="navigateTo('')">Home</a>
+        </div>
+
+        <div class="file-list" id="file-list">
+            <p style="color: #666; text-align: center;">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Player Bar -->
+    <div class="player-bar">
+        <div class="now-playing">
+            <div class="now-playing-info">
+                <h4 id="now-playing-title">Nothing playing</h4>
+                <p id="now-playing-path"></p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn" onclick="playOrPause()" id="play-btn">▶</button>
+                <button class="btn btn-danger" onclick="stopPlayback()">Stop</button>
+            </div>
+        </div>
+
+        <div class="player-controls">
+            <button class="btn btn-alt" onclick="volumeDown()">Vol -</button>
+            <div class="volume-control">
+                <input type="range" id="volume-slider" min="0" max="100" value="50" onchange="setVolume(this.value)">
+                <span id="volume-value">50</span>
+            </div>
+            <button class="btn btn-alt" onclick="volumeUp()">Vol +</button>
+        </div>
+    </div>
+
+    <!-- Lock Conflict Modal -->
+    <div class="modal" id="lockModal">
+        <h2>⚠️ Streaming Conflict</h2>
+        <p id="lock-message"></p>
+        <div class="modal-actions">
+            <button class="btn btn-alt" onclick="closeLockModal()">Cancel</button>
+            <button class="btn" onclick="takeLockControl()">Take Control</button>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = '/local';
+        let currentPath = '';
+        let isPlaying = false;
+
+        // Toggle Sidebar
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('overlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('show');
+        }
+
+        // Navigate to folder
+        function navigateTo(path) {
+            currentPath = path;
+            loadFileList(path);
+        }
+
+        // Load file list for current path
+        async function loadFileList(path) {
+            try {
+                const response = await fetch(`${BASE_URL}/browse?path=${encodeURIComponent(path)}`);
+                const data = await response.json();
+
+                // Update breadcrumb
+                const breadcrumb = document.getElementById('breadcrumb');
+                breadcrumb.innerHTML = '<span>📁 Folder:</span><a onclick="navigateTo(\'\')">Home</a>';
+                
+                if (path) {
+                    const parts = path.split('/').filter(p => p);
+                    let current = '';
+                    for (const part of parts) {
+                        current += part + '/';
+                        breadcrumb.innerHTML += ` / <a onclick="navigateTo('${current.slice(0, -1)}')">${part}</a>`;
+                    }
+                }
+
+                // Render file list
+                const fileList = document.getElementById('file-list');
+                fileList.innerHTML = '';
+
+                for (const item of data.items) {
+                    const div = document.createElement('div');
+                    div.className = `file-item ${item.is_dir ? 'folder' : ''}`;
+                    
+                    const icon = item.is_dir ? '📁' : '🎵';
+                    const name = item.name;
+                    const relPath = item.rel_path;
+
+                    div.innerHTML = `
+                        <div class="file-item-name" onclick="${item.is_dir ? `navigateTo('${relPath}')` : ''}">
+                            <span>${icon}</span>
+                            <p>${name}</p>
+                        </div>
+                        <div class="file-item-actions">
+                            ${item.is_dir ? `
+                                <button class="btn btn-alt" onclick="playFolder('${relPath}')">Play Folder</button>
+                            ` : `
+                                <button class="btn" onclick="playFile('${relPath}')">Play</button>
+                            `}
+                        </div>
+                    `;
+                    fileList.appendChild(div);
+                }
+            } catch (e) {
+                console.error('Error loading files:', e);
+                document.getElementById('file-list').innerHTML = '<p style="color: #f44">Error loading files</p>';
+            }
+        }
+
+        // Play file
+        async function playFile(relPath) {
+            const result = await checkLockAndAcquire('local');
+            if (!result.acquired && result.owner !== 'local') {
+                showLockConflict(result.owner);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/play`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: relPath })
+                });
+                const data = await response.json();
+                updateStatus();
+            } catch (e) {
+                console.error('Error playing file:', e);
+            }
+        }
+
+        // Play folder
+        async function playFolder(folderPath) {
+            const result = await checkLockAndAcquire('local');
+            if (!result.acquired && result.owner !== 'local') {
+                showLockConflict(result.owner);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/play_folder`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: folderPath })
+                });
+                const data = await response.json();
+                updateStatus();
+            } catch (e) {
+                console.error('Error playing folder:', e);
+            }
+        }
+
+        // Check and acquire lock
+        async function checkLockAndAcquire(owner) {
+            try {
+                const response = await fetch(`/bose/lock/acquire?owner=${owner}`);
+                return await response.json();
+            } catch (e) {
+                console.error('Error acquiring lock:', e);
+                return { acquired: false };
+            }
+        }
+
+        // Force take control
+        async function takeLockControl() {
+            try {
+                const response = await fetch(`/bose/lock/force-acquire?owner=local`);
+                const data = await response.json();
+                if (data.acquired) {
+                    closeLockModal();
+                    updateStatus();
+                }
+            } catch (e) {
+                console.error('Error taking control:', e);
+            }
+        }
+
+        // Show lock conflict modal
+        function showLockConflict(currentOwner) {
+            const modal = document.getElementById('lockModal');
+            const message = document.getElementById('lock-message');
+            message.textContent = `The YouTube app is currently using the music player. Do you want to take control and interrupt their stream?`;
+            modal.classList.add('show');
+        }
+
+        // Close lock modal
+        function closeLockModal() {
+            document.getElementById('lockModal').classList.remove('show');
+        }
+
+        // Control playback
+        async function playOrPause() {
+            try {
+                await fetch(`${BASE_URL}/toggle`, { method: 'POST' });
+                updateStatus();
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function stopPlayback() {
+            try {
+                await fetch(`${BASE_URL}/stop`, { method: 'POST' });
+                updateStatus();
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function volumeUp() {
+            try {
+                await fetch(`/bose/ctrl/vol_up`);
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function volumeDown() {
+            try {
+                await fetch(`/bose/ctrl/vol_down`);
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function setVolume(value) {
+            try {
+                await fetch(`/bose/set_volume/${value}`);
+                document.getElementById('volume-value').textContent = value;
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        // Update status
+        async function updateStatus() {
+            try {
+                const response = await fetch(`${BASE_URL}/status`);
+                const data = await response.json();
+
+                document.getElementById('now-playing-title').textContent = data.current_file || 'Nothing playing';
+                document.getElementById('now-playing-path').textContent = data.current_file ? 'Playing...' : '';
+                isPlaying = data.is_playing;
+                document.getElementById('play-btn').textContent = isPlaying ? '⏸' : '▶';
+
+                // Update queue
+                const queueList = document.getElementById('queue-list');
+                if (data.queue && data.queue.length > 0) {
+                    queueList.innerHTML = data.queue.map((item, i) => 
+                        `<div class="queue-item">${i + 1}. ${item}</div>`
+                    ).join('');
+                } else {
+                    queueList.innerHTML = '<p style="color: #666; text-align: center;">Queue is empty</p>';
+                }
+            } catch (e) {
+                console.error('Error updating status:', e);
+            }
+        }
+
+        // Monitor system resources
+        async function updateMonitoring() {
+            try {
+                const response = await fetch('/core/system-monitor');
+                const data = await response.json();
+                document.getElementById('cpu-monitor').textContent = data.cpu + '%';
+                document.getElementById('memory-monitor').textContent = data.memory + '%';
+            } catch (e) {
+                console.error('Error updating monitoring:', e);
+            }
+        }
+
+        // Initialize
+        loadFileList('');
+        updateStatus();
+        setInterval(updateStatus, 1000);
+        setInterval(updateMonitoring, 2000);
+    </script>
+
+</body>
+</html>
