@@ -37,7 +37,7 @@ def ctrl(cmd):
 
     return jsonify({"status": status})
 
-@bose_control_bp.route("/set_volume/<int:level>")
+@bose_control_bp.route("/set_vol/<int:level>")
 def set_volume(level):
     """Directly sets volume level (0-100)."""
     success = bose.set_volume(level)

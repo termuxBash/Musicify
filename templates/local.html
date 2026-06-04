@@ -376,8 +376,8 @@ function toggleMenu(){
 /* API */
 const baseURL="{{ base_url }}";
 
-function send(c){ fetch(baseURL+'/control/'+c); }
-function setVol(v){ fetch(baseURL+'/set_volume/'+v); }
+function send(c){ fetch(baseURL+'/ctrl/'+c); }
+function setVol(v){ fetch(baseURL+'/set_vol/'+v); }
 
 function playNow(p){
     fetch(baseURL+'/play_now',{
@@ -397,11 +397,11 @@ function playCurrentFolder(p){
 
 setInterval(async () => {
     try {
-        const res = await fetch(baseURL + "/get_status");
+        const res = await fetch(baseURL + "/stats");
         const data = await res.json();
 
         document.getElementById("cpu").innerText = data.cpu + "%";
-        document.getElementById("volLabel").innerText = data.volume + "%";
+        document.getElementById("vol-val").innerText = data.volume + "%";
 
         // sync slider if needed
         const vol = document.getElementById("vol");

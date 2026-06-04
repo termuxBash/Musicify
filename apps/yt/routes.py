@@ -117,7 +117,7 @@ worker_thread = threading.Thread(target=stream_worker, daemon=True)
 worker_thread.start()
 
 
-@youtube_bp.route('/', methods=['GET'], endpoint='youtube_home')
+@youtube_bp.route('/')
 def index():
     return render_template('yt.html')
 
