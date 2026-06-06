@@ -114,6 +114,13 @@ nav{
     text-overflow: ellipsis;
 }
 
+.queue-item span {
+    margin-left: auto;
+    cursor: pointer;
+    color: var(--danger);
+    font-size: 30px;
+}
+
 .drawer-header{
     display:flex;
     justify-content:space-between;
@@ -641,7 +648,7 @@ async function addToQueue(song, btn){
 }
 
 /* QUEUE MANAGEMENT */
-async function removeFromQueue(i){ await fetch(baseURL+"/remove_from_queue/"+i,{method:"POST"}) }
+async function removeFromQueue(i){ await fetch("/local/remove_from_queue/"+i,{method:"POST"}) }
 
 /* UPDATE STATS */
 const volSlider = document.getElementById("vol-slider");
@@ -669,7 +676,7 @@ async function updateStats(){
         } else {
             qList.innerHTML = data.queue.map((s,i)=>`
                 <div class="queue-item">
-                    <img src="${s.thumbnail}">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E">
                     <p>${s.title}</p>
                     <span onclick="removeFromQueue(${i})">✕</span>
                 </div>
