@@ -1,6 +1,6 @@
 # stats_bp.py
 import json
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from core.bose_routes import get_status
 import psutil
 
@@ -19,14 +19,14 @@ def stats():
     else:
         volume = 0
     # Simulated song queue and current song for demonstration
-    song_queue = ["Song A", "Song B", "Song C"]
-    current_song = "Song A"
+    global song_queue
+    global current_song
     show_lyrics_enabled = True  # Simulated synced state
     return jsonify({
         "cpu": psutil.cpu_percent(),
         "volume": volume,
-        "queue": song_queue,
-        "now_playing": current_song,
-        "is_playing": current_song is not None,
+        "queue": list(current_app.player.status().get("queue", [])),
+        "now_playing": current_app.player.status().get("current_song", None),
+        "is_playing": current_app.player.status().get("playing", False),
         "show_lyrics": show_lyrics_enabled   # 🔥 SYNCED STATE
     })

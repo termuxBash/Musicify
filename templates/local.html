@@ -67,20 +67,52 @@ nav{
 .overlay.show{display:block;}
 
 /* SIDE PANEL */
-.side-panel{
-    position:fixed;
-    top:0;
-    left:-300px;
-    width:280px;
-    height:100%;
-    background:var(--panel);
-    transition:0.3s ease;
-    z-index:2000;
-    padding:15px;
-    border-right:1px solid var(--border);
+.side-panel {
+    position: fixed;
+    top: 0;
+    left: -100%;
+    width: 300px;
+    height: 100%;
+    background: var(--panel);
+    z-index: 2000;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 20px;
+    box-shadow: 5px 0 15px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
 }
 
-.side-panel.open{left:0;}
+.side-panel.open {
+    left: 0;
+}
+
+.queue-list {
+    flex: 1;
+    overflow-y: auto;
+    margin-top: 20px;
+}
+
+.queue-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #1a1a1a;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.queue-item img {
+    width: 40px;
+    border-radius: 4px;
+}
+
+.queue-item p {
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 .drawer-header{
     display:flex;
@@ -152,25 +184,140 @@ nav{
 }
 
 /* ---------------- PLAYER BAR (KEPT FROM YOUR FIRST DESIGN STYLE) ---------------- */
-.player-bar{
-    position:fixed;
-    bottom:0;
-    left:0;
-    width:100%;
-    background:#000;
-    border-top:2px solid var(--green);
-    padding:10px 15px;
-    z-index:1000;
+.player-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 110px;
+    background: #000;
+    border-top: 2px solid var(--green);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 15px;
+    z-index: 1000;
 }
 
-/* TOP ROW */
-.player-top{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:8px;
+.player-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 8px;
 }
 
+.now-playing {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.now-playing img {
+    width: 45px;
+    height: 45px;
+    border-radius: 6px;
+    background: #222;
+}
+
+.now-playing-info h4 {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.now-playing-info p {
+    font-size: 0.65rem;
+    color: var(--green);
+}
+
+.player-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 10px;
+}
+
+.volume-cluster {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #111;
+    padding: 5px 10px;
+    border-radius: 20px;
+}
+
+.vol-btn {
+    background: #333;
+    border: none;
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+#vol-slider {
+    accent-color: var(--green);
+    width: 80px;
+    cursor: pointer;
+}
+
+#vol-val {
+    font-family: monospace;
+    font-size: 0.75rem;
+    min-width: 35px;
+    text-align: center;
+}
+
+.btn-group {
+    display: flex;
+    gap: 8px;
+}
+
+.skip-btn {
+    background: var(--green);
+    border: none;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 0.75rem;
+}
+
+.power-btn {
+    background: var(--danger);
+    border: none;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+    .side-panel {
+        left: -100%;
+        width: 350px;
+    }
+
+    .menu {
+        display: flex;
+    }
+
+    .player-bar {
+        flex-direction: row;
+        height: 90px;
+    }
+
+    #vol-slider {
+        width: 150px;
+    }
+}
 .now-playing{
     display:flex;
     align-items:center;
@@ -271,7 +418,7 @@ nav{
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
 
     <div style="font-family:monospace;font-size:12px;color:#aaa;background:rgba(29,185,84,0.1);padding:5px 10px;border-radius:15px;">
-        CPU: <span id="cpu">0%</span>
+        CPU: <span id="cpu-load">0%</span>
     </div>
 
 </div>
@@ -279,11 +426,18 @@ nav{
 
 <!-- SIDE -->
 <div class="side-panel" id="sidePanel">
-    <div class="drawer-header">
-        <h3>Library</h3>
-        <span onclick="toggleMenu()" style="cursor:pointer;font-size:22px">✕</span>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3>Music Queue</h3>
+        <span onclick="toggleMenu()" style="cursor:pointer;font-size:24px;">✕</span>
     </div>
-    <p style="font-size:12px;color:#777;">Navigation</p>
+
+    <div class="queue-list" id="queueList">
+        <p style="color:#666;text-align:center;margin-top:40px;">
+            No songs queued.
+        </p>
+    </div>
+
 </div>
 
 <!-- MAIN -->
@@ -294,7 +448,7 @@ nav{
     </div>
 
     {% if current_path != "" %}
-    <button class="btn" onclick="window.location.href='/browse/{{ parent or '' }}'">⬅ Back</button>
+    <button class="btn" onclick="window.location.href='{{ api_prefix }}/{{ parent or '' }}'">⬅ Back</button>
     {% endif %}
 
     <div style="margin:10px 0;">
@@ -312,7 +466,7 @@ nav{
 
             <div class="file-name">
                 {% if item.is_dir %}
-                <a href="/browse/{{ item.rel_path }}" style="color:white;text-decoration:none">
+                <a href="{{ api_prefix }}/{{ item.rel_path }}" style="color:white;text-decoration:none">
                     {{ item.name }}
                 </a>
                 {% else %}
@@ -321,7 +475,7 @@ nav{
             </div>
 
             {% if not item.is_dir %}
-            <button class="btn" onclick="playNow('{{ item.rel_path }}')">Play</button>
+            <button class="btn" onclick="addToQueue({url: '{{ item.rel_path }}', title: '{{ item.name }}'}, this)">+ Add to Queue</button>
             {% endif %}
         </div>
         {% endfor %}
@@ -330,36 +484,53 @@ nav{
 </div>
 
 <!-- PLAYER BAR (RESTORED) -->
+<!-- --- Player Bar --- -->
 <div class="player-bar">
 
     <div class="player-top">
         <div class="now-playing">
-            <img id="thumb">
-            <div>
-                <p id="status">IDLE</p>
-                <h4 id="title">Ready</h4>
+            <img id="playing-thumb"
+                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E">
+
+            <div class="now-playing-info">
+                <p id="playing-status">IDLE</p>
+                <h4 id="playing-title">Ready to stream</h4>
             </div>
         </div>
 
         <div class="btn-group">
-            <button class="ctrl-btn skip" onclick="send('next')">⏭</button>
-            <button class="ctrl-btn power" onclick="send('bose_power')">⏻</button>
+            <button class="skip-btn" onclick="skipTrack()">SKIP ⏭</button>
+            <button class="power-btn" onclick="sendControl('bose_power')">POWER ⏻</button>
         </div>
     </div>
 
     <div class="player-bottom">
-        <div class="volume">
-            <button class="vol-btn" onclick="send('vol_down')">-</button>
-            <input id="vol" type="range" min="0" max="100" onchange="setVol(this.value)">
-            <button class="vol-btn" onclick="send('vol_up')">+</button>
+        <div class="volume-cluster">
+            <button class="vol-btn" onclick="sendControl('vol_down')">-</button>
+
+            <input
+                type="range"
+                id="vol-slider"
+                min="0"
+                max="100"
+                value="0"
+                oninput="setVolume(this.value)">
+
+            <button class="vol-btn" onclick="sendControl('vol_up')">+</button>
+
             <span id="vol-val">0%</span>
         </div>
-        <span style="font-size:11px;color:#666;">SYSTEM</span>
+
+        <div style="font-size:10px;color:#555;">
+            SYSTEM CONTROL
+        </div>
     </div>
 
 </div>
 
 <script>
+
+
 const panel=document.getElementById("sidePanel");
 const overlay=document.getElementById("overlay");
 const main=document.getElementById("main");
@@ -372,15 +543,143 @@ function toggleMenu(){
         main.classList.toggle("shift");
     }
 }
+async function sendControl(cmd){
+    await fetch(baseURL + "/ctrl/" + cmd);
+}
 
+async function setVolume(val){
+    document.getElementById("vol-val").textContent = val + "%";
+    await fetch(baseURL + "/set_vol/" + val);
+}
+
+async function skipTrack(){
+    await fetch(baseURL + "/skip", {
+        method: "POST"
+    });
+}
 /* API */
-const baseURL="{{ base_url }}";
+const baseURL="{{ api_prefix }}";
 
 function send(c){ fetch(baseURL+'/ctrl/'+c); }
 function setVol(v){ fetch(baseURL+'/set_vol/'+v); }
 
+/* ADD TO QUEUE */
+async function addToQueue(song, btn){
+
+    btn.classList.add("queued");
+    setTimeout(() => {
+        btn.classList.remove("queued");
+    }, 1500);
+
+    let res = await fetch("/local/enqueue", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({rel_path: song.url, title: song.title})
+    });
+
+    if (res.ok) {
+        return;
+    }
+
+    if (res.status === 403) {
+
+        const data = await res.json();
+
+        if (data.owner === "youtube") {
+
+            const takeOver = confirm(
+                "Youtube player is currently controlling playback.\n\n" +
+                "Taking ownership will clear its queue and stop playback.\n\n" +
+                "Continue?"
+            );
+
+            if (!takeOver) {
+                return;
+            }
+
+            const acquire = await fetch(
+                "/local/acquire",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        force: true
+                    })
+                }
+            );
+
+            if (!acquire.ok) {
+                alert("Failed to acquire ownership.");
+                return;
+            }
+
+            // retry enqueue
+
+            res = await fetch("/local/enqueue", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({rel_path: song.url, title: song.title})
+            });
+
+            if (!res.ok) {
+                alert("Failed to queue song after takeover.");
+            }
+
+            return;
+        }
+
+        alert(
+            `Playback is controlled by '${data.owner}'.`
+        );
+    }
+}
+
+/* QUEUE MANAGEMENT */
+async function removeFromQueue(i){ await fetch(baseURL+"/remove_from_queue/"+i,{method:"POST"}) }
+
+/* UPDATE STATS */
+const volSlider = document.getElementById("vol-slider");
+const volVal = document.getElementById("vol-val");
+async function updateStats(){
+    try{
+        const res = await fetch("/stats");
+        const data = await res.json();
+        document.getElementById("cpu-load").textContent = data.cpu + "%";
+
+        if(document.activeElement !== volSlider){
+            volSlider.value = data.volume;
+            volVal.textContent = data.volume + "%";
+        }
+
+        if(data.now_playing){
+            document.getElementById("playing-title").textContent = data.now_playing.title;
+            document.getElementById("playing-thumb").src = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
+            document.getElementById("playing-status").textContent = data.is_playing ? "BROADCASTING" : "PAUSED";
+        }
+
+        const qList = document.getElementById("queueList");
+        if(!data.queue || data.queue.length===0){
+            qList.innerHTML = "No songs queued";
+        } else {
+            qList.innerHTML = data.queue.map((s,i)=>`
+                <div class="queue-item">
+                    <img src="${s.thumbnail}">
+                    <p>${s.title}</p>
+                    <span onclick="removeFromQueue(${i})">✕</span>
+                </div>
+            `).join("");
+        }
+        //document.getElementById("lyricsToggle").checked = data.show_lyrics;
+    } catch(e){}
+}
 function playNow(p){
-    fetch(baseURL+'/play_now',{
+    fetch(baseURL+'/enqueue',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({path:p})
@@ -388,29 +687,14 @@ function playNow(p){
 }
 
 function playCurrentFolder(p){
-    fetch(baseURL+'/play_folder',{
+    fetch('/local/play_folder',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({path:p})
     });
 }
 
-setInterval(async () => {
-    try {
-        const res = await fetch(baseURL + "/stats");
-        const data = await res.json();
-
-        document.getElementById("cpu").innerText = data.cpu + "%";
-        document.getElementById("vol-val").innerText = data.volume + "%";
-
-        // sync slider if needed
-        const vol = document.getElementById("vol");
-        if (document.activeElement !== vol) {
-            vol.value = data.volume;
-        }
-
-    } catch(e){}
-}, 1500);
+setInterval(updateStats, 2000);
 </script>
 
 </body>

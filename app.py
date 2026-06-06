@@ -3,9 +3,31 @@ from core.bose_routes import bose_control_bp
 from core.stats import stats_bp
 from apps.local.routes import local_bp
 from apps.yt.routes import youtube_bp
+from dotenv import load_dotenv
+from collections import deque
+from core.bose_worker import BoseSoundTouchWorker
+from core.playback_controller import PlaybackController
+from core.stream_manager import QueuePlayer
+from services.ffmpeg_service import FFmpegService
+
+
+load_dotenv()
 
 def create_app():
     app = Flask(__name__)
+    app.config['song_queue'] = deque()
+    app.config['current_song'] = None
+
+    app.player = QueuePlayer(
+        ffmpeg_service=FFmpegService(),
+        bose_worker=BoseSoundTouchWorker(
+            ip_address="192.168.29.234"
+        )
+    )
+
+    app.player.start()
+
+    app.playback = PlaybackController(app.player)
 
     @app.route("/")
     def index():

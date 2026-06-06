@@ -203,7 +203,7 @@ input:checked + .slider:before {
 <div class="player-bar">
     <div class="player-top">
         <div class="now-playing">
-            <img id="playing-thumb" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="">
+            <img id="playing-thumb" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E" alt="">
             <div class="now-playing-info">
                 <p id="playing-status">IDLE</p>
                 <h4 id="playing-title">Ready to stream</h4>
@@ -227,6 +227,8 @@ input:checked + .slider:before {
 </div>
 
 <script>
+const API_PREFIX = "{{ api_prefix }}";
+
 const resultsGrid = document.getElementById("results");
 const volSlider = document.getElementById("vol-slider");
 const volVal = document.getElementById("vol-val");
@@ -246,7 +248,7 @@ async function skipTrack() { await fetch("/skip",{method:"POST"}) }
 document.getElementById("searchForm").onsubmit = async (e)=>{
     e.preventDefault();
     resultsGrid.innerHTML = "Searching...";
-    const res = await fetch("/search",{method:"POST",body:new FormData(e.target)});
+    const res = await fetch(API_PREFIX+"/search",{method:"POST",body:new FormData(e.target)});
     const songs = await res.json();
     resultsGrid.innerHTML = songs.map(s=>`
         <div class="song-card">
@@ -259,13 +261,83 @@ document.getElementById("searchForm").onsubmit = async (e)=>{
 
 /* ADD TO QUEUE */
 async function addToQueue(song, btn){
+
     btn.classList.add("queued");
-    setTimeout(()=>{ btn.classList.remove("queued"); }, 1500);
-    await fetch("/enqueue",{method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(song)});
+    setTimeout(() => {
+        btn.classList.remove("queued");
+    }, 1500);
+
+    let res = await fetch(API_PREFIX + "/enqueue", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(song)
+    });
+
+    if (res.ok) {
+        return;
+    }
+
+    if (res.status === 403) {
+
+        const data = await res.json();
+
+        if (data.owner === "local") {
+
+            const takeOver = confirm(
+                "Local player is currently controlling playback.\n\n" +
+                "Taking ownership will clear its queue and stop playback.\n\n" +
+                "Continue?"
+            );
+
+            if (!takeOver) {
+                return;
+            }
+
+            const acquire = await fetch(
+                API_PREFIX + "/acquire",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        force: true
+                    })
+                }
+            );
+
+            if (!acquire.ok) {
+                alert("Failed to acquire ownership.");
+                return;
+            }
+
+            // retry enqueue
+
+            res = await fetch(API_PREFIX + "/enqueue", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(song)
+            });
+
+            if (!res.ok) {
+                alert("Failed to queue song after takeover.");
+            }
+
+            return;
+        }
+
+        alert(
+            `Playback is controlled by '${data.owner}'.`
+        );
+    }
 }
 
 /* QUEUE MANAGEMENT */
-async function removeFromQueue(i){ await fetch("/remove_from_queue/"+i,{method:"POST"}) }
+async function removeFromQueue(i){ await fetch(API_PREFIX+"/remove_from_queue/"+i,{method:"POST"}) }
 
 /* UPDATE STATS */
 async function updateStats(){

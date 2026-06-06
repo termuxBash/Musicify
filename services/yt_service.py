@@ -7,7 +7,9 @@ class YTService:
 
         with YoutubeDL({
             "format": "bestaudio",
-            "quiet": True
+            "quiet": True,
+            'nocheckcertificate': True,
+            "remote_components": ["ejs:github"]
         }) as ydl:
 
             info = ydl.extract_info(
