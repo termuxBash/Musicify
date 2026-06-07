@@ -1,5 +1,5 @@
 # core/stats.py
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify, request ,current_app
 import psutil
 from core.bose_routes import get_status
 
