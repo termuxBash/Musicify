@@ -18,15 +18,32 @@ def stats():
             pass
     else:
         volume = 0
-    # Simulated song queue and current song for demonstration
-    global song_queue
-    global current_song
+        
+    player_status = current_app.player.status()
     show_lyrics_enabled = True  # Simulated synced state
+    
     return jsonify({
         "cpu": psutil.cpu_percent(),
         "volume": volume,
-        "queue": list(current_app.player.status().get("queue", [])),
-        "now_playing": current_app.player.status().get("current_song", None),
-        "is_playing": current_app.player.status().get("playing", False),
-        "show_lyrics": show_lyrics_enabled   # 🔥 SYNCED STATE
+        "queue": list(player_status.get("queue", [])),
+        "now_playing": player_status.get("current_song", None),
+        "is_playing": player_status.get("playing", False),
+        "autoplay_enabled": player_status.get("autoplay_enabled", False), # 🔥 FEEDBACK TO UI
+        "show_lyrics": show_lyrics_enabled   
+    })
+
+@stats_bp.route("/toggle_autoplay", methods=["POST"])
+def toggle_autoplay():
+    """
+    Accepts JSON: {"enabled": true} or {"enabled": false}
+    Changes the state inside the core audio loop instantly.
+    """
+    data = request.get_json() or {}
+    enabled = data.get("enabled", False)
+    
+    current_app.player.toggle_autoplay(enabled)
+    
+    return jsonify({
+        "status": "success",
+        "autoplay_enabled": current_app.player.status().get("autoplay_enabled")
     })

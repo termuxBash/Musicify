@@ -12,8 +12,6 @@ import logging
 import random
 from services.yt_service import YTService
 import requests # type: ignore
-#from core.lock_manager import ffmpeg_lock
-#from core.system_monitor import system_monitor
 
 
 logging.basicConfig(level=logging.INFO)
@@ -240,16 +238,16 @@ def get_musicatlas_recommendations(song_title, limit=5):
     """
     Fetches recommended track objects from the MusicAtlas API based on an input song.
     """
-    MUSICATLAS_API_KEY = os.getenv("MUSICATLAS_API_KEY")
-    if not MUSICATLAS_API_KEY:
-        logger.error("MUSICATLAS_API_KEY environment variable is not set.")
+    MUSICATLAS_API_KEY = os.getenv("MUSIC_ATLAS_KEY")
+    if not MUSIC_ATLAS_KEY:
+        logger.error("MUSIC_ATLAS_KEY environment variable is not set.")
         return []
 
     # Using MusicAtlas endpoint for single-track or prompt similarity
     url = "https://api.musicatlas.ai/v1/similar_tracks"
     
     headers = {
-        "Authorization": f"Bearer {MUSICATLAS_API_KEY}",
+        "Authorization": f"Bearer {MUSIC_ATLAS_KEY}",
         "Content-Type": "application/json"
     }
     
@@ -498,10 +496,7 @@ def recommend_and_enqueue():
 @youtube_bp.route("/skip", methods=["POST"])
 def skip():
 
-    global ffmpeg_process
-
-    if ffmpeg_process:
-        ffmpeg_process.terminate()
+    current_app.playback.skip("youtube")
 
     return jsonify({"status": "skipped"})
 

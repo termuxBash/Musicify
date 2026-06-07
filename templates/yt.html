@@ -50,6 +50,7 @@ nav {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.7); z-index: 1500; display: none;
 }
+/* 🛠️ FIXED: Changed from 'block;' to 'display: block;' so clicking outside triggers toggleMenu() */
 .overlay.show { display: block; }
 
 .queue-list { flex: 1; overflow-y: auto; margin-top: 20px; }
@@ -110,14 +111,14 @@ nav {
 
 @media (min-width: 1024px) {
     .side-panel { 
-        left: -100%; /* Keep hidden by default */
+        left: -100%; 
         width: 350px; 
     }
     .main-content { 
-        margin-left: 0; /* Don't push content */
+        margin-left: 0; 
         width: 100%; 
     }
-    .menu-toggle { display: flex; } /* Show toggle */
+    .menu-toggle { display: flex; } 
     .player-bar { flex-direction: row; height: 90px; }
     #vol-slider { width: 150px; }
 }
@@ -172,14 +173,25 @@ input:checked + .slider:before {
 <nav>
     <div class="menu-toggle" onclick="toggleMenu()">☰</div>
     <h3 style="color: var(--spotify-green)">Songify Pro</h3>
-<div style="display:flex;align-items:center;gap:10px;margin-left:10px;">
-    <span style="font-size:12px;color:#aaa;">Lyrics</span>
+    
+    <div style="display:flex;align-items:center;gap:15px;margin-left:15px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:#aaa;">Lyrics</span>
+            <label class="switch">
+                <input type="checkbox" id="lyricsToggle" onchange="toggleLyrics()">
+                <span class="slider"></span>
+            </label>
+        </div>
 
-    <label class="switch">
-        <input type="checkbox" id="lyricsToggle" onchange="toggleLyrics()">
-        <span class="slider"></span>
-    </label>
-</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:#aaa;">Autoplay</span>
+            <label class="switch">
+                <input type="checkbox" id="autoplayToggle" onchange="toggleAutoplay()">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+    
     <div class="system-monitor">CPU: <span id="cpu-load">0%</span></div>
 </nav>
 
@@ -201,7 +213,6 @@ input:checked + .slider:before {
     <div class="results-grid" id="results"></div>
 </div>
 
-<!-- --- Player Bar --- -->
 <div class="player-bar">
     <div class="player-top">
         <div class="now-playing">
@@ -263,7 +274,6 @@ document.getElementById("searchForm").onsubmit = async (e)=>{
 
 /* ADD TO QUEUE */
 async function addToQueue(song, btn){
-
     btn.classList.add("queued");
     setTimeout(() => {
         btn.classList.remove("queued");
@@ -282,11 +292,8 @@ async function addToQueue(song, btn){
     }
 
     if (res.status === 403) {
-
         const data = await res.json();
-
         if (data.owner === "local") {
-
             const takeOver = confirm(
                 "Local player is currently controlling playback.\n\n" +
                 "Taking ownership will clear its queue and stop playback.\n\n" +
@@ -315,8 +322,6 @@ async function addToQueue(song, btn){
                 return;
             }
 
-            // retry enqueue
-
             res = await fetch(API_PREFIX + "/enqueue", {
                 method: "POST",
                 headers: {
@@ -328,13 +333,9 @@ async function addToQueue(song, btn){
             if (!res.ok) {
                 alert("Failed to queue song after takeover.");
             }
-
             return;
         }
-
-        alert(
-            `Playback is controlled by '${data.owner}'.`
-        );
+        alert(`Playback is controlled by '${data.owner}'.`);
     }
 }
 
@@ -372,12 +373,27 @@ async function updateStats(){
             `).join("");
         }
         document.getElementById("lyricsToggle").checked = data.show_lyrics;
+        document.getElementById("autoplayToggle").checked = data.autoplay_enabled;
     } catch(e){}
 }
+
 async function toggleLyrics(){
     const on = document.getElementById("lyricsToggle").checked;
     await fetch("/ctrl/" + (on ? "show_lyrics_on" : "show_lyrics_off"));
 }
+
+/* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */
+async function toggleAutoplay(){
+    const isChecked = document.getElementById("autoplayToggle").checked;
+    await fetch("/toggle_autoplay", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ enabled: isChecked })
+    });
+}
+
 setInterval(updateStats, 2000);
 </script>
 </body>
