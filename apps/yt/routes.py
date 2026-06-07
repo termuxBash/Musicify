@@ -127,49 +127,169 @@ def get_stream_url():
 
 STREAM_URL = get_stream_url()
 
+# ---------- PLAYBACK CONTROL ----------
+def enqueue_youtube_result(result):
+    """
+    Enqueue a YouTube search result into the playback queue.
+    Expected keys:
+        title
+        thumbnail
+        videoId
+    """
 
-def stream_worker():
-    """Background worker to manage FFmpeg streaming to Bose"""
-    while True:
-        with state["lock"]:
-            if not state["queue"]:
-                state["is_playing"] = False
-                time.sleep(1)
-                continue
-            
-            youtube_url = state["queue"].pop(0)
-            state["current_url"] = youtube_url
-            if state["queue_titles"]:
-                state["current_title"] = state["queue_titles"].pop(0)
-            state["is_playing"] = True
+    video_url = (
+        f"https://www.youtube.com/watch?v={result['videoId']}"
+    )
+
+    stream_url = yt_service.resolve_stream(video_url)
+
+    if not stream_url:
+        return False
+
+    return current_app.playback.enqueue(
+        "youtube",
+        {
+            "title": result["title"],
+            "thumbnail": result["thumbnail"],
+            "url": stream_url
+        }
+    )
+
+
+def auto_pick_song(query):
+
+    url = "https://www.googleapis.com/youtube/v3/search"
+
+    params = {
+        "part": "snippet",
+        "q": query + " music",
+        "type": "video",
+        "maxResults": 10,
+        "key": YOUTUBE_API_KEY
+    }
+
+    res = requests.get(url, params=params).json()
+
+    items = res.get("items", [])
+
+    if not items:
+        return None
+
+    bad_words = [
+        "live",
+        "cover",
+        "slowed",
+        "reverb",
+        "nightcore",
+        "8d",
+        "remix",
+        "bass boosted"
+    ]
+
+    best_score = -999
+    best_item = None
+
+    for item in items:
+
+        title = item["snippet"]["title"].lower()
+        channel = item["snippet"]["channelTitle"].lower()
+
+        score = 0
+
+        # good signals
+
+        if "official" in title:
+            score += 5
+
+        if "topic" in channel:
+            score += 5
+
+        if "vevo" in channel:
+            score += 4
+
+        if "music" in channel:
+            score += 2
+
+        # bad signals
+
+        for word in bad_words:
+            if word in title:
+                score -= 10
+
+        # prefer shorter cleaner titles
+
+        score -= len(title) // 40
+
+        if score > best_score:
+            best_score = score
+            best_item = item
+
+    if not best_item:
+        return None
+
+    return {
+        "title": best_item["snippet"]["title"],
+        "thumbnail": best_item["snippet"]["thumbnails"]["high"]["url"],
+        "videoId": best_item["id"]["videoId"],
+        "channel": best_item["snippet"]["channelTitle"]
+    }
+
+# ---------- MUSICATLAS RECOMMENDATIONS ----------
+
+def get_musicatlas_recommendations(song_title, limit=5):
+    """
+    Fetches recommended track objects from the MusicAtlas API based on an input song.
+    """
+    MUSICATLAS_API_KEY = os.getenv("MUSICATLAS_API_KEY")
+    if not MUSICATLAS_API_KEY:
+        logger.error("MUSICATLAS_API_KEY environment variable is not set.")
+        return []
+
+    # Using MusicAtlas endpoint for single-track or prompt similarity
+    url = "https://api.musicatlas.ai/v1/similar_tracks"
+    
+    headers = {
+        "Authorization": f"Bearer {MUSICATLAS_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "text": song_title,
+        "limit": limit
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
         
-        try:
-            # Resolve YouTube stream URL
-            stream_url = yt_service.resolve_stream(youtube_url)
+        if response.status_code != 200:
+            logger.error(f"MusicAtlas API error: {response.status_code} - {response.text}")
+            return []
             
-            if not stream_url:
-                print("[YouTube] Failed to resolve stream URL")
-                continue
+        data = response.json()
+        recommendations = []
+        
+        # Iterate through the returned recommendations map
+        for track in data.get("tracks", []):
+            title = track.get("title", "Unknown Track")
+            artists = track.get("artists", [])
+            artist_name = artists[0].get("name") if artists else "Unknown Artist"
             
-            # Stream to FFmpeg
-            ffmpeg.stream_url(stream_url)
-            time.sleep(2)
+            # Extract YouTube videoId safely from platform mappings if present
+            platform_ids = track.get("platform_ids", {})
+            youtube_id = platform_ids.get("youtube")
             
-            # Trigger Bose playback
-            bose.trigger_upnp_stream(STREAM_URL)
-            
-            # Wait for stream to finish
-            if ffmpeg.process:
-                ffmpeg.process.wait(timeout=3600)
-        except Exception as e:
-            print(f"[YouTube Streaming] Error: {e}")
-        finally:
-            ffmpeg.stop()
+            recommendations.append({
+                "title": f"{artist_name} - {title}",
+                "videoId": youtube_id # Could be None if unavailable
+            })
+                
+        return recommendations
 
+    except Exception as e:
+        logger.error(f"Failed to fetch MusicAtlas recommendations: {e}")
+        return []
 
-# Start background worker
-#worker_thread = threading.Thread(target=stream_worker, daemon=True)
-#worker_thread.start()
+# ---------------- ROUTES ----------------
 
 
 @youtube_bp.route('/')
@@ -274,22 +394,10 @@ def enqueue():
 
     if current_app.playback.owner is None:
         current_app.playback.acquire("youtube")
+
     song = request.get_json()
 
-    video_url = (
-        f"https://www.youtube.com/watch?v={song['videoId']}"
-    )
-
-    url = yt_service.resolve_stream(video_url)
-
-    success = current_app.playback.enqueue(
-        "youtube",
-        {
-            "title": song["title"],
-            "thumbnail": song["thumbnail"],
-            "url": url
-        }
-    )
+    success = enqueue_youtube_result(song)
 
     if not success:
         return jsonify({
@@ -322,6 +430,68 @@ def remove_from_queue(index):
         "title": removed["title"]
     })
 
+@youtube_bp.route("/recommend_and_enqueue", methods=["POST"])
+def recommend_and_enqueue():
+    """
+    Route to recommend songs based on an input query and inject them into the queue.
+    Uses Direct YouTube ID from MusicAtlas if present; falls back to search if not.
+    """
+    data = request.get_json() or {}
+    input_song = data.get("song")
+    limit = data.get("limit", 5)
+
+    if not input_song:
+        return jsonify({"error": "Input 'song' string is required"}), 400
+
+    if current_app.playback.owner is None:
+        current_app.playback.acquire("youtube")
+
+    # 1. Fetch recommendations from MusicAtlas
+    recommended_tracks = get_musicatlas_recommendations(input_song, limit=limit)
+    
+    if not recommended_tracks:
+        return jsonify({"error": "No recommendations found or API error"}), 404
+
+    added_songs = []
+
+    # 2. Process recommendations
+    for track in recommended_tracks:
+        try:
+            result = None
+            
+            # PATH A: Direct match found in MusicAtlas metadata
+            if track["videoId"]:
+                logger.info(f"Direct YouTube ID found via MusicAtlas for: {track['title']}")
+                result = {
+                    "title": track["title"],
+                    "videoId": track["videoId"],
+                    "thumbnail": f"https://img.youtube.com/vi/{track['videoId']}/hqdefault.jpg"
+                }
+            
+            # PATH B: Fallback to your heuristic search engine
+            else:
+                logger.warning(f"No YouTube ID in MusicAtlas data for: {track['title']}. Falling back to search.")
+                result = auto_pick_song(track["title"])
+
+            # 3. Stream link resolution and queue execution
+            if result:
+                success = enqueue_youtube_result(result)
+                if success:
+                    added_songs.append({
+                        "title": result["title"],
+                        "videoId": result["videoId"]
+                    })
+
+        except Exception as e:
+            logger.error(f"Recommendation handling failed for '{track.get('title')}': {e}")
+
+    return jsonify({
+        "status": "completed",
+        "input_song": input_song,
+        "count_requested": len(recommended_tracks),
+        "count_enqueued": len(added_songs),
+        "enqueued_songs": added_songs
+    })
 
 # ---------- SKIP ----------
 
@@ -351,99 +521,36 @@ def get_status():
 
 
 
-def auto_pick_song(query):
-
-    url = "https://www.googleapis.com/youtube/v3/search"
-
-    params = {
-        "part": "snippet",
-        "q": query + " music",
-        "type": "video",
-        "maxResults": 10,
-        "key": YOUTUBE_API_KEY
-    }
-
-    res = requests.get(url, params=params).json()
-
-    items = res.get("items", [])
-
-    if not items:
-        return None
-
-    bad_words = [
-        "live",
-        "cover",
-        "slowed",
-        "reverb",
-        "nightcore",
-        "8d",
-        "remix",
-        "bass boosted"
-    ]
-
-    best_score = -999
-    best_item = None
-
-    for item in items:
-
-        title = item["snippet"]["title"].lower()
-        channel = item["snippet"]["channelTitle"].lower()
-
-        score = 0
-
-        # good signals
-
-        if "official" in title:
-            score += 5
-
-        if "topic" in channel:
-            score += 5
-
-        if "vevo" in channel:
-            score += 4
-
-        if "music" in channel:
-            score += 2
-
-        # bad signals
-
-        for word in bad_words:
-            if word in title:
-                score -= 10
-
-        # prefer shorter cleaner titles
-
-        score -= len(title) // 40
-
-        if score > best_score:
-            best_score = score
-            best_item = item
-
-    if not best_item:
-        return None
-
-    return {
-        "title": best_item["snippet"]["title"],
-        "thumbnail": best_item["snippet"]["thumbnails"]["high"]["url"],
-        "videoId": best_item["id"]["videoId"],
-        "channel": best_item["snippet"]["channelTitle"]
-    }
     
 
 PLAYLIST_DIR = "/opt/radio/playlists"
 @youtube_bp.route("/playlist/<name>", methods=["POST"])
 def playlist(name):
 
-    path = os.path.join(PLAYLIST_DIR, f"{name}.txt")
+    path = os.path.join(
+        PLAYLIST_DIR,
+        f"{name}.txt"
+    )
 
     if not os.path.exists(path):
-        return jsonify({"error": "playlist not found"}), 404
+        return jsonify({
+            "error": "playlist not found"
+        }), 404
 
     with open(path, "r") as f:
-        songs = [x.strip() for x in f.readlines() if x.strip()]
+        songs = [
+            x.strip()
+            for x in f.readlines()
+            if x.strip()
+        ]
 
-    if len(songs) == 0:
-        return jsonify({"error": "playlist empty"}), 400
+    if not songs:
+        return jsonify({
+            "error": "playlist empty"
+        }), 400
+
+    if current_app.playback.owner is None:
+        current_app.playback.acquire("youtube")
 
     random.shuffle(songs)
 
@@ -452,15 +559,20 @@ def playlist(name):
     for query in songs:
 
         try:
-
             result = auto_pick_song(query)
 
-            if result:
-                current_app.config["song_queue"].append(result)
+            if not result:
+                continue
+
+            success = enqueue_youtube_result(result)
+
+            if success:
                 added.append(result["title"])
 
         except Exception as e:
-            logger.error("Playlist enqueue failed: " + str(e))
+            logger.error(
+                f"Playlist enqueue failed for '{query}': {e}"
+            )
 
     return jsonify({
         "status": "queued",
