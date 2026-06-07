@@ -329,6 +329,32 @@ def search():
 
     return jsonify(results)
 
+
+@youtube_bp.route("/auto_pick", methods=["POST"])
+def auto_pick():
+    query = request.form.get("query")
+    if not query:
+        return jsonify({"error": "query required"}), 400
+
+    if current_app.playback.owner is None:
+        current_app.playback.acquire("youtube")
+
+    result = auto_pick_song(query)
+    if not result:
+        return jsonify({"error": "No suitable song found"}), 404
+
+    success = enqueue_youtube_result(result)
+    if not success:
+        return jsonify({
+            "error": "youtube blueprint does not own player",
+            "owner": current_app.playback.owner
+        }), 403
+
+    return jsonify({
+        "status": "queued",
+        "song": result
+    })
+
 @youtube_bp.route('/play', methods=['POST'])
 def play_youtube():
     """Queue a YouTube URL for playback"""

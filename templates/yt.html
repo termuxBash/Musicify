@@ -65,7 +65,7 @@ nav {
 }
 /* --- Main Content --- */
 .main-content { padding: 80px 20px 140px; width: 100%; max-width: 1200px; margin: 0 auto; }
-.search-form { display: flex; gap: 8px; margin-bottom: 30px; }
+.search-form { display: flex; gap: 8px; margin-bottom: 30px; align-items: center; }
 .search-form input { 
     flex: 1; padding: 12px 20px; border-radius: 25px; border: 1px solid #444;
     background: #1a1a1a; color: white; outline: none;
@@ -73,6 +73,16 @@ nav {
 .search-form button { 
     background: var(--spotify-green); border: none; padding: 12px 20px; 
     border-radius: 25px; font-weight: bold; cursor: pointer;
+}
+.auto-pick-btn {
+    background: linear-gradient(135deg, #ffd166, #ff8c42);
+    color: #111;
+    min-width: 48px;
+    box-shadow: 0 8px 20px rgba(255, 140, 66, 0.25);
+}
+.auto-pick-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
 }
 .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; }
 
@@ -209,6 +219,7 @@ input:checked + .slider:before {
     <form class="search-form" id="searchForm">
         <input type="text" name="query" placeholder="Search YouTube Music..." required>
         <button type="submit">🔍</button>
+        <button type="button" class="auto-pick-btn" id="autoPickBtn" title="Auto-pick and queue">✨️</button>
     </form>
     <div class="results-grid" id="results"></div>
 </div>
@@ -271,6 +282,92 @@ document.getElementById("searchForm").onsubmit = async (e)=>{
             <button class="add-btn" onclick='addToQueue(${JSON.stringify(s)}, this)'>+QUEUE</button>
         </div>
     `).join("");
+}
+
+async function autoPickSong(btn){
+    const form = document.getElementById("searchForm");
+    const queryInput = form.querySelector("input[name='query']");
+    const query = queryInput.value.trim();
+
+    if(!query){
+        queryInput.focus();
+        return;
+    }
+
+    const previousLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⌛";
+
+    try{
+        let res = await fetch(API_PREFIX+"/auto_pick", {
+            method: "POST",
+            body: new FormData(form)
+        });
+
+        if(res.status === 403){
+            const data = await res.json();
+            if(data.owner === "local"){
+                const takeOver = confirm(
+                    "Local player is currently controlling playback.\n\n" +
+                    "Taking ownership will clear its queue and stop playback.\n\n" +
+                    "Continue?"
+                );
+
+                if(!takeOver){
+                    return;
+                }
+
+                const acquire = await fetch(API_PREFIX + "/acquire", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ force: true })
+                });
+
+                if(!acquire.ok){
+                    alert("Failed to acquire ownership.");
+                    return;
+                }
+
+                res = await fetch(API_PREFIX+"/auto_pick", {
+                    method: "POST",
+                    body: new FormData(form)
+                });
+
+                if(!res.ok){
+                    const retryData = await res.json();
+                    alert(retryData.error || "Auto-pick failed after takeover.");
+                    return;
+                }
+            } else {
+                alert(`Playback is controlled by '${data.owner}'.`);
+                return;
+            }
+        }
+
+        const data = await res.json();
+
+        if(!res.ok){
+            alert(data.error || "Auto-pick failed.");
+            return;
+        }
+
+        resultsGrid.innerHTML = `
+            <div class="song-card">
+                <img src="${data.song.thumbnail}">
+                <p>${data.song.title}</p>
+                <button class="add-btn queued" disabled>QUEUED</button>
+            </div>
+        `;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = previousLabel;
+    }
+}
+
+document.getElementById("autoPickBtn").onclick = async (e)=>{
+    await autoPickSong(e.target);
 }
 
 /* ADD TO QUEUE */
