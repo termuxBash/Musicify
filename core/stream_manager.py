@@ -1,18 +1,13 @@
 import threading
 import time
-import os
 import logging
+from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL
 
 logger = logging.getLogger(__name__)
 
-STREAM_URL = os.getenv(
-    "STREAM_URL",
-    "http://192.168.29.157:8000/mpv.ogg"
-)
-
 class QueuePlayer:
 
-    def __init__(self, ffmpeg_service, bose_worker=None):
+    def __init__(self, ffmpeg_service, bose_worker=None, autoplay_enabled=DEFAULT_AUTOPLAY_ENABLED):
         self.ffmpeg = ffmpeg_service
         self.bose = bose_worker
 
@@ -25,7 +20,7 @@ class QueuePlayer:
         self.running = False
         self.thread = None
         
-        self.autoplay_enabled = False 
+        self.autoplay_enabled = autoplay_enabled 
 
     def start(self):
         if self.running:

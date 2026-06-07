@@ -1,13 +1,9 @@
-import os
 from flask import Blueprint, jsonify, request
 from core.bose_worker import BoseSoundTouchWorker
+from core.settings import BOSE_IP, STREAM_URL
 
 # Initialize the blueprint
 bose_control_bp = Blueprint('bose_control', __name__)
-
-# Load configurations (Fallback to your default hardcoded Bose IP if env is missing)
-BOSE_IP = os.getenv("BOSE_IP", "192.168.29.234")
-STREAM_URL = os.getenv("STREAM_URL", "http://192.168.29.157:8000/mpv.ogg")
 
 # Instantiate the single shared worker instance
 bose = BoseSoundTouchWorker(ip_address=BOSE_IP)

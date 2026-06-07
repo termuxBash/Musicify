@@ -2,13 +2,14 @@ import time
 import requests
 import xml.etree.ElementTree as ET
 import upnpclient
+from core.settings import BOSE_IP
 
 class BoseSoundTouchWorker:
     """
     A lightweight, stateless alternative wrapper for Bose SoundTouch devices
     utilizing native HTTP REST API definitions directly over port 8090.
     """
-    def __init__(self, ip_address="192.168.29.234", upnp_xml_url=None):
+    def __init__(self, ip_address=BOSE_IP, upnp_xml_url=None):
         self.ip = ip_address
         self.base_url = f"http://{ip_address}:8090"
         self.upnp_xml = upnp_xml_url or f"http://{ip_address}:8091/XD/BO5EBO5E-F00D-F00D-FEED-38D2697D7E7B.xml"

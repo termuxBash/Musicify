@@ -220,6 +220,7 @@ input:checked + .slider:before {
             <div class="now-playing-info">
                 <p id="playing-status">IDLE</p>
                 <h4 id="playing-title">Ready to stream</h4>
+                <div id="live-lyrics" style="font-size: 0.85rem; color: #1db954; font-weight: bold; margin-top: 4px; min-height: 1.2em;"></div>
             </div>
         </div>
         <div class="btn-group">
@@ -355,10 +356,14 @@ async function updateStats(){
         }
 
         if(data.now_playing){
-            document.getElementById("playing-title").textContent = data.now_playing.title;
-            document.getElementById("playing-thumb").src = data.now_playing.thumbnail;
-            document.getElementById("playing-status").textContent = data.is_playing ? "BROADCASTING" : "PAUSED";
-        }
+    document.getElementById("playing-title").textContent = data.now_playing.title;
+    document.getElementById("playing-thumb").src = data.now_playing.thumbnail;
+    document.getElementById("playing-status").textContent = data.is_playing ? "BROADCASTING" : "PAUSED";
+    // Inject the active sub-line safely
+    document.getElementById("live-lyrics").textContent = data.current_lyric || "";
+} else {
+    document.getElementById("live-lyrics").textContent = "No lyrics available";
+}
 
         const qList = document.getElementById("queueList");
         if(!data.queue || data.queue.length===0){
@@ -378,8 +383,12 @@ async function updateStats(){
 }
 
 async function toggleLyrics(){
-    const on = document.getElementById("lyricsToggle").checked;
-    await fetch("/ctrl/" + (on ? "show_lyrics_on" : "show_lyrics_off"));
+    const isChecked = document.getElementById("lyricsToggle").checked;
+    await fetch("/toggle_lyrics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: isChecked })
+    });
 }
 
 /* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */

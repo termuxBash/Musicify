@@ -2,12 +2,14 @@
 YouTube Music Routes - Stream YouTube audio via FFmpeg to Bose
 """
 import os
+import subprocess
 import threading
 import time
 from flask import Blueprint, jsonify, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
 from services.ffmpeg_service import FFmpegService
 from core.bose_worker import BoseSoundTouchWorker
+from core.settings import BOSE_IP, PLAYLIST_DIR, STREAM_FALLBACK_URLS, STREAM_URL
 import logging
 import random
 from services.yt_service import YTService
@@ -24,9 +26,7 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 # Initialize services
 yt_service = YTService()
 ffmpeg = FFmpegService()
-bose = BoseSoundTouchWorker(
-    ip_address=os.getenv("BOSE_IP", "192.168.29.234")
-)
+bose = BoseSoundTouchWorker(ip_address=BOSE_IP)
 # ---------------- DISPLAY ----------------
 
 def show_lyric(text):
@@ -96,14 +96,9 @@ state = {
 def get_stream_url():
     """Detect local Icecast stream URL"""
     import socket
-    ips = [
-        os.getenv("STREAM_HOST", "192.168.29.157"),
-        "192.168.29.229",
-        "127.0.0.1"
-    ]
-    
-    for ip in ips:
-        url = f"http://{ip}:8000/mpv.ogg"
+    candidate_urls = [STREAM_URL, *STREAM_FALLBACK_URLS]
+
+    for url in candidate_urls:
         try:
             import requests # type: ignore
             r = requests.get(url, timeout=1, stream=True)
@@ -238,7 +233,7 @@ def get_musicatlas_recommendations(song_title, limit=5):
     """
     Fetches recommended track objects from the MusicAtlas API based on an input song.
     """
-    MUSICATLAS_API_KEY = os.getenv("MUSIC_ATLAS_KEY")
+    MUSIC_ATLAS_KEY = os.getenv("MUSIC_ATLAS_KEY")
     if not MUSIC_ATLAS_KEY:
         logger.error("MUSIC_ATLAS_KEY environment variable is not set.")
         return []
@@ -297,14 +292,11 @@ def index():
 
 @youtube_bp.route("/search", methods=["POST"])
 def search():
-
     query = request.form.get("query")
-
     if not query:
         return jsonify([])
 
     url = "https://www.googleapis.com/youtube/v3/search"
-
     params = {
         "part": "snippet",
         "q": query + " music",
@@ -313,12 +305,21 @@ def search():
         "key": YOUTUBE_API_KEY
     }
 
-    res = requests.get(url, params=params).json()
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        
+        # Catch Bad API Keys / Quota limits
+        if response.status_code != 200:
+            logger.error(f"YouTube API Error Status {response.status_code}: {response.text}")
+            return jsonify({"error": "YouTube API lookup failed", "details": response.json()}), response.status_code
+            
+        res = response.json()
+    except Exception as e:
+        logger.error(f"Network error targeting YouTube API: {e}")
+        return jsonify({"error": "Network failure"}), 500
 
     results = []
-
     for item in res.get("items", []):
-
         results.append({
             "title": item["snippet"]["title"],
             "thumbnail": item["snippet"]["thumbnails"]["high"]["url"],
@@ -327,7 +328,6 @@ def search():
         })
 
     return jsonify(results)
-
 
 @youtube_bp.route('/play', methods=['POST'])
 def play_youtube():
@@ -518,8 +518,7 @@ def get_status():
 
     
 
-PLAYLIST_DIR = "/opt/radio/playlists"
-@youtube_bp.route("/playlist/<name>", methods=["POST"])
+@youtube_bp.route("/playlist/<name>", methods=["GET"])
 def playlist(name):
 
     path = os.path.join(
