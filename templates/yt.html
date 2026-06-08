@@ -482,7 +482,7 @@ async function updateStats(){
 async function toggleLyrics(){
     const isChecked = document.getElementById("lyricsToggle").checked;
     await fetch("/toggle_lyrics", {
-        method: "POST",
+        method: "GET",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: isChecked })
     });
@@ -492,7 +492,7 @@ async function toggleLyrics(){
 async function toggleAutoplay(){
     const isChecked = document.getElementById("autoplayToggle").checked;
     await fetch("/toggle_autoplay", {
-        method: "POST",
+        method: "GET",
         headers: {
             "Content-Type": "application/json"
         },
