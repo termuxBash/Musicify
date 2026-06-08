@@ -38,19 +38,20 @@ def stats():
         "show_lyrics": lyrics_svc.enabled,
         "current_lyric": lyrics_svc.get_current_line()  # This returns the raw line string
     })
-
 @stats_bp.route("/toggle_lyrics", methods=["GET"])
 def toggle_lyrics():
-    data = request.get_json() or {}
-    enabled = data.get("enabled", True)
-    current_app.lyrics_service.enabled = enabled
-    return jsonify({"status": "success", "show_lyrics": enabled})
+    current_app.lyrics_service.enabled = not current_app.lyrics_service.enabled
+    return jsonify({
+        "status": "success",
+        "show_lyrics": current_app.lyrics_service.enabled
+    })
+
 
 @stats_bp.route("/toggle_autoplay", methods=["GET"])
 def toggle_autoplay():
-    data = request.get_json() or {}
-    enabled = data.get("enabled", False)
-    current_app.player.toggle_autoplay(enabled)
+    current_enabled = current_app.player.status().get("autoplay_enabled", False)
+    current_app.player.toggle_autoplay(not current_enabled)
+
     return jsonify({
         "status": "success",
         "autoplay_enabled": current_app.player.status().get("autoplay_enabled")
