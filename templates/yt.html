@@ -483,8 +483,7 @@ async function toggleLyrics(){
     const isChecked = document.getElementById("lyricsToggle").checked;
     await fetch("/toggle_lyrics", {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: isChecked })
+        headers: { "Content-Type": "application/json" }
     });
 }
 
@@ -495,8 +494,7 @@ async function toggleAutoplay(){
         method: "GET",
         headers: {
             "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ enabled: isChecked })
+        }
     });
 }
 
