@@ -482,19 +482,14 @@ async function updateStats(){
 async function toggleLyrics(){
     const isChecked = document.getElementById("lyricsToggle").checked;
     await fetch("/toggle_lyrics", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" }
+        method: "POST"
     });
 }
-
 /* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */
 async function toggleAutoplay(){
     const isChecked = document.getElementById("autoplayToggle").checked;
     await fetch("/toggle_autoplay", {
-        method: "GET",
-        headers: {
-            "Content-Type": "application/json"
-        }
+        method: "POST"
     });
 }
 
