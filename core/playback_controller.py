@@ -91,10 +91,7 @@ class PlaybackController:
     def skip(self, blueprint_name):
 
         with self._lock:
-
-            if self._owner != blueprint_name:
-                return False
-
+            #Allow any bp to skip the track
             self.player.skip()
 
             return True

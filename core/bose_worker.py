@@ -73,7 +73,7 @@ class BoseSoundTouchWorker:
                 if actual_vol is not None:
                     return int(actual_vol.text)
         except Exception as e:
-            print(f"[Bose Worker] Failed retrieving current volume structural map: {e}")
+            print(f"[Bose Worker] Failed get volume") #: {e}")
         return 0
 
     def toggle_mute(self):

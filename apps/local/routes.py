@@ -1,3 +1,6 @@
+""" local/routes.py - Flask routes for local file browsing and playback
+"""
+
 import os
 
 from flask import Blueprint, current_app, jsonify, render_template, request, url_for # type: ignore
@@ -151,3 +154,38 @@ def remove_from_queue(index):
 def status():
     return jsonify({"status": "ok", "service": "local"})
 
+@local_bp.route("/search")
+def search_tracks():
+    query = request.args.get('q', '').lower().strip()
+    if not query:
+        return jsonify([])
+
+    results = []
+    # Supported audio track extensions
+    audio_extensions = ('.mp3', '.wav', '.flac', '.m4a', '.ogg')
+
+    # Walk through the base operating system directory structure
+    for root, dirs, files in os.walk(ROOT_DIR):
+        # 1. Evaluate matching directories
+        for d in dirs:
+            if query in d.lower():
+                full_path = os.path.join(root, d)
+                rel_path = os.path.relpath(full_path, ROOT_DIR)
+                results.append({
+                    "name": d,
+                    "rel_path": rel_path,
+                    "is_dir": True
+                })
+
+        # 2. Evaluate matching files
+        for f in files:
+            if f.endswith(audio_extensions) and query in f.lower():
+                full_path = os.path.join(root, f)
+                rel_path = os.path.relpath(full_path, ROOT_DIR)
+                results.append({
+                    "name": f,
+                    "rel_path": rel_path,
+                    "is_dir": False
+                })
+
+    return jsonify(results)

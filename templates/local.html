@@ -140,6 +140,37 @@ nav{
     margin-left:280px;
 }
 
+/* SEARCH COMPONENT STYLES */
+.search-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.search-input {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 10px 15px;
+    color: white;
+    font-size: 14px;
+}
+
+.search-input:focus {
+    outline: 1px solid var(--green);
+}
+
+.search-btn {
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 0 20px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
 /* FILE GRID */
 .file-grid{
     display:grid;
@@ -183,6 +214,159 @@ nav{
     background:var(--green);
 }
 
+.card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.card-actions .btn,
+.card-actions .playlist-btn {
+    width: auto;
+    flex: 1;
+}
+
+.queue-playlist-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    margin-bottom: 6px;
+}
+
+.queue-playlist-select {
+    flex: 1;
+    background: #1a1a1a;
+    color: white;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 10px;
+    min-width: 0;
+}
+
+.queue-playlist-btn {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.playlist-btn {
+    padding: 7px;
+    border: none;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.playlist-btn:hover{
+    filter: brightness(1.08);
+}
+
+.playlist-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 2500;
+    padding: 20px;
+}
+
+.playlist-modal.open { display: flex; }
+
+.playlist-modal-card {
+    width: min(92vw, 360px);
+    background: #111;
+    border: 1px solid #2f2f2f;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.playlist-modal-card h4 {
+    margin-bottom: 8px;
+}
+
+.playlist-modal-card p {
+    color: #aaa;
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+}
+
+.playlist-select {
+    width: 100%;
+    background: #1a1a1a;
+    color: white;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 12px;
+}
+
+.playlist-digits {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.playlist-digit-btn {
+    border: 1px solid #333;
+    border-radius: 12px;
+    background: #1a1a1a;
+    color: white;
+    padding: 10px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.playlist-digit-btn.active {
+    background: rgba(29, 185, 84, 0.2);
+    border-color: var(--green);
+    color: var(--green);
+}
+
+.playlist-combo-input {
+    width: 100%;
+    background: #1a1a1a;
+    color: white;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 12px;
+}
+
+.playlist-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.playlist-modal-actions button {
+    border: none;
+    border-radius: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.playlist-cancel {
+    background: #333;
+    color: white;
+}
+
+.playlist-save {
+    background: linear-gradient(135deg, #ffd166, #ff8c42);
+    color: #111;
+}
+
 /* PATH */
 .path{
     margin-bottom:15px;
@@ -190,7 +374,7 @@ nav{
     color:#aaa;
 }
 
-/* ---------------- PLAYER BAR (KEPT FROM YOUR FIRST DESIGN STYLE) ---------------- */
+/* ---------------- PLAYER BAR ---------------- */
 .player-bar {
     position: fixed;
     bottom: 0;
@@ -325,80 +509,6 @@ nav{
         width: 150px;
     }
 }
-.now-playing{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    overflow:hidden;
-}
-
-.now-playing img{
-    width:45px;
-    height:45px;
-    border-radius:6px;
-    background:#222;
-}
-
-.now-playing h4{
-    font-size:0.8rem;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-}
-
-.now-playing p{
-    font-size:0.65rem;
-    color:var(--green);
-}
-
-.btn-group{
-    display:flex;
-    gap:8px;
-}
-
-.ctrl-btn{
-    border:none;
-    padding:8px 12px;
-    border-radius:18px;
-    font-weight:bold;
-    cursor:pointer;
-    font-size:0.75rem;
-}
-
-.skip{background:var(--green);color:white;}
-.power{background:var(--danger);color:white;}
-
-/* BOTTOM ROW */
-.player-bottom{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:10px;
-}
-
-.volume{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    background:#111;
-    padding:5px 10px;
-    border-radius:20px;
-}
-
-.vol-btn{
-    width:28px;
-    height:28px;
-    border-radius:50%;
-    border:none;
-    background:#333;
-    color:white;
-    cursor:pointer;
-}
-
-#vol{
-    width:100px;
-    accent-color:var(--green);
-}
 
 /* RESPONSIVE DRAWER FIX */
 @media(max-width:768px){
@@ -418,53 +528,57 @@ nav{
 
 <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
 
-<!-- NAV -->
 <nav>
     <div class="menu" onclick="toggleMenu()">☰</div>
     <div class="brand">Stream Station</div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
-
-    <div style="font-family:monospace;font-size:12px;color:#aaa;background:rgba(29,185,84,0.1);padding:5px 10px;border-radius:15px;">
-        CPU: <span id="cpu-load">0%</span>
+        <div style="font-family:monospace;font-size:12px;color:#aaa;background:rgba(29,185,84,0.1);padding:5px 10px;border-radius:15px;">
+            CPU: <span id="cpu-load">0%</span>
+        </div>
     </div>
-
-</div>
 </nav>
 
-<!-- SIDE -->
 <div class="side-panel" id="sidePanel">
-
     <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3>Music Queue</h3>
         <span onclick="toggleMenu()" style="cursor:pointer;font-size:24px;">✕</span>
     </div>
-
-    <div class="queue-list" id="queueList">
-        <p style="color:#666;text-align:center;margin-top:40px;">
-            No songs queued.
-        </p>
+    <div class="queue-playlist-controls">
+        <select id="playlistQueueSelect" class="queue-playlist-select" onclick="refreshPlaylistDropdown()">
+            <option value="">Select Playlist</option>
+        </select>
+        <button class="queue-playlist-btn" onclick="enqueueSelectedPlaylist()">Queue</button>
     </div>
-
+    <div class="queue-list" id="queueList">
+        <p style="color:#666;text-align:center;margin-top:40px;">No songs queued.</p>
+    </div>
 </div>
 
-<!-- MAIN -->
 <div class="main" id="main">
 
-    <div class="path">
-        Explorer: /{{ current_path }}
+    <div class="search-container">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search files and music...">
+        <button class="search-btn" onclick="performSearch()">Search</button>
     </div>
 
-    {% if current_path != "" %}
-    <button class="btn" onclick="window.location.href='{{ api_prefix }}/{{ parent or '' }}'">⬅ Back</button>
-    {% endif %}
+    <div id="navigationControls">
+        <div class="path" id="explorerPath">
+            Explorer: /{{ current_path }}
+        </div>
 
-    <div style="margin:10px 0;">
-        <button class="btn" style="background:var(--green)" onclick="playCurrentFolder('{{ current_path }}')">
-            ▶ Play Folder
-        </button>
+        <div style="display: flex; gap: 10px; margin-bottom:10px;">
+            {% if current_path != "" %}
+            <button class="btn" style="margin-top:0;" onclick="window.location.href='{{ api_prefix }}/{{ parent or '' }}'">⬅ Back</button>
+            {% endif %}
+            <button id="searchBackButton" class="btn" style="margin-top:0; display:none; background:#555;" onclick="clearSearchState()">⬅ Back to Folders</button>
+            
+            <button id="playFolderBtn" class="btn" style="margin-top:0; background:var(--green)" onclick="playCurrentFolder('{{ current_path }}')">
+                ▶ Play Folder
+            </button>
+        </div>
     </div>
 
-    <div class="file-grid">
+    <div class="file-grid" id="fileGridContainer">
         {% for item in items %}
         <div class="file-card">
             <div class="file-icon">
@@ -482,7 +596,10 @@ nav{
             </div>
 
             {% if not item.is_dir %}
-            <button class="btn" onclick="addToQueue({url: '{{ item.rel_path }}', title: '{{ item.name }}'}, this)">+ Add to Queue</button>
+            <div class="card-actions">
+                <button class="btn" onclick='addToQueue({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'>+ Add to Queue</button>
+                <button class="playlist-btn" type="button" onclick='openPlaylistMenu({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)' title="Add to playlist">🎶️</button>
+            </div>
             {% endif %}
         </div>
         {% endfor %}
@@ -490,15 +607,10 @@ nav{
 
 </div>
 
-<!-- PLAYER BAR (RESTORED) -->
-<!-- --- Player Bar --- -->
 <div class="player-bar">
-
     <div class="player-top">
         <div class="now-playing">
-            <img id="playing-thumb"
-                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E">
-
+            <img id="playing-thumb" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E">
             <div class="now-playing-info">
                 <p id="playing-status">IDLE</p>
                 <h4 id="playing-title">Ready to stream</h4>
@@ -514,30 +626,41 @@ nav{
     <div class="player-bottom">
         <div class="volume-cluster">
             <button class="vol-btn" onclick="sendControl('vol_down')">-</button>
-
-            <input
-                type="range"
-                id="vol-slider"
-                min="0"
-                max="100"
-                value="0"
-                oninput="setVolume(this.value)">
-
+            <input type="range" id="vol-slider" min="0" max="100" value="0" oninput="setVolume(this.value)">
             <button class="vol-btn" onclick="sendControl('vol_up')">+</button>
-
             <span id="vol-val">0%</span>
         </div>
+        <div style="font-size:10px;color:#555;">SYSTEM CONTROL</div>
+    </div>
+</div>
 
-        <div style="font-size:10px;color:#555;">
-            SYSTEM CONTROL
+<div class="playlist-modal" id="playlistModal" onclick="if(event.target === this) closePlaylistMenu()">
+    <div class="playlist-modal-card">
+        <h4>Add to Playlist</h4>
+        <p id="playlistSongTitle">Select a playlist</p>
+        <div class="playlist-digits">
+            <button type="button" class="playlist-digit-btn" data-digit="1" onclick="togglePlaylistDigit('1')">1</button>
+            <button type="button" class="playlist-digit-btn" data-digit="2" onclick="togglePlaylistDigit('2')">2</button>
+            <button type="button" class="playlist-digit-btn" data-digit="3" onclick="togglePlaylistDigit('3')">3</button>
+            <button type="button" class="playlist-digit-btn" data-digit="4" onclick="togglePlaylistDigit('4')">4</button>
+            <button type="button" class="playlist-digit-btn" data-digit="5" onclick="togglePlaylistDigit('5')">5</button>
+            <button type="button" class="playlist-digit-btn" data-digit="6" onclick="togglePlaylistDigit('6')">6</button>
+        </div>
+        <input id="playlistComboInput" class="playlist-combo-input" type="text" maxlength="6" oninput="syncPlaylistComboInput()">
+        <div class="playlist-modal-actions">
+            <button class="playlist-cancel" type="button" onclick="closePlaylistMenu()">Cancel</button>
+            <button class="playlist-save" type="button" id="playlistSaveBtn" onclick="confirmPlaylistAdd()">Add</button>
         </div>
     </div>
-
 </div>
 
 <script>
+    window.API_PREFIX = "{{ api_prefix }}";
+    window.CURRENT_OWNER = "local";
+</script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
 
-
+<script>
 const panel=document.getElementById("sidePanel");
 const overlay=document.getElementById("overlay");
 const main=document.getElementById("main");
@@ -545,114 +668,122 @@ const main=document.getElementById("main");
 function toggleMenu(){
     panel.classList.toggle("open");
     overlay.classList.toggle("show");
-
     if(window.innerWidth>=768){
         main.classList.toggle("shift");
     }
 }
-async function sendControl(cmd){
-    await fetch(baseURL + "/ctrl/" + cmd);
+
+/* Base DOM Nodes cached for folder recovery lookup toggling */
+const backupOriginalGridContent = document.getElementById("fileGridContainer").innerHTML;
+
+async function performSearch() {
+    const QueryStr = document.getElementById("searchInput").value.trim();
+    if(!QueryStr) return;
+
+    try {
+        const response = await fetch(`/local/search?q=${encodeURIComponent(QueryStr)}`);
+        const items = await response.json();
+        
+        const gridContainer = document.getElementById("fileGridContainer");
+        gridContainer.innerHTML = ""; // Clear active viewport elements
+
+        if(items.length === 0) {
+            gridContainer.innerHTML = '<p style="color:#666; grid-column: 1/-1; text-align:center; margin-top:20px;">No matching items found.</p>';
+        } else {
+            items.forEach(item => {
+                const card = document.createElement("div");
+                card.className = "file-card";
+                
+                // Keep identical structure with structural escaping logic for safety strings
+                let escapingTitle = item.name.replace(/'/g, "\\'");
+                let escapingPath = item.rel_path.replace(/'/g, "\\'");
+
+                card.innerHTML = `
+                    <div class="file-icon">${item.is_dir ? "📁" : "🎵"}</div>
+                    <div class="file-name">
+                        ${item.is_dir ? `<a href="${window.API_PREFIX}/${item.rel_path}" style="color:white;text-decoration:none">${item.name}</a>` : item.name}
+                    </div>
+                    ${!item.is_dir ? `
+                    <div class="card-actions">
+                        <button class="btn" onclick="addToQueue({url: '${escapingPath}', title: '${escapingTitle}'}, this)">+ Add to Queue</button>
+                        <button class="playlist-btn" type="button" onclick="openPlaylistMenu({url: '${escapingPath}', title: '${escapingTitle}'}, this)" title="Add to playlist">🎶️</button>
+                    </div>
+                    ` : ''}
+                `;
+                gridContainer.appendChild(card);
+            });
+        }
+
+        // Adjust interactive Navigation states
+        document.getElementById("explorerPath").textContent = `Search Results for: "${QueryStr}"`;
+        document.getElementById("searchBackButton").style.display = "inline-block";
+        document.getElementById("playFolderBtn").style.display = "none";
+    } catch (e) {
+        console.error("Search failure encountered:", e);
+    }
 }
 
-async function setVolume(val){
-    document.getElementById("vol-val").textContent = val + "%";
-    await fetch(baseURL + "/set_vol/" + val);
+function clearSearchState() {
+    document.getElementById("searchInput").value = "";
+    document.getElementById("fileGridContainer").innerHTML = backupOriginalGridContent;
+    document.getElementById("explorerPath").textContent = "Explorer: /{{ current_path }}";
+    document.getElementById("searchBackButton").style.display = "none";
+    document.getElementById("playFolderBtn").style.display = "inline-block";
 }
 
-async function skipTrack(){
-    await fetch(baseURL + "/skip", {
-        method: "POST"
-    });
-}
-/* API */
-const baseURL="{{ api_prefix }}";
+// Support hitting 'Enter' key directly inside inputs to run operations
+document.getElementById("searchInput").addEventListener("keypress", function(event) {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        performSearch();
+    }
+});
 
-function send(c){ fetch(baseURL+'/ctrl/'+c); }
-function setVol(v){ fetch(baseURL+'/set_vol/'+v); }
-
-/* ADD TO QUEUE */
+/* API EXECUTION AND QUEUE HANDLING */
 async function addToQueue(song, btn){
-
     btn.classList.add("queued");
-    setTimeout(() => {
-        btn.classList.remove("queued");
-    }, 1500);
+    setTimeout(() => { btn.classList.remove("queued"); }, 1500);
 
     let res = await fetch("/local/enqueue", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({rel_path: song.url, title: song.title})
     });
 
-    if (res.ok) {
-        return;
-    }
+    if (res.ok) return;
 
     if (res.status === 403) {
-
         const data = await res.json();
+        if (data.owner === "youtube" || data.owner === "playlist") {
+            const takeOver = confirm(`${data.owner} player is currently controlling playback.\n\nTaking ownership will clear its queue and stop playback.\n\nContinue?`);
+            if (!takeOver) return;
 
-        if (data.owner === "youtube") {
+            const acquire = await fetch("/local/acquire", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ force: true })
+            });
 
-            const takeOver = confirm(
-                "Youtube player is currently controlling playback.\n\n" +
-                "Taking ownership will clear its queue and stop playback.\n\n" +
-                "Continue?"
-            );
-
-            if (!takeOver) {
-                return;
-            }
-
-            const acquire = await fetch(
-                "/local/acquire",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        force: true
-                    })
-                }
-            );
-
-            if (!acquire.ok) {
-                alert("Failed to acquire ownership.");
-                return;
-            }
-
-            // retry enqueue
+            if (!acquire.ok) { alert("Failed to acquire ownership."); return; }
 
             res = await fetch("/local/enqueue", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({rel_path: song.url, title: song.title})
             });
 
-            if (!res.ok) {
-                alert("Failed to queue song after takeover.");
-            }
-
+            if (!res.ok) alert("Failed to queue song after takeover.");
             return;
         }
-
-        alert(
-            `Playback is controlled by '${data.owner}'.`
-        );
+        alert(`Playback is controlled by '${data.owner}'.`);
     }
 }
 
-/* QUEUE MANAGEMENT */
-async function removeFromQueue(i){ await fetch("/local/remove_from_queue/"+i,{method:"POST"}) }
+document.addEventListener("DOMContentLoaded", refreshPlaylistDropdown);
 
-/* UPDATE STATS */
 const volSlider = document.getElementById("vol-slider");
 const volVal = document.getElementById("vol-val");
+
 async function updateStats(){
     try{
         const res = await fetch("/stats");
@@ -676,21 +807,13 @@ async function updateStats(){
         } else {
             qList.innerHTML = data.queue.map((s,i)=>`
                 <div class="queue-item">
-                    <img src="${s.thumbnail}" alt="thumb">
+                    <img src="${s.thumbnail || ''}" alt="thumb">
                     <p>${s.title}</p>
                     <span onclick="removeFromQueue(${i})">✕</span>
                 </div>
             `).join("");
         }
-        //document.getElementById("lyricsToggle").checked = data.show_lyrics;
     } catch(e){}
-}
-function playNow(p){
-    fetch(baseURL+'/enqueue',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({path:p})
-    });
 }
 
 function playCurrentFolder(p){
@@ -703,6 +826,5 @@ function playCurrentFolder(p){
 
 setInterval(updateStats, 2000);
 </script>
-
 </body>
 </html>

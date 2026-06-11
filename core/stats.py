@@ -1,8 +1,21 @@
 # core/stats.py
 from flask import Blueprint, jsonify, request ,current_app
 import psutil
+import os
+
+import logging
+from services.yt_service import YTService
+
+from flask import current_app
+from core.settings import PLAYLIST_DIR
+from dotenv import load_dotenv
+import random
+load_dotenv()
+ROOT_DIR = os.path.abspath('/home/linuxlite/Music/')
 from core.bose_routes import get_status
 
+logger = logging.getLogger(__name__)
+stats_bp = Blueprint("stats", __name__)
 stats_bp = Blueprint("stats", __name__)
 
 @stats_bp.route("/stats")
@@ -55,4 +68,201 @@ def toggle_autoplay():
     return jsonify({
         "status": "success",
         "autoplay_enabled": current_app.player.status().get("autoplay_enabled")
+    })
+
+@stats_bp.route("/playlists")
+def playlists():
+
+    os.makedirs(
+        PLAYLIST_DIR,
+        exist_ok=True
+    )
+
+    return jsonify(
+        sorted([
+            os.path.splitext(f)[0]
+            for f in os.listdir(PLAYLIST_DIR)
+            if f.endswith(".txt")
+        ])
+    )
+
+@stats_bp.route(
+    "/add_to_playlist",
+    methods=["POST"]
+)
+def add_to_playlist():
+
+    data = request.get_json() or {}
+
+    playlist = (
+        data.get("playlist") or ""
+    ).strip()
+
+    song = data.get("song") or {}
+
+    if not playlist:
+        return jsonify(
+            error="playlist required"
+        ), 400
+
+    os.makedirs(
+        PLAYLIST_DIR,
+        exist_ok=True
+    )
+
+    path = os.path.join(
+        PLAYLIST_DIR,
+        f"{playlist}.txt"
+    )
+
+    title = song.get("title", "").strip()
+
+    source = (
+        song.get("videoId")
+        or song.get("url")
+        or ""
+    ).strip()
+
+    if not title:
+        return jsonify(
+            error="song title required"
+        ), 400
+
+    with open(
+        path,
+        "a",
+        encoding="utf8"
+    ) as f:
+
+        if source:
+            f.write(
+                f"{title}>{source}\n"
+            )
+        else:
+            f.write(
+                f"{title}\n"
+            )
+
+    return jsonify(
+        status="success"
+    )
+
+
+@stats_bp.route("/playlist/<name>", methods=["GET"])
+def playlist(name):
+    path = os.path.join(PLAYLIST_DIR, f"{name}.txt")
+
+    if not os.path.exists(path):
+        return jsonify({"error": "playlist not found"}), 404
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw_lines = [x.strip() for x in f.readlines() if x.strip()]
+    except Exception as e:
+        return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
+
+    if not raw_lines:
+        return jsonify({"error": "playlist empty"}), 400
+
+    # 1. Take full control under the "playlist" owner identity right away.
+    # This automatically clears old queues and prevents inter-blueprint locks.
+    current_app.playback.acquire("playlist", force=True)
+
+    random.shuffle(raw_lines)
+    count = 0
+
+    for raw in raw_lines:
+        try:
+            if ">" in raw:
+                title, source = raw.split(">", 1)
+                title = title.strip()
+                source = source.strip()
+            else:
+                title = raw
+                source = None
+
+            # -------------------------------------------------------------
+            # FORMAT 3: Local Song (e.g., di.mp3>tunes/di.mp3)
+            # -------------------------------------------------------------
+            if source and source.lower().endswith(
+                (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".webm")
+            ):
+                # Build the absolute system path using ROOT_DIR
+                full_local_url = f"{ROOT_DIR}/{source}"
+
+                # Safely enqueue using the "playlist" lock identifier
+                success = current_app.playback.enqueue(
+                    "playlist",
+                    {
+                        "title": title,
+                        "thumbnail": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E",
+                        "url": full_local_url
+                    }
+                )
+
+                if success:
+                    count += 1
+                continue
+
+            # -------------------------------------------------------------
+            # FORMAT 1: Explicit YouTube ID (e.g., Title>XEjLoHdbVeE)
+            # -------------------------------------------------------------
+            if source:
+                video_url = f"https://www.youtube.com/watch?v={source}"
+                
+                # Resolve the direct audio streaming URL using yt_service pipeline
+                try:
+                    from services.yt_service import YTService
+                    yt_resolver = YTService()
+                    stream_url = yt_resolver.resolve_stream(video_url)
+                except Exception as stream_err:
+                    logger.error(f"Failed to extract stream for ID {source}: {stream_err}")
+                    stream_url = None
+
+                if stream_url:
+                    success = current_app.playback.enqueue(
+                        "playlist",
+                        {
+                            "title": title,
+                            "thumbnail": f"https://img.youtube.com/vi/{source}/hqdefault.jpg",
+                            "url": stream_url
+                        }
+                    )
+                    if success:
+                        count += 1
+                continue
+
+            # -------------------------------------------------------------
+            # FORMAT 2: Heuristic Text Query (e.g., Eye of the tiger)
+            # -------------------------------------------------------------
+            result = auto_pick_song(title)
+            if result and result.get("videoId"):
+                video_url = f"https://www.youtube.com/watch?v={result['videoId']}"
+                
+                try:
+                    from services.yt_service import YTService
+                    yt_resolver = YTService()
+                    stream_url = yt_resolver.resolve_stream(video_url)
+                except Exception as stream_err:
+                    logger.error(f"Failed to extract stream for text match {title}: {stream_err}")
+                    stream_url = None
+
+                if stream_url:
+                    success = current_app.playback.enqueue(
+                        "playlist",
+                        {
+                            "title": result["title"],
+                            "thumbnail": result["thumbnail"],
+                            "url": stream_url
+                        }
+                    )
+                    if success:
+                        count += 1
+
+        except Exception as e:
+            logger.error(f"Playlist line process failed for '{raw}': {e}")
+
+    return jsonify({
+        "status": "queued",
+        "count": count
     })

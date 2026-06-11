@@ -1,4 +1,4 @@
-"""
+""" yt/rotes.py - Flask routes for YouTube Music integration
 YouTube Music Routes - Stream YouTube audio via FFmpeg to Bose
 """
 import os
@@ -12,7 +12,6 @@ from core.bose_worker import BoseSoundTouchWorker
 from core.settings import BOSE_IP, PLAYLIST_DIR, STREAM_FALLBACK_URLS, STREAM_URL
 import logging
 import random
-from services.yt_service import YTService
 import requests # type: ignore
 
 
@@ -24,7 +23,6 @@ youtube_bp = Blueprint('youtube', __name__, template_folder='templates')
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 # Initialize services
-yt_service = YTService()
 ffmpeg = FFmpegService()
 bose = BoseSoundTouchWorker(ip_address=BOSE_IP)
 # ---------------- DISPLAY ----------------
@@ -121,111 +119,7 @@ def get_stream_url():
 STREAM_URL = get_stream_url()
 
 # ---------- PLAYBACK CONTROL ----------
-def enqueue_youtube_result(result):
-    """
-    Enqueue a YouTube search result into the playback queue.
-    Expected keys:
-        title
-        thumbnail
-        videoId
-    """
 
-    video_url = (
-        f"https://www.youtube.com/watch?v={result['videoId']}"
-    )
-
-    stream_url = yt_service.resolve_stream(video_url)
-
-    if not stream_url:
-        return False
-
-    return current_app.playback.enqueue(
-        "youtube",
-        {
-            "title": result["title"],
-            "thumbnail": result["thumbnail"],
-            "url": stream_url
-        }
-    )
-
-
-def auto_pick_song(query):
-
-    url = "https://www.googleapis.com/youtube/v3/search"
-
-    params = {
-        "part": "snippet",
-        "q": query + " music",
-        "type": "video",
-        "maxResults": 10,
-        "key": YOUTUBE_API_KEY
-    }
-
-    res = requests.get(url, params=params).json()
-
-    items = res.get("items", [])
-
-    if not items:
-        return None
-
-    bad_words = [
-        "live",
-        "cover",
-        "slowed",
-        "reverb",
-        "nightcore",
-        "8d",
-        "remix",
-        "bass boosted"
-    ]
-
-    best_score = -999
-    best_item = None
-
-    for item in items:
-
-        title = item["snippet"]["title"].lower()
-        channel = item["snippet"]["channelTitle"].lower()
-
-        score = 0
-
-        # good signals
-
-        if "official" in title:
-            score += 5
-
-        if "topic" in channel:
-            score += 5
-
-        if "vevo" in channel:
-            score += 4
-
-        if "music" in channel:
-            score += 2
-
-        # bad signals
-
-        for word in bad_words:
-            if word in title:
-                score -= 10
-
-        # prefer shorter cleaner titles
-
-        score -= len(title) // 40
-
-        if score > best_score:
-            best_score = score
-            best_item = item
-
-    if not best_item:
-        return None
-
-    return {
-        "title": best_item["snippet"]["title"],
-        "thumbnail": best_item["snippet"]["thumbnails"]["high"]["url"],
-        "videoId": best_item["id"]["videoId"],
-        "channel": best_item["snippet"]["channelTitle"]
-    }
 
 # ---------- MUSICATLAS RECOMMENDATIONS ----------
 
@@ -339,11 +233,11 @@ def auto_pick():
     if current_app.playback.owner is None:
         current_app.playback.acquire("youtube")
 
-    result = auto_pick_song(query)
+    result = YTService.auto_pick_song(query)
     if not result:
         return jsonify({"error": "No suitable song found"}), 404
 
-    success = enqueue_youtube_result(result)
+    success = YTService.enqueue_youtube_result(result)
     if not success:
         return jsonify({
             "error": "youtube blueprint does not own player",
@@ -421,7 +315,7 @@ def enqueue():
 
     song = request.get_json()
 
-    success = enqueue_youtube_result(song)
+    success = YTService.enqueue_youtube_result(song)
 
     if not success:
         return jsonify({
@@ -495,11 +389,11 @@ def recommend_and_enqueue():
             # PATH B: Fallback to your heuristic search engine
             else:
                 logger.warning(f"No YouTube ID in MusicAtlas data for: {track['title']}. Falling back to search.")
-                result = auto_pick_song(track["title"])
+                result = YTService.auto_pick_song(track["title"])
 
             # 3. Stream link resolution and queue execution
             if result:
-                success = enqueue_youtube_result(result)
+                success = YTService.enqueue_youtube_result(result)
                 if success:
                     added_songs.append({
                         "title": result["title"],
@@ -543,59 +437,3 @@ def get_status():
 
 
     
-
-@youtube_bp.route("/playlist/<name>", methods=["GET"])
-def playlist(name):
-
-    path = os.path.join(
-        PLAYLIST_DIR,
-        f"{name}.txt"
-    )
-
-    if not os.path.exists(path):
-        return jsonify({
-            "error": "playlist not found"
-        }), 404
-
-    with open(path, "r") as f:
-        songs = [
-            x.strip()
-            for x in f.readlines()
-            if x.strip()
-        ]
-
-    if not songs:
-        return jsonify({
-            "error": "playlist empty"
-        }), 400
-
-    if current_app.playback.owner is None:
-        current_app.playback.acquire("youtube")
-
-    random.shuffle(songs)
-
-    added = []
-
-    for query in songs:
-
-        try:
-            result = auto_pick_song(query)
-
-            if not result:
-                continue
-
-            success = enqueue_youtube_result(result)
-
-            if success:
-                added.append(result["title"])
-
-        except Exception as e:
-            logger.error(
-                f"Playlist enqueue failed for '{query}': {e}"
-            )
-
-    return jsonify({
-        "status": "queued",
-        "count": len(added),
-        "songs": added
-    })

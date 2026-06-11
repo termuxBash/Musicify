@@ -96,6 +96,139 @@ nav {
     border-radius: 15px; font-weight: bold; cursor: pointer; transition: background 0.25s;
 }
 .add-btn.queued { background: var(--spotify-green); }
+.card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+.card-actions .add-btn,
+.card-actions .playlist-btn {
+    width: auto;
+    flex: 1;
+}
+.queue-playlist-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    margin-bottom: 6px;
+}
+.queue-playlist-select {
+    flex: 1;
+    background: #1a1a1a;
+    color: white;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 10px;
+    min-width: 0;
+}
+.queue-playlist-btn {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-weight: bold;
+    white-space: nowrap;
+}
+.playlist-btn {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    color: white;
+    border: none;
+    padding: 8px;
+    border-radius: 15px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.playlist-btn:hover {
+    filter: brightness(1.08);
+}
+
+.playlist-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 2500;
+    padding: 20px;
+}
+.playlist-modal.open { display: flex; }
+.playlist-modal-card {
+    width: min(92vw, 360px);
+    background: #111;
+    border: 1px solid #2f2f2f;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.playlist-modal-card h4 {
+    margin-bottom: 8px;
+}
+.playlist-modal-card p {
+    color: #aaa;
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+}
+.playlist-select {
+    width: 100%;
+    background: #1a1a1a;
+    color: white;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 12px;
+}
+.playlist-digits {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.playlist-digit-btn {
+    border: 1px solid #333;
+    border-radius: 12px;
+    background: #1a1a1a;
+    color: white;
+    padding: 10px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.playlist-digit-btn.active {
+    background: rgba(29, 185, 84, 0.2);
+    border-color: var(--spotify-green);
+    color: var(--spotify-green);
+}
+.playlist-combo-input {
+    width: 100%;
+    background: #1a1a1a;
+    color: white;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 12px;
+}
+.playlist-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+.playlist-modal-actions button {
+    border: none;
+    border-radius: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-weight: bold;
+}
+.playlist-cancel {
+    background: #333;
+    color: white;
+}
+.playlist-save {
+    background: linear-gradient(135deg, #ffd166, #ff8c42);
+    color: #111;
+}
 
 /* --- Player Bar --- */
 .player-bar {
@@ -210,6 +343,28 @@ input:checked + .slider:before {
         <h3>Music Queue</h3>
         <span onclick="toggleMenu()" style="cursor: pointer; font-size: 24px;">✕</span>
     </div>
+    <div class="queue-playlist-controls">
+
+    <select
+        id="playlistQueueSelect"
+        class="queue-playlist-select"
+        onclick="refreshPlaylistDropdown()">
+
+        <option value="">
+            Select Playlist
+        </option>
+
+    </select>
+
+    <button
+        class="queue-playlist-btn"
+        onclick="enqueueSelectedPlaylist()">
+
+        Queue
+
+    </button>
+
+</div>
     <div class="queue-list" id="queueList">
         <p style="color: #666; text-align: center; margin-top: 40px;">No songs queued.</p>
     </div>
@@ -225,14 +380,14 @@ input:checked + .slider:before {
 </div>
 
 <div class="player-bar">
+    <div id="live-lyrics" style="font-size: 0.85rem; color: #1db954; font-weight: bold; margin-top: 4px; min-height: 1.2em;"></div>
     <div class="player-top">
         <div class="now-playing">
             <img id="playing-thumb" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E" alt="">
             <div class="now-playing-info">
                 <p id="playing-status">IDLE</p>
                 <h4 id="playing-title">Ready to stream</h4>
-                <div id="live-lyrics" style="font-size: 0.85rem; color: #1db954; font-weight: bold; margin-top: 4px; min-height: 1.2em;"></div>
-            </div>
+                </div>
         </div>
         <div class="btn-group">
             <button class="skip-btn" onclick="skipTrack()">SKIP ⏭</button>
@@ -251,6 +406,48 @@ input:checked + .slider:before {
     </div>
 </div>
 
+<div class="playlist-modal" id="playlistModal" onclick="if(event.target === this) closePlaylistMenu()">
+    <div class="playlist-modal-card">
+        <h4>Add to Playlist</h4>
+        <p id="playlistSongTitle">Enter any combination of digits 1 through 6.</p>
+        <div class="playlist-digits">
+            <button type="button" class="playlist-digit-btn" data-digit="1" onclick="togglePlaylistDigit('1')">1</button>
+            <button type="button" class="playlist-digit-btn" data-digit="2" onclick="togglePlaylistDigit('2')">2</button>
+            <button type="button" class="playlist-digit-btn" data-digit="3" onclick="togglePlaylistDigit('3')">3</button>
+            <button type="button" class="playlist-digit-btn" data-digit="4" onclick="togglePlaylistDigit('4')">4</button>
+            <button type="button" class="playlist-digit-btn" data-digit="5" onclick="togglePlaylistDigit('5')">5</button>
+            <button type="button" class="playlist-digit-btn" data-digit="6" onclick="togglePlaylistDigit('6')">6</button>
+        </div>
+        <input class="playlist-combo-input" id="playlistComboInput" type="text" inputmode="numeric" maxlength="6" placeholder="e.g. 13 or 246" oninput="syncPlaylistComboInput()">
+        <div class="playlist-modal-actions">
+            <button class="playlist-cancel" type="button" onclick="closePlaylistMenu()">Cancel</button>
+            <button class="playlist-save" type="button" id="playlistSaveBtn" onclick="confirmPlaylistAdd()">Add</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. Setup Blueprint-specific properties globally
+    window.API_PREFIX = "{{ api_prefix }}";
+    window.CURRENT_OWNER = "youtube"; // for queue logic handling
+</script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script>
+    // 3. Keep ONLY unique logic here (like your distinct layout toggle or search actions)
+    function toggleMenu(){
+        const panel = document.getElementById("sidePanel");
+        const overlay = document.getElementById("overlay");
+        const main = document.getElementById("main");
+        panel.classList.toggle("open");
+        overlay.classList.toggle("show");
+        if(window.innerWidth >= 768 && main){
+            main.classList.toggle("shift");
+        }
+    }
+    
+    document.addEventListener("DOMContentLoaded", refreshPlaylistDropdown);
+    setInterval(updateStats, 2000);
+</script>
 <script>
 const API_PREFIX = "{{ api_prefix }}";
 
@@ -265,9 +462,6 @@ function toggleMenu() {
     overlay.classList.toggle("show");
 }
 
-async function sendControl(cmd) { await fetch("/ctrl/"+cmd) }
-async function setVolume(val) { volVal.textContent = val + "%"; await fetch("/set_vol/"+val) }
-async function skipTrack() { await fetch(API_PREFIX+"/skip",{method:"POST"}) }
 
 /* SEARCH */
 document.getElementById("searchForm").onsubmit = async (e)=>{
@@ -279,7 +473,10 @@ document.getElementById("searchForm").onsubmit = async (e)=>{
         <div class="song-card">
             <img src="${s.thumbnail}">
             <p>${s.title}</p>
-            <button class="add-btn" onclick='addToQueue(${JSON.stringify(s)}, this)'>+QUEUE</button>
+            <div class="card-actions">
+                <button class="add-btn" onclick='addToQueue(${JSON.stringify(s)}, this)'>+QUEUE</button>
+                <button class="playlist-btn" type="button" onclick='openPlaylistMenu(${JSON.stringify(s)}, this)' title="Add to playlist">🎶️</button>
+            </div>
         </div>
     `).join("");
 }
@@ -306,9 +503,9 @@ async function autoPickSong(btn){
 
         if(res.status === 403){
             const data = await res.json();
-            if(data.owner === "local"){
+            if(data.owner === "local" || data.owner === "playlist"){
                 const takeOver = confirm(
-                    "Local player is currently controlling playback.\n\n" +
+                    data.owner + " player is currently controlling playback.\n\n" +
                     "Taking ownership will clear its queue and stop playback.\n\n" +
                     "Continue?"
                 );
@@ -326,7 +523,7 @@ async function autoPickSong(btn){
                 });
 
                 if(!acquire.ok){
-                    alert("Failed to acquire ownership.");
+                    showPopup("Failed to acquire ownership.");
                     return;
                 }
 
@@ -337,11 +534,11 @@ async function autoPickSong(btn){
 
                 if(!res.ok){
                     const retryData = await res.json();
-                    alert(retryData.error || "Auto-pick failed after takeover.");
+                    showPopup(retryData.error || "Auto-pick failed after takeover.");
                     return;
                 }
             } else {
-                alert(`Playback is controlled by '${data.owner}'.`);
+                showPopup(`Playback is controlled by '${data.owner}'.`);
                 return;
             }
         }
@@ -349,7 +546,7 @@ async function autoPickSong(btn){
         const data = await res.json();
 
         if(!res.ok){
-            alert(data.error || "Auto-pick failed.");
+            showPopup(data.error || "Auto-pick failed.");
             return;
         }
 
@@ -391,9 +588,9 @@ async function addToQueue(song, btn){
 
     if (res.status === 403) {
         const data = await res.json();
-        if (data.owner === "local") {
+        if (data.owner === "local" || data.owner === "playlist") {
             const takeOver = confirm(
-                "Local player is currently controlling playback.\n\n" +
+                data.owner + " player is currently controlling playback.\n\n" +
                 "Taking ownership will clear its queue and stop playback.\n\n" +
                 "Continue?"
             );
@@ -416,7 +613,7 @@ async function addToQueue(song, btn){
             );
 
             if (!acquire.ok) {
-                alert("Failed to acquire ownership.");
+                showPopup("Failed to acquire ownership.");
                 return;
             }
 
@@ -429,16 +626,23 @@ async function addToQueue(song, btn){
             });
 
             if (!res.ok) {
-                alert("Failed to queue song after takeover.");
+                showPopup("Failed to queue song after takeover.");
             }
             return;
         }
-        alert(`Playback is controlled by '${data.owner}'.`);
+        showPopup(`Playback is controlled by '${data.owner}'.`);
     }
 }
 
-/* QUEUE MANAGEMENT */
-async function removeFromQueue(i){ await fetch(API_PREFIX+"/remove_from_queue/"+i,{method:"POST"}) }
+const playlistState = {
+    song: null,
+    button: null
+};
+
+document.addEventListener(
+    "DOMContentLoaded",
+    refreshPlaylistDropdown
+);
 
 /* UPDATE STATS */
 async function updateStats(){
