@@ -1,7 +1,9 @@
-#stream_manager.py
+# stream_manager.py
 import threading
 import time
 import logging
+import urllib.request
+import json
 from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,32 @@ class QueuePlayer:
                 return None
             return self.queue.pop(0)
 
+    def _get_icecast_listeners(self):
+        """Fetches the active listener count from Icecast's JSON endpoint."""
+        try:
+            # Assumes standard Icecast installation on localhost port 8000
+            url = "http://127.0.0.1:8000/status-json.xsl"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=2) as response:
+                data = json.loads(response.read().decode())
+                
+                # Icecast JSON nesting structure parsing
+                if "icestats" in data and "source" in data["icestats"]:
+                    sources = data["icestats"]["source"]
+                    
+                    # If there's only 1 mountpoint, Icecast returns a dict instead of a list
+                    if isinstance(sources, dict):
+                        sources = [sources]
+                        
+                    for source in sources:
+                        if "/mpv.ogg" in source.get("listenurl", ""):
+                            return int(source.get("listeners", 0))
+        except Exception as e:
+            logger.error(f"Error pulling Icecast statistics: {e}")
+            
+        # Default fallback to 1 so autoplay isn't accidentally killed on network timeouts
+        return 1
+
     def _trigger_autoplay(self, reference_song):
         """Generates lookalike track additions using local context processing to bypass endpoint hanging."""
         full_title = reference_song.get("title", "Unknown")
@@ -96,12 +124,8 @@ class QueuePlayer:
         logger.info(f"🔮 AUTOPLAY ACTIVE: Processing local context lookup for -> Artist: '{artist}' | Title: '{title}'")
         
         try:
-            # Import dependencies dynamically to maintain separation
-            from apps.yt.routes import auto_pick_song
             from services.yt_service import YTService
-            yt_resolver = YTService()
 
-            # Seed lookahead lookup strings based on standard artist profiles
             search_queries = [
                 f"{artist} top tracks",
                 f"songs similar to {title} {artist}",
@@ -112,22 +136,19 @@ class QueuePlayer:
 
             for query in search_queries:
                 try:
-                    # Leverage your application's integrated track resolution pipeline
-                    resolved = auto_pick_song(query)
+                    resolved = YTService.auto_pick_song(query)
                     if resolved and resolved.get("videoId"):
-                        # Verify we don't accidentally re-enqueue the identical track currently playing
                         if resolved["videoId"] == reference_song.get("videoId"):
                             continue
                             
                         watch_url = f"https://www.youtube.com/watch?v={resolved['videoId']}"
-                        stream_url = yt_resolver.resolve_stream(watch_url)
+                        stream_url = YTService.resolve_stream(watch_url)
                         
                         if stream_url:
                             resolved["url"] = stream_url
                             autoplays_to_append.append(resolved)
                             logger.info(f"Local Autoplay resolved stream for: {resolved.get('title')}")
                             
-                            # Break early once our targeted lookahead buffer limit is satisfied
                             if len(autoplays_to_append) >= 3:
                                 break
                 except Exception as track_err:
@@ -152,6 +173,21 @@ class QueuePlayer:
 
             with self.lock:
                 self.current_song = song
+
+            # --- DYNAMIC AUTOPLAY CANCELLATION CHECK ---
+            if self.autoplay_enabled:
+                listeners = self._get_icecast_listeners()
+                bose_on = self.bose.is_on() if self.bose else False
+                
+                logger.info(f"Autoplay Status Check -> Connected Listeners: {listeners} | Bose Speaker Awake: {bose_on}")
+                
+                if listeners == 0 and not bose_on:
+                    with self.lock:
+                        self.autoplay_enabled = False
+                    logger.warning("🛑 Autoplay Disabled: 0 active Icecast listeners found and Bose speaker is off.")
+
+            # Assess if autoplay needs to trigger now that we popped the last song
+            with self.lock:
                 should_trigger_now = (len(self.queue) == 0) and self.autoplay_enabled
 
             if should_trigger_now:
@@ -164,7 +200,7 @@ class QueuePlayer:
                 
                 self.current_process = self.ffmpeg.start_stream(target)
 
-                if self.bose:
+                if self.bose and self.bose.is_on():
                     time.sleep(2)
                     self.bose.trigger_upnp_stream(STREAM_URL)
 
