@@ -212,9 +212,7 @@ def playlist(name):
                 
                 # Resolve the direct audio streaming URL using yt_service pipeline
                 try:
-                    from services.yt_service import YTService
-                    yt_resolver = YTService()
-                    stream_url = yt_resolver.resolve_stream(video_url)
+                    stream_url = YTService.resolve_stream(video_url)
                 except Exception as stream_err:
                     logger.error(f"Failed to extract stream for ID {source}: {stream_err}")
                     stream_url = None
@@ -235,14 +233,12 @@ def playlist(name):
             # -------------------------------------------------------------
             # FORMAT 2: Heuristic Text Query (e.g., Eye of the tiger)
             # -------------------------------------------------------------
-            result = auto_pick_song(title)
+            result = YTService.auto_pick_song(title)
             if result and result.get("videoId"):
                 video_url = f"https://www.youtube.com/watch?v={result['videoId']}"
                 
                 try:
-                    from services.yt_service import YTService
-                    yt_resolver = YTService()
-                    stream_url = yt_resolver.resolve_stream(video_url)
+                    stream_url = YTService.resolve_stream(video_url)
                 except Exception as stream_err:
                     logger.error(f"Failed to extract stream for text match {title}: {stream_err}")
                     stream_url = None

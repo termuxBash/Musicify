@@ -104,7 +104,7 @@ class BoseSoundTouchWorker:
                     "artist": artist_name
                 }
         except Exception as e:
-            print(f"[Bose Worker] Failed fetching now_playing node: {e}")
+            print(f"[Bose Worker] Failed fetching now_playing node")#: {e}")
         return {"source": "UNKNOWN", "track": "", "artist": ""}
 
     def is_on(self):

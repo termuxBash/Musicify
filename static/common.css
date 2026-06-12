@@ -1,0 +1,205 @@
+/* static/css/player-shared.css */
+
+/* --- 1. CORE LAYOUT FRAMEWORK --- */
+:root {
+    --bg-dark: #121214;
+    --bg-panel: #1e1e24;
+    --accent: #2a2a35;
+    --text-main: #ffffff;
+    --text-muted: #a0a0ab;
+    --radius: 8px;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    font-family: system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Slide Panel */
+#sidePanel {
+    position: fixed;
+    top: 0;
+    left: -300px; /* Hidden offscreen by default */
+    width: 300px;
+    height: 100vh;
+    background-color: var(--bg-panel);
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease;
+    z-index: 1000;
+}
+
+#sidePanel.open {
+    transform: translateX(300px); /* Slides in */
+}
+
+/* Background Dimmer Overlay */
+#overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 999;
+}
+
+#overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Main Content Wrapper (With transition if shifted) */
+#main {
+    transition: margin-left 0.3s ease;
+    padding: 20px;
+}
+
+@media (min-width: 768px) {
+    #main.shift {
+        margin-left: 300px;
+    }
+}
+
+/* --- 2. SONG CARDS & SEARCH GRIDS --- */
+#results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 20px;
+    padding: 20px 0;
+}
+
+.song-card {
+    background-color: var(--bg-panel);
+    border-radius: var(--radius);
+    padding: 12px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.song-card img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: calc(var(--radius) - 2px);
+}
+
+.song-card p {
+    margin: 10px 0;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+/* Buttons */
+button {
+    background-color: var(--accent);
+    color: var(--text-main);
+    border: none;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+button:hover {
+    filter: brightness(1.2);
+}
+
+button.queued {
+    background-color: #2e7d32; /* Green successful visual state */
+}
+
+/* --- 3. QUEUE LIST (Inside Side Panel) --- */
+.queue-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.queue-item img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.queue-item p {
+    flex: 1;
+    margin: 0;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queue-item span {
+    color: #e53935;
+    cursor: pointer;
+    font-weight: bold;
+    padding: 4px 8px;
+}
+
+/* --- 4. UNIVERSAL PLAYLIST MODAL --- */
+#playlistModal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background-color: var(--bg-panel);
+    padding: 24px;
+    border-radius: calc(var(--radius) * 1.5);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+    z-index: 1100;
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+    width: 90%;
+    max-width: 400px;
+}
+
+#playlistModal.open {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Combinator Grid (Buttons 1-6) */
+.playlist-digit-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 15px 0;
+}
+
+.playlist-digit-btn {
+    padding: 15px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    background-color: var(--bg-dark);
+}
+
+.playlist-digit-btn.active {
+    background-color: #1565c0; /* Blue highlighting selected digits */
+}
+
+/* Volume Slider styling match */
+input[type="range"] {
+    width: 100%;
+    accent-color: #1565c0;
+}
