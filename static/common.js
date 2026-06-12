@@ -63,14 +63,12 @@ async function setVolume(val) {
     await fetch("/set_vol/" + val);
 }
 
-async function skipTrack() { 
-    const prefix = window.API_PREFIX || "";
-    await fetch(prefix + "/skip", { method: "POST" }); 
+async function skipTrack() {
+    await fetch("/skip", { method: "POST" }); 
 }
 
-async function removeFromQueue(i) { 
-    const prefix = window.API_PREFIX || "";
-    await fetch(prefix + "/remove_from_queue/" + i, { method: "POST" }); 
+async function removeFromQueue(i) {
+    await fetch("/remove_from_queue/" + i, { method: "POST" }); 
 }
 
 // --- UNIVERSAL PLAYLIST MODAL MANAGEMENT ---

@@ -327,27 +327,6 @@ def enqueue():
         "status": "queued"
     })
 
-@youtube_bp.route(
-    "/remove_from_queue/<int:index>",
-    methods=["POST"]
-)
-def remove_from_queue(index):
-
-    removed = current_app.playback.remove_from_queue(
-        "youtube",
-        index
-    )
-
-    if removed is None:
-        return jsonify({
-            "error": "not owner"
-        }), 403
-
-    return jsonify({
-        "status": "removed",
-        "title": removed["title"]
-    })
-
 @youtube_bp.route("/recommend_and_enqueue", methods=["POST"])
 def recommend_and_enqueue():
     """
@@ -411,14 +390,6 @@ def recommend_and_enqueue():
         "enqueued_songs": added_songs
     })
 
-# ---------- SKIP ----------
-
-@youtube_bp.route("/skip", methods=["POST"])
-def skip():
-
-    current_app.playback.skip("youtube")
-
-    return jsonify({"status": "skipped"})
 
 
 

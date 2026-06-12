@@ -79,16 +79,13 @@ class PlaybackController:
 
             return True
 
-    def remove_from_queue(self, blueprint_name, index):
+    def remove_from_queue(self, index):
 
         with self._lock:
-
-            if self._owner != blueprint_name:
-                return None
-
+            #Allow any bp to remove from the queue, but not shift ownership
             return self.player.remove_from_queue(index)
 
-    def skip(self, blueprint_name):
+    def skip(self):
 
         with self._lock:
             #Allow any bp to skip the track

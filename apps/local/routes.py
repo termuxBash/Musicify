@@ -129,26 +129,6 @@ def play_folder():
         "folder": subpath
     })
 
-@local_bp.route(
-    "/remove_from_queue/<int:index>",
-    methods=["POST"]
-)
-def remove_from_queue(index):
-
-    removed = current_app.playback.remove_from_queue(
-        "local",
-        index
-    )
-
-    if removed is None:
-        return jsonify({
-            "error": "not owner"
-        }), 403
-
-    return jsonify({
-        "status": "removed",
-        "title": removed["title"]
-    })
 
 @local_bp.route("/status")
 def status():

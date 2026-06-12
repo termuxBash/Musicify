@@ -146,6 +146,28 @@ def add_to_playlist():
     return jsonify(
         status="success"
     )
+@stats_bp.route(
+    "/remove_from_queue/<int:index>",
+    methods=["POST"]
+)
+def remove_from_queue(index):
+
+    removed = current_app.playback.remove_from_queue(index)
+
+    if removed is None:
+        return jsonify({
+            "error": "not owner"
+        }), 403
+
+    return jsonify({
+        "status": "removed",
+        "title": removed["title"]
+    })
+
+@stats_bp.route("/skip", methods=["POST"])
+def skip():
+    current_app.playback.skip()
+    return jsonify({"status": "skipped"})
 
 
 @stats_bp.route("/playlist/<name>", methods=["GET"])
