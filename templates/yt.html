@@ -447,7 +447,6 @@ input:checked + .slider:before {
     }
     
     document.addEventListener("DOMContentLoaded", refreshPlaylistDropdown);
-    setInterval(updateStats, 2000);
 </script>
 <script>
 const API_PREFIX = "{{ api_prefix }}";
@@ -697,8 +696,6 @@ async function toggleAutoplay(){
         method: "POST"
     });
 }
-
-setInterval(updateStats, 2000);
 </script>
 </body>
 </html>
