@@ -19,6 +19,12 @@ pip install yt-dlp flask python-dotenv requests
 
 5. Setup the speaker api accordingly to your speaker and set the `BOSE_IP` in the `.env` file.
 Configure the bose is_on() to return true always incase of incompatibility with the speaker api
+
+6. Start with
+```bash
+python3 app.py
+```
+
 ## Environment
 
 Set these in your `.env` file to override runtime defaults:
