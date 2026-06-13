@@ -7,7 +7,15 @@ Music streaming service to stream music directly to aireplay via icecast2 stream
 2. Make sure Icecast2 is installed and configured on your system. You can follow the official Icecast documentation for installation instructions. 
 the default configuration is set to stream on `http://localhost:8000/stream` with the username `source` and password `password`. You can modify these settings in the `config/icecast.xml` file.
 
+3. Get the required API keys for YouTube Data API and Music Atlas API, and set them in the `.env` file.
 
+4. Install the required Python dependencies using pip:
+```bash
+pip install yt-dlp flask python-dotenv requests
+```
+
+5. Setup the speaker api accordingly to your speaker and set the `BOSE_IP` in the `.env` file.
+Configure the bose is_on() to return true always incase of incompatibility with the speaker api
 ## Environment
 
 Set these in your `.env` file to override runtime defaults:
