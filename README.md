@@ -1,7 +1,7 @@
 # Musicify
 Music streaming service to stream music directly to aireplay via icecast2 stream
 
-# Setup
+## Setup
 1. Clone the repository and navigate to the project directory.
 ```bash
 git clone https://github.com/termuxBash/Musicify
@@ -9,7 +9,7 @@ cd Musicify
 ```
 2. Make sure Icecast2 is installed and configured on your system. You can follow the official Icecast documentation for installation instructions. 
 the default configuration is set to stream on `http://localhost:8000/stream` with the username `source` and password `password`. You can modify these settings in the `config/icecast.xml` file.
-# Linux configuration example
+### Linux configuration example
 `/etc/icecast2/icecast.xml`:
 ```xml
 <mount>
