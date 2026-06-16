@@ -3,540 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Stream Station Pro</title>
-
-<style>
-:root{
-    --green:#1db954;
-    --bg:#0f0c29;
-    --panel:#121212;
-    --card:#1a1a1a;
-    --border:#2a2a2a;
-    --danger:#d32f2f;
-}
-
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    -webkit-tap-highlight-color:transparent;
-}
-
-body{
-    font-family:-apple-system,sans-serif;
-    background:var(--bg);
-    color:white;
-    overflow-x:hidden;
-}
-
-/* NAV */
-nav{
-    position:fixed;
-    top:0;
-    width:100%;
-    height:60px;
-    background:rgba(0,0,0,0.9);
-    backdrop-filter:blur(10px);
-    display:flex;
-    align-items:center;
-    padding:0 15px;
-    border-bottom:1px solid var(--border);
-    z-index:1000;
-}
-
-.menu{
-    font-size:24px;
-    color:var(--green);
-    cursor:pointer;
-    margin-right:10px;
-}
-
-.brand{
-    font-weight:bold;
-    color:var(--green);
-}
-
-/* OVERLAY */
-.overlay{
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,0.6);
-    display:none;
-    z-index:1500;
-}
-.overlay.show{display:block;}
-
-/* SIDE PANEL */
-.side-panel {
-    position: fixed;
-    top: 0;
-    left: -100%;
-    width: 300px;
-    height: 100%;
-    background: var(--panel);
-    z-index: 2000;
-    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    padding: 20px;
-    box-shadow: 5px 0 15px rgba(0,0,0,0.5);
-    display: flex;
-    flex-direction: column;
-}
-
-.side-panel.open {
-    left: 0;
-}
-
-.queue-list {
-    flex: 1;
-    overflow-y: auto;
-    margin-top: 20px;
-}
-
-.queue-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: #1a1a1a;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 10px;
-}
-
-.queue-item img {
-    width: 40px;
-    border-radius: 4px;
-}
-
-.queue-item p {
-    font-size: 0.75rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.queue-item span {
-    margin-left: auto;
-    cursor: pointer;
-    color: var(--danger);
-    font-size: 30px;
-}
-
-.drawer-header{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:10px;
-}
-
-/* MAIN */
-.main{
-    padding:80px 15px 160px; /* bottom space for player bar */
-    max-width:1200px;
-    margin:0 auto;
-    transition:margin-left 0.3s ease;
-}
-
-.main.shift{
-    margin-left:280px;
-}
-
-/* SEARCH COMPONENT STYLES */
-.search-container {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-}
-
-.search-input {
-    flex: 1;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 10px 15px;
-    color: white;
-    font-size: 14px;
-}
-
-.search-input:focus {
-    outline: 1px solid var(--green);
-}
-
-.search-btn {
-    background: var(--green);
-    color: white;
-    border: none;
-    border-radius: 20px;
-    padding: 0 20px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-/* FILE GRID */
-.file-grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
-    gap:12px;
-}
-
-.file-card{
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:12px;
-    padding:12px;
-    text-align:center;
-}
-
-.file-icon{
-    font-size:28px;
-    margin-bottom:8px;
-}
-
-.file-name{
-    font-size:12px;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-}
-
-.btn{
-    margin-top:8px;
-    width:100%;
-    padding:7px;
-    border:none;
-    border-radius:20px;
-    background:#333;
-    color:white;
-    font-weight:bold;
-    cursor:pointer;
-}
-
-.btn:hover{
-    background:var(--green);
-}
-
-.card-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.card-actions .btn,
-.card-actions .playlist-btn {
-    width: auto;
-    flex: 1;
-}
-
-.queue-playlist-controls {
-    display: flex;
-    gap: 8px;
-    margin-top: 14px;
-    margin-bottom: 6px;
-}
-
-.queue-playlist-select {
-    flex: 1;
-    background: #1a1a1a;
-    color: white;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 10px;
-    min-width: 0;
-}
-
-.queue-playlist-btn {
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    padding: 10px 12px;
-    cursor: pointer;
-    font-weight: bold;
-    white-space: nowrap;
-}
-
-.playlist-btn {
-    padding: 7px;
-    border: none;
-    border-radius: 20px;
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-    color: white;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.playlist-btn:hover{
-    filter: brightness(1.08);
-}
-
-.playlist-modal {
-    position: fixed;
-    inset: 0;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.72);
-    z-index: 2500;
-    padding: 20px;
-}
-
-.playlist-modal.open { display: flex; }
-
-.playlist-modal-card {
-    width: min(92vw, 360px);
-    background: #111;
-    border: 1px solid #2f2f2f;
-    border-radius: 18px;
-    padding: 18px;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-}
-
-.playlist-modal-card h4 {
-    margin-bottom: 8px;
-}
-
-.playlist-modal-card p {
-    color: #aaa;
-    font-size: 0.8rem;
-    margin-bottom: 12px;
-}
-
-.playlist-select {
-    width: 100%;
-    background: #1a1a1a;
-    color: white;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 10px;
-    margin-bottom: 12px;
-}
-
-.playlist-digits {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.playlist-digit-btn {
-    border: 1px solid #333;
-    border-radius: 12px;
-    background: #1a1a1a;
-    color: white;
-    padding: 10px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.playlist-digit-btn.active {
-    background: rgba(29, 185, 84, 0.2);
-    border-color: var(--green);
-    color: var(--green);
-}
-
-.playlist-combo-input {
-    width: 100%;
-    background: #1a1a1a;
-    color: white;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 10px;
-    margin-bottom: 12px;
-}
-
-.playlist-modal-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-}
-
-.playlist-modal-actions button {
-    border: none;
-    border-radius: 12px;
-    padding: 10px 14px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.playlist-cancel {
-    background: #333;
-    color: white;
-}
-
-.playlist-save {
-    background: linear-gradient(135deg, #ffd166, #ff8c42);
-    color: #111;
-}
-
-/* PATH */
-.path{
-    margin-bottom:15px;
-    font-size:13px;
-    color:#aaa;
-}
-
-/* ---------------- PLAYER BAR ---------------- */
-.player-bar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 110px;
-    background: #000;
-    border-top: 2px solid var(--green);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 10px 15px;
-    z-index: 1000;
-}
-
-.player-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    margin-bottom: 8px;
-}
-
-.now-playing {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-    overflow: hidden;
-}
-
-.now-playing img {
-    width: 45px;
-    height: 45px;
-    border-radius: 6px;
-    background: #222;
-}
-
-.now-playing-info h4 {
-    font-size: 0.8rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.now-playing-info p {
-    font-size: 0.65rem;
-    color: var(--green);
-}
-
-.player-bottom {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    gap: 10px;
-}
-
-.volume-cluster {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #111;
-    padding: 5px 10px;
-    border-radius: 20px;
-}
-
-.vol-btn {
-    background: #333;
-    border: none;
-    color: white;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    cursor: pointer;
-}
-
-#vol-slider {
-    accent-color: var(--green);
-    width: 80px;
-    cursor: pointer;
-}
-
-#vol-val {
-    font-family: monospace;
-    font-size: 0.75rem;
-    min-width: 35px;
-    text-align: center;
-}
-
-.btn-group {
-    display: flex;
-    gap: 8px;
-}
-
-.skip-btn {
-    background: var(--green);
-    border: none;
-    color: white;
-    padding: 8px 15px;
-    border-radius: 20px;
-    font-weight: bold;
-    font-size: 0.75rem;
-}
-
-.power-btn {
-    background: var(--danger);
-    border: none;
-    color: white;
-    padding: 8px 15px;
-    border-radius: 20px;
-    font-weight: bold;
-    font-size: 0.75rem;
-}
-
-@media (min-width: 1024px) {
-    .side-panel {
-        left: -100%;
-        width: 350px;
-    }
-
-    .menu {
-        display: flex;
-    }
-
-    .player-bar {
-        flex-direction: row;
-        height: 90px;
-    }
-
-    #vol-slider {
-        width: 150px;
-    }
-}
-
-/* RESPONSIVE DRAWER FIX */
-@media(max-width:768px){
-    .side-panel{
-        width:100%;
-        left:-100%;
-    }
-
-    .main.shift{
-        margin-left:0;
-    }
-}
-</style>
+<title>Songify local</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='common.css') }}">
 </head>
-
 <body>
-
 <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
-
 <nav>
     <div class="menu" onclick="toggleMenu()">☰</div>
-    <div class="brand">Stream Station</div>
-    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
-        <div style="font-family:monospace;font-size:12px;color:#aaa;background:rgba(29,185,84,0.1);padding:5px 10px;border-radius:15px;">
-            CPU: <span id="cpu-load">0%</span>
+    <h3 style="color:var(--spotify-green); margin-right: auto;">Songify local</h3>
+
+    <div style="display:flex; align-items:center; gap:15px; margin-right:15px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:12px; color:#aaa;">Lyrics</span>
+            <label class="switch">
+                <input type="checkbox" id="lyricsToggle" onchange="toggleLyrics()">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:12px; color:#aaa;">Autoplay</span>
+            <label class="switch">
+                <input type="checkbox" id="autoplayToggle" onchange="toggleAutoplay()">
+                <span class="slider"></span>
+            </label>
         </div>
     </div>
+    
+    <div class="system-monitor">CPU: <span id="cpu-load">0%</span></div>
 </nav>
 
 <div class="side-panel" id="sidePanel">
@@ -573,8 +67,12 @@ nav{
             {% endif %}
             <button id="searchBackButton" class="btn" style="margin-top:0; display:none; background:#555;" onclick="clearSearchState()">⬅ Back to Folders</button>
             
-            <button id="playFolderBtn" class="btn" style="margin-top:0; background:var(--green)" onclick="playCurrentFolder('{{ current_path }}')">
+            <button id="playFolderBtn" class="btn" style="margin-top:0; background:var(--spotify-green)" onclick="playCurrentFolder('{{ current_path }}')">
                 ▶ Play Folder
+            </button>
+
+            <button id="randomSongBtn" class="btn" style="margin-top:0; background: linear-gradient(135deg, #ff8c42, #ff3c00);" onclick="queueRandomSong(this)">
+                🎲 Random Song
             </button>
         </div>
     </div>
@@ -740,6 +238,51 @@ document.getElementById("searchInput").addEventListener("keypress", function(eve
     }
 });
 
+async function queueRandomSong(btn) {
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Queueing... 🎲";
+    btn.disabled = true;
+
+    try {
+        let res = await fetch("/local/enqueue_random", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+        });
+
+        if (res.status === 403) {
+            const data = await res.json();
+            const takeOver = confirm(`${data.owner} player is currently controlling playback.\n\nTaking ownership will clear its queue and stop playback.\n\nContinue?`);
+            
+            if (takeOver) {
+                const acquire = await fetch("/local/acquire", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ force: true })
+                });
+
+                if (acquire.ok) {
+                    res = await fetch("/local/enqueue_random", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" }
+                    });
+                }
+            }
+        }
+
+        if (res.ok) {
+            const data = await res.json();
+            console.log("Successfully queued random track:", data.song.title);
+        } else {
+            alert("Failed to queue random song.");
+        }
+    } catch (e) {
+        console.error("Error queueing random track:", e);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
 /* API EXECUTION AND QUEUE HANDLING */
 async function addToQueue(song, btn){
     btn.classList.add("queued");
@@ -780,43 +323,6 @@ async function addToQueue(song, btn){
     }
 }
 
-document.addEventListener("DOMContentLoaded", refreshPlaylistDropdown);
-
-const volSlider = document.getElementById("vol-slider");
-const volVal = document.getElementById("vol-val");
-
-async function updateStats(){
-    try{
-        const res = await fetch("/stats");
-        const data = await res.json();
-        document.getElementById("cpu-load").textContent = data.cpu + "%";
-
-        if(document.activeElement !== volSlider){
-            volSlider.value = data.volume;
-            volVal.textContent = data.volume + "%";
-        }
-
-        if(data.now_playing){
-            document.getElementById("playing-title").textContent = data.now_playing.title;
-            document.getElementById("playing-thumb").src = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
-            document.getElementById("playing-status").textContent = data.is_playing ? "BROADCASTING" : "PAUSED";
-        }
-
-        const qList = document.getElementById("queueList");
-        if(!data.queue || data.queue.length===0){
-            qList.innerHTML = "No songs queued";
-        } else {
-            qList.innerHTML = data.queue.map((s,i)=>`
-                <div class="queue-item">
-                    <img src="${s.thumbnail || ''}" alt="thumb">
-                    <p>${s.title}</p>
-                    <span onclick="removeFromQueue(${i})">✕</span>
-                </div>
-            `).join("");
-        }
-    } catch(e){}
-}
-
 function playCurrentFolder(p){
     fetch('/local/play_folder',{
         method:'POST',
@@ -825,7 +331,6 @@ function playCurrentFolder(p){
     });
 }
 
-setInterval(updateStats, 2000);
 </script>
 </body>
 </html>

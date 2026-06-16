@@ -2,6 +2,7 @@
 """
 
 import os
+import random
 
 from flask import Blueprint, current_app, jsonify, render_template, request, url_for # type: ignore
 
@@ -48,6 +49,56 @@ def acquire():
     })
 
 # ---------- QUEUE ----------
+
+def get_random_local_track_payload():
+    """Helper function to find a random audio file and format its payload."""
+    audio_exts = (
+        '.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.opus', '.webm', '.wma',
+        '.alac', '.ape', '.aiff', '.au', '.dsd', '.dff', '.mka', '.pcm', '.ra',
+        '.tta', '.mp4', '.avi', '.mov', '.flv', '.mkv', '.mpeg', '.mpg', '.3gp', '.wmv'
+    )
+    
+    all_files = []
+    for root, _, filenames in os.walk(ROOT_DIR):
+        for f in filenames:
+            if f.lower().endswith(audio_exts):
+                abs_path = os.path.join(root, f)
+                rel_path = os.path.relpath(abs_path, ROOT_DIR)
+                all_files.append({
+                    "title": f,
+                    "rel_path": rel_path,
+                    "url": abs_path
+                })
+                
+    if not all_files:
+        return None
+        
+    picked = random.choice(all_files)
+    return {
+        "title": picked["title"],
+        "thumbnail": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E",
+        "url": picked["url"]
+    }
+
+@local_bp.route("/enqueue_random", methods=["POST"])
+def enqueue_random():
+    """Route targeted by the UI button to queue one random track."""
+    if current_app.playback.owner is None:
+        current_app.playback.acquire("local")
+        
+    payload = get_random_local_track_payload()
+    if not payload:
+        return jsonify({"error": "No local music files found"}), 404
+        
+    success = current_app.playback.enqueue("local", payload)
+    
+    if not success:
+        return jsonify({
+            "error": "local blueprint does not own player",
+            "owner": current_app.playback.owner
+        }), 403
+        
+    return jsonify({"status": "queued", "song": payload})
 
 @local_bp.route("/enqueue", methods=["POST"])
 def enqueue():

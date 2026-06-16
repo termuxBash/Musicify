@@ -44,7 +44,19 @@ function showPopup(message) {
 
 
 
-// static/js/player-shared.js
+async function toggleLyrics(){
+    const isChecked = document.getElementById("lyricsToggle").checked;
+    await fetch("/toggle_lyrics", {
+        method: "POST"
+    });
+}
+/* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */
+async function toggleAutoplay(){
+    const isChecked = document.getElementById("autoplayToggle").checked;
+    await fetch("/toggle_autoplay", {
+        method: "POST"
+    });
+}
 
 // Global state container to avoid collisions
 window.playlistState = {
@@ -211,11 +223,14 @@ async function refreshPlaylistDropdown() {
         console.error(err);
     }
 }
-
+document.addEventListener("DOMContentLoaded", refreshPlaylistDropdown);
 // --- SAFE GLOBAL POLING MONITORS ---
 // Initialize a local execution gate safely at the top of common.js
 window.sysConfig = { active: false };
 
+
+const volSlider = document.getElementById("vol-slider");
+const volVal = document.getElementById("vol-val");
 async function updateStats() {
     try {
         const res = await fetch("/stats");
