@@ -2,6 +2,8 @@
 Settings file that can be imported for access to all environment variables and configuration values in one place. This helps avoid circular imports and keeps configuration organized.
 
 """
+from dotenv import load_dotenv
+load_dotenv()
 import os
 
 def env_bool(name, default=False):
