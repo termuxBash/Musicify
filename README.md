@@ -9,12 +9,22 @@ cd Musicify
 ```
 2. Make sure Icecast2 is installed and configured on your system. You can follow the official Icecast documentation for installation instructions. 
 the default configuration is set to stream on `http://localhost:8000/stream` with the username `source` and password `password`. You can modify these settings in the `config/icecast.xml` file.
+# Linux configuration example
+`/etc/icecast2/icecast.xml`:
+```xml
+<mount>
+  <mount-name>/mpv.ogg</mount-name>
+  <fallback-mount>/silent.mp3</fallback-mount>
+  <fallback-override>1</fallback-override>
+</mount>
+```
+Make sure to copy the `silent.mp3` file to the appropriate location (e.g., `/usr/share/icecast2/web/silent.mp3`) and set the correct permissions.
 
-3. Get the required API keys for YouTube Data API and Music Atlas API, and set them in the `.env` file.
+3. Get the required API keys for YouTube Data API and Last.fm API, and set them in the `.env` file.
 
 4. Install the required Python dependencies using pip:
 ```bash
-pip install yt-dlp flask python-dotenv requests
+pip install -r requirements.txt
 ```
 
 5. Setup the speaker api accordingly to your speaker and set the `BOSE_IP` in the `.env` file.
@@ -37,5 +47,5 @@ Set these in your `.env` file to override runtime defaults:
 - `LYRICS_ENABLED` to control lyrics on startup (`true` / `false`).
 - `AUTOPLAY_ENABLED` to control autoplay on startup (`true` / `false`).
 - `APP_HOST` and `APP_PORT` for the Flask server bind address.
-- `YOUTUBE_API_KEY` and `MUSIC_ATLAS_KEY` for the external API integrations.
+- `YOUTUBE_API_KEY` and `LASTFM_API_KEY` for the external API integrations.
 - `BACKUP_YOUTUBE_API_KEY` is a backup api key if the 1st one fails put a random characters here
