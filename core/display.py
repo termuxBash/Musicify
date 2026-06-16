@@ -1,6 +1,5 @@
 import sys
 import subprocess
-import textwrap
 from PIL import Image, ImageDraw, ImageFont
 
 WIDTH, HEIGHT = 128, 100

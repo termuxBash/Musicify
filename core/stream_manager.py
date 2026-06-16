@@ -1,4 +1,10 @@
-# stream_manager.py
+"""core.stream_manager.py - Threaded music queue manager with dynamic autoplay and Icecast listener monitoring
+The StreamQueueManager class provides a thread-safe music queue management system that integrates with FFmpeg for streaming to Icecast.
+It maintains a queue of songs to be played, handles the lifecycle of FFmpeg processes, and includes an autoplay feature that dynamically generates new tracks based on the currently playing song
+using Last.fm recommendations or local file shuffling depending on the source. The manager also monitors the number of active listeners connected to the Icecast stream and the state of the Bose speaker to intelligently disable autoplay when no one is listening, preventing unnecessary resource usage.
+The QueuePlayer class encapsulates the core functionality of managing the playback queue, starting and stopping streams
+"""
+
 import threading
 import time
 import logging

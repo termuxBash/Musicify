@@ -1,4 +1,12 @@
-from flask import Blueprint, jsonify, request
+"""#core.bose_routes.py - Flask routes for controlling Bose SoundTouch speakers
+This module defines the Flask routes that allow the front-end to send commands to the Bose SoundTouch
+speaker, such as adjusting volume, changing input sources, and triggering playback of a network stream. It uses a shared instance of the BoseSoundTouchWorker to execute these commands and retrieve status information.
+The routes return JSON responses that indicate the success of the operations and provide current status details for the speaker.
+
+**This file is focused solely on the Flask route definitions and their interactions with the BoseSoundTouchWorker. The actual implementation of the worker, including how it communicates with the Bose hardware, is contained in the bose_worker module. This separation allows for cleaner code organization and easier maintenance.**
+"""
+
+from flask import Blueprint, jsonify
 from core.bose_worker import BoseSoundTouchWorker
 from core.settings import BOSE_IP, STREAM_URL
 

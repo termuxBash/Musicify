@@ -1,4 +1,7 @@
-# core/stats.py
+""" core.stats.py - Flask routes for system stats and player status
+This module defines the Flask routes that provide real-time system statistics and player status information to the front.
+It has endpoints for retrieving CPU usage, current volume, queue status, now playing details, autoplay and lyrics settings, as well as toggling autoplay and lyrics display.
+It also includes routes for managing playlists and removing songs from the queue."""
 from flask import Blueprint, jsonify, request ,current_app
 import psutil
 import os

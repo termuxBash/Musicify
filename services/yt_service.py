@@ -1,15 +1,22 @@
+"""services.yt_service.py - Service for search and stream resolution
+The YTService class provides methods for searching music videos based on a text query,
+resolving direct audio stream URLs from YouTube video links using yt_dlp, and enqueuing search results into the playback queue.
+The service also implements a heuristic scoring system to select the best matching video from search results, prioritizing official music videos and channels while penalizing live performances, covers, and remixes.
+This design ensures that the most relevant and high-quality audio streams are selected for playback while maintaining resilience against API limitations.
+
+"""
+
 from flask import current_app
 import requests
 from yt_dlp import YoutubeDL
 import logging
-import os
+from core.settings import YOUTUBE_API_KEY, BACKUP_YOUTUBE_API_KEY
 
 
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 logger = logging.getLogger(__name__)
 YOUTUBE_API_KEYS = [
     YOUTUBE_API_KEY,
-    os.getenv("BACKUP_YOUTUBE_API_KEY")
+    BACKUP_YOUTUBE_API_KEY
 ]
 
 

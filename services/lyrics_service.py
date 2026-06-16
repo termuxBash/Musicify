@@ -1,3 +1,11 @@
+"""services.lyrics_service.py - Service for fetching and displaying synced lyrics
+The LyricsService class provides functionality to fetch synced lyrics for the currently playing song using the LRCLIB API. It processes the song title to create a clean search query,
+retrieves the lyrics in a timestamped format, and calculates the current lyric line based on the elapsed time since the song started. The service also includes a method to trigger the display of the current lyric line on a hardware screen by spawning a subprocess that runs a separate display script.
+The service is designed to be enabled or disabled based on configuration settings, allowing for flexible integration with the music player.
+
+**Note: The actual display of lyrics on hardware is handled by a separate script (core/display.py), and this service is responsible for providing the lyrics to be displayed. The communication between the service and the display script is done through subprocess calls, which allows for decoupling of the lyric fetching logic from the hardware interaction logic.**
+"""
+
 import logging
 import requests
 import time

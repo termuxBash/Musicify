@@ -1,3 +1,8 @@
+"""#services.ffmpeg_service.py - FFmpeg process management for streaming to Icecast
+This module provides a clean interface for starting and stopping FFmpeg processes that stream audio to an Icecast server. It abstracts away the complexities of subprocess management, 
+allowing the rest of the application to simply call start_stream with a file path or URL, and handles the lifecycle of the FFmpeg process internally. It also includes a StreamQueueManager class that can manage a queue of tracks to be streamed sequentially, with support for skipping and stopping playback.
+"""
+
 import subprocess
 import os
 import signal

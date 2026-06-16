@@ -1,15 +1,13 @@
-""" yt/rotes.py - Flask routes for YouTube Music integration
-YouTube Music Routes - Stream YouTube audio via FFmpeg to Bose
+"""#yt/rotes.py - Flask routes for Online Music integration
+Music Routes - Stream audio via FFmpeg to Bose
 """
-import os
 import subprocess
 import threading
-import time
 from flask import Blueprint, jsonify, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
 from services.ffmpeg_service import FFmpegService
 from core.bose_worker import BoseSoundTouchWorker
-from core.settings import BOSE_IP, PLAYLIST_DIR, STREAM_FALLBACK_URLS, STREAM_URL
+from core.settings import BOSE_IP, STREAM_FALLBACK_URLS, STREAM_URL, MUSIC_ATLAS_KEY, LASTFM_KEY
 import logging
 import random
 import requests # type: ignore
@@ -20,8 +18,6 @@ logger = logging.getLogger(__name__)
 
 # Blueprint setup
 youtube_bp = Blueprint('youtube', __name__, template_folder='templates')
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
-LASTFM_KEY = os.getenv("LASTFM_KEY")
 
 # Initialize services
 ffmpeg = FFmpegService()
@@ -334,7 +330,6 @@ def get_musicatlas_recommendations(song_title, limit=5):
     """
     Fetches recommended track objects from the MusicAtlas API based on an input song.
     """
-    MUSIC_ATLAS_KEY = os.getenv("MUSIC_ATLAS_KEY")
     if not MUSIC_ATLAS_KEY:
         logger.error("MUSIC_ATLAS_KEY environment variable is not set.")
         return []

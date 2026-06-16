@@ -1,3 +1,12 @@
+"""core.bose_worker.py - Lightweight wrapper for Bose SoundTouch REST API
+This module defines the BoseSoundTouchWorker class, which provides a simple interface for sending commands to Bose SoundTouch speakers using their native HTTP REST API over port 8090. It includes methods for
+adjusting volume, toggling power and mute states, and triggering playback of a network stream via UPnP. The worker is designed to be stateless and can be instantiated as a shared object for use across multiple Flask routes without maintaining any internal state between calls.
+The class handles the necessary XML formatting for the API requests and includes error handling to manage communication issues with the speaker. It also provides a method to retrieve the current playing track and source information, which can be used to verify if the speaker is actively playing the intended stream.
+
+This may vary depending on the specific model and firmware version of the Bose SoundTouch device, so some adjustments may be necessary for compatibility with different hardware revisions.
+This file is based on the official API docs at https://assets.bosecreative.com/m/496577402d128874/original/SoundTouch-Web-API.pdf
+
+"""
 import time
 import requests
 import xml.etree.ElementTree as ET

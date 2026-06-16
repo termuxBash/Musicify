@@ -1,11 +1,16 @@
-import threading
+"""core.playback_controller.py - Thread-safe controller for managing access to the music player
+The PlaybackController class provides a thread-safe interface for managing access to the music player across multiple Flask
+blueprints. It uses a reentrant lock to ensure that only one blueprint can control the player at a time, while allowing any blueprint to enqueue songs or skip tracks if they have ownership.
+The controller also provides methods for acquiring and releasing control, as well as checking the current status of the player and its owner.
+This design allows for flexible integration of different music sources while maintaining a consistent user experience and preventing conflicts between blueprints.
+"""
 
+import threading
 
 class PlaybackController:
 
     def __init__(self, player):
         self.player = player
-
         self._owner = None
         self._lock = threading.RLock()
 
@@ -35,11 +40,8 @@ class PlaybackController:
 
             # force takeover
             if force:
-
                 self._reset_player()
-
                 self._owner = blueprint_name
-
                 return True
 
             return False
@@ -58,12 +60,9 @@ class PlaybackController:
             return True
 
     def enqueue(self, blueprint_name, song):
-
         with self._lock:
-
             if self._owner != blueprint_name:
                 return False
-
             self.player.enqueue(song)
 
             return True
@@ -71,12 +70,9 @@ class PlaybackController:
     def enqueue_many(self, blueprint_name, songs):
 
         with self._lock:
-
             if self._owner != blueprint_name:
                 return False
-
             self.player.enqueue_many(songs)
-
             return True
 
     def remove_from_queue(self, index):
@@ -86,7 +82,6 @@ class PlaybackController:
             return self.player.remove_from_queue(index)
 
     def skip(self):
-
         with self._lock:
             #Allow any bp to skip the track
             self.player.skip()
@@ -94,15 +89,11 @@ class PlaybackController:
             return True
 
     def status(self):
-
         data = self.player.status()
-
         data["owner"] = self._owner
-
         return data
 
     def _reset_player(self):
-
         # stop currently playing track
         self.player.skip()
 

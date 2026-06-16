@@ -1,8 +1,6 @@
 import sys
 import signal
-from dotenv import load_dotenv
-load_dotenv()
-from flask import Flask, jsonify, redirect, url_for
+from flask import Flask, redirect, url_for
 from core.bose_routes import bose_control_bp
 from core.stats import stats_bp
 from apps.local.routes import local_bp
@@ -41,10 +39,6 @@ def create_app():
     def index():
         return redirect(url_for('youtube.index'))
 
-    @app.route("/status")
-    def status():
-        return jsonify({"status": "ok"})
-
     app.register_blueprint(bose_control_bp)
     app.register_blueprint(local_bp, url_prefix='/local')
     app.register_blueprint(youtube_bp, url_prefix='/youtube')
@@ -68,4 +62,4 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
 
-    app.run(host=APP_HOST, port=APP_PORT, debug=False, use_reloader=False)
+    app.run(host=APP_HOST, port=APP_PORT, debug=False, use_reloader=True)

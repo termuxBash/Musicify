@@ -1,14 +1,14 @@
-""" local/routes.py - Flask routes for local file browsing and playback
+"""#local/routes.py - Flask routes for local file browsing and playback
 """
 
 import os
 import random
-
+from core.settings import ROOT_DIR
 from flask import Blueprint, current_app, jsonify, render_template, request, url_for # type: ignore
 
 local_bp = Blueprint("local", __name__, template_folder="templates")
 
-ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
+
 @local_bp.route('/')
 @local_bp.route('/browse/')
 @local_bp.route('/browse/<path:subpath>')
