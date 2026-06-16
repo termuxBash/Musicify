@@ -16,21 +16,29 @@ def env_list(name, default):
         return default
     return [item.strip() for item in value.split(",") if item.strip()]
 
+#Server settings
+APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
+APP_PORT = int(os.getenv("APP_PORT", "5000"))
 
+# Bose SoundTouch settings
 BOSE_IP = os.getenv("BOSE_IP", "192.168.29.234")
 STREAM_URL = os.getenv("STREAM_URL", "http://192.168.29.157:8000/mpv.ogg")
 STREAM_FALLBACK_URLS = env_list(
     "STREAM_FALLBACK_URLS",
     ["http://192.168.29.229:8000/mpv.ogg", "http://127.0.0.1:8000/mpv.ogg"]
 )
+
+#Local file and playlist settings
+ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
 PLAYLIST_DIR = os.getenv("PLAYLIST_DIR", "/opt/radio/playlists")
 DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)
 DEFAULT_AUTOPLAY_ENABLED = env_bool("AUTOPLAY_ENABLED", True)
-APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
-APP_PORT = int(os.getenv("APP_PORT", "5000"))
 
-ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
+
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 BACKUP_YOUTUBE_API_KEY = os.getenv("BACKUP_YOUTUBE_API_KEY", YOUTUBE_API_KEY)
 LASTFM_KEY = os.getenv("LASTFM_KEY")
+
+
+MUSIC_ATLAS_KEY = os.getenv("MUSIC_ATLAS_KEY", "PlaceholderKeyForMusicAtlas")
