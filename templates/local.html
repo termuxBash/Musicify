@@ -80,24 +80,30 @@
     <div class="file-grid" id="fileGridContainer">
         {% for item in items %}
         <div class="file-card">
-            <div class="file-icon">
-                {{ "📁" if item.is_dir else "🎵" }}
-            </div>
-
-            <div class="file-name">
-                {% if item.is_dir %}
-                <a href="{{ api_prefix }}/{{ item.rel_path }}" style="color:white;text-decoration:none">
-                    {{ item.name }}
-                </a>
-                {% else %}
-                    {{ item.name }}
-                {% endif %}
-            </div>
+            {% if item.is_dir %}
+            <a href="{{ api_prefix }}/{{ item.rel_path }}"
+            class="folder-link"
+            style="color:white;text-decoration:none;">
+                <div class="file-icon">📁</div>
+                <div class="file-name">{{ item.name }}</div>
+            </a>
+            {% else %}
+            <div class="file-icon">🎵</div>
+            <div class="file-name">{{ item.name }}</div>
+            {% endif %}
 
             {% if not item.is_dir %}
             <div class="card-actions">
-                <button class="btn" onclick='addToQueue({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'>+ Add to Queue</button>
-                <button class="playlist-btn" type="button" onclick='openPlaylistMenu({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)' title="Add to playlist">🎶️</button>
+                <button class="btn"
+                        onclick='addToQueue({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'>
+                    + Add to Queue
+                </button>
+                <button class="playlist-btn"
+                        type="button"
+                        onclick='openPlaylistMenu({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'
+                        title="Add to playlist">
+                    🎶️
+                </button>
             </div>
             {% endif %}
         </div>
