@@ -80,6 +80,12 @@ class PlaybackController:
         with self._lock:
             #Allow any bp to remove from the queue, but not shift ownership
             return self.player.remove_from_queue(index)
+    
+    def stop(self):
+        with self._lock:
+            #Allow any bp to stop the track, but not shift ownership
+            self.player.stop()
+            return True
 
     def skip(self):
         with self._lock:
@@ -100,3 +106,12 @@ class PlaybackController:
         # clear queue
         with self.player.lock:
             self.player.queue.clear()
+
+
+
+
+
+
+"""            Need to clear the list if i want to with a button that doesnt care about ownership also,
+if power button is presses it should route it through this app which then clears the queue and then sends it to the bose
+"""

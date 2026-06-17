@@ -168,6 +168,11 @@ def remove_from_queue(index):
         "title": removed["title"]
     })
 
+@stats_bp.route("/stop", methods=["POST"])
+def stop():
+    current_app.playback.stop()
+    return jsonify({"status": "stopped"})
+
 @stats_bp.route("/skip", methods=["POST"])
 def skip():
     current_app.playback.skip()

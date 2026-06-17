@@ -79,6 +79,10 @@ async function skipTrack() {
     await fetch("/skip", { method: "POST" }); 
 }
 
+async function clearQueue() {
+    await fetch("/stop", { method: "POST" }); 
+}
+
 async function removeFromQueue(i) {
     await fetch("/remove_from_queue/" + i, { method: "POST" }); 
 }
@@ -204,21 +208,41 @@ async function confirmPlaylistAdd() {
     closePlaylistMenu();
 }
 
+async function addPlaylist() {
+    const playlist = document.getElementById("addtoPlaylistSelect").value;
+    if (!playlist) {
+        showPopup("Please select a playlist first.");
+        return;
+    }
+    try {
+        const digits = Array.from(String(playlist), Number);
+        for (const digit of digits) {
+            togglePlaylistDigit(digit);
+            await new Promise(res => setTimeout(res, 200)); // Small delay for UX
+        }
+    } catch (err) {
+        console.error("Error processing playlist selection:", err);
+        showPopup("Invalid playlist format.");
+    }
+}
 // --- GLOBAL DROPDOWNS ---
 async function refreshPlaylistDropdown() {
-    const select = document.getElementById("playlistQueueSelect");
-    if (!select) return;
+    const selects = document.querySelectorAll(".queue-playlist-select");
+    if (!selects.length) return;
 
     try {
         const res = await fetch("/playlists");
         const playlists = await res.json();
-        const current = select.value;
 
-        select.innerHTML = '<option value="">Select Playlist</option>';
-        playlists.forEach(name => {
-            select.innerHTML += `<option value="${name}">${name}</option>`;
+        selects.forEach(select => {
+            const current = select.value;
+
+            select.innerHTML = '<option value="">Select Playlist</option>';
+            playlists.forEach(name => {
+                select.innerHTML += `<option value="${name}">${name}</option>`;
+            });
+            select.value = current;
         });
-        select.value = current;
     } catch (err) {
         console.error(err);
     }

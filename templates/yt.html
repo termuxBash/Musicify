@@ -37,7 +37,7 @@
 
 <div class="side-panel" id="sidePanel">
     <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h3>Music Queue</h3>
+        <h3>Music Queue</h3><button class="clear-queue-btn" onclick="clearQueue()">Clear Queue & Stop Music</button>
         <span onclick="toggleMenu()" style="cursor: pointer; font-size: 24px;">✕</span>
     </div>
     <div class="queue-playlist-controls">
@@ -45,7 +45,7 @@
     <select
         id="playlistQueueSelect"
         class="queue-playlist-select"
-        onclick="refreshPlaylistDropdown()">
+        onmouseover="refreshPlaylistDropdown()">
 
         <option value="">
             Select Playlist
@@ -106,6 +106,9 @@
 <div class="playlist-modal" id="playlistModal" onclick="if(event.target === this) closePlaylistMenu()">
     <div class="playlist-modal-card">
         <h4>Add to Playlist</h4>
+        <select class="queue-playlist-select" id="addtoPlaylistSelect" onmouseover="refreshPlaylistDropdown()" onchange="addPlaylist()">
+            <option value="">Select Playlist</option>
+        </select>
         <p id="playlistSongTitle">Enter any combination of digits 1 through 6.</p>
         <div class="playlist-digits">
             <button type="button" class="playlist-digit-btn" data-digit="1" onclick="togglePlaylistDigit('1')">1</button>
@@ -141,8 +144,6 @@
             main.classList.toggle("shift");
         }
     }
-    
-    document.addEventListener("DOMContentLoaded", refreshPlaylistDropdown);
 </script>
 <script>
 const API_PREFIX = "{{ api_prefix }}";

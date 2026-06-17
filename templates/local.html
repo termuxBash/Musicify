@@ -35,11 +35,11 @@
 
 <div class="side-panel" id="sidePanel">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3>Music Queue</h3>
+        <h3>Music Queue</h3><button class="clear-queue-btn" onclick="clearQueue()">Clear Queue & Stop Music</button>
         <span onclick="toggleMenu()" style="cursor:pointer;font-size:24px;">✕</span>
     </div>
     <div class="queue-playlist-controls">
-        <select id="playlistQueueSelect" class="queue-playlist-select" onclick="refreshPlaylistDropdown()">
+        <select id="playlistQueueSelect" class="queue-playlist-select" onmouseover="refreshPlaylistDropdown()">
             <option value="">Select Playlist</option>
         </select>
         <button class="queue-playlist-btn" onclick="enqueueSelectedPlaylist()">Queue</button>
@@ -136,6 +136,9 @@
 <div class="playlist-modal" id="playlistModal" onclick="if(event.target === this) closePlaylistMenu()">
     <div class="playlist-modal-card">
         <h4>Add to Playlist</h4>
+        <select class="queue-playlist-select" id="addtoPlaylistSelect" onmouseover="refreshPlaylistDropdown()" onchange="addPlaylist()">
+            <option value="">Select Playlist</option>
+        </select>
         <p id="playlistSongTitle">Select a playlist</p>
         <div class="playlist-digits">
             <button type="button" class="playlist-digit-btn" data-digit="1" onclick="togglePlaylistDigit('1')">1</button>
