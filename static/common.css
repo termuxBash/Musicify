@@ -132,9 +132,7 @@ nav {
 
 .queue-item p { 
     font-size: 0.75rem; 
-    white-space: nowrap; 
-    overflow: hidden; 
-    text-overflow: ellipsis; 
+    white-space: normal;
 }
 
 .queue-item span {
@@ -227,13 +225,17 @@ nav {
     margin-bottom: 8px;
 }
 
-.song-card p, .file-name { 
-    font-size: 0.8rem; 
-    margin: 10px 0; 
-    height: 32px; 
-    overflow: hidden; 
-    white-space: nowrap;
-    text-overflow: ellipsis;
+.song-card p,
+.file-name {
+    font-size: 0.8rem;
+    margin: 10px 0;
+    min-height: 32px;
+
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+
+    overflow: visible;
 }
 
 /* ==========================================================================
