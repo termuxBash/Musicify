@@ -2,6 +2,8 @@
 This module defines the Flask routes that provide real-time system statistics and player status information to the front.
 It has endpoints for retrieving CPU usage, current volume, queue status, now playing details, autoplay and lyrics settings, as well as toggling autoplay and lyrics display.
 It also includes routes for managing playlists and removing songs from the queue."""
+from time import sleep
+
 from flask import Blueprint, jsonify, request ,current_app
 import psutil
 import os
@@ -181,13 +183,14 @@ def power():
         ctrl("bose_power")
     else:
         ctrl("bose_power")
-        
-
+    sleep(4)  # Give it a moment to process the power command
+    ctrl("bose_power")  # Ensure the power command is sent to the Bose speaker
     return jsonify({"status": "powering off"})
 
 @stats_bp.route("/stop", methods=["POST"])
 def stop():
-    toggle_autoplay()
+    current_app.player.toggle_autoplay(False)  # Disable autoplay when stopping
+    current_app.playback._reset_player()  # Clear the queue and stop playback
     current_app.playback.stop()
     return jsonify({"status": "stopped"})
 
