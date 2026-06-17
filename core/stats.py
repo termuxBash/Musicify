@@ -177,6 +177,7 @@ def power():
     bose_power = check_power().get_json() if check_power else None
     print(f"BOSE POWER STATUS: {bose_power}")
     if bose_power and bose_power.get("is_on"):
+        toggle_autoplay()
         stop()
         ctrl("bose_power")
     else:
