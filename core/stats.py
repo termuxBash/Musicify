@@ -10,11 +10,10 @@ import logging
 from services.yt_service import YTService
 from core.bose_routes import check_power, ctrl
 from flask import current_app
-from core.settings import PLAYLIST_DIR
+from core.settings import PLAYLIST_DIR, ROOT_DIR
 from dotenv import load_dotenv
 import random
 load_dotenv()
-ROOT_DIR = os.path.abspath('/home/linuxlite/Music/')
 from core.bose_routes import get_status
 
 logger = logging.getLogger(__name__)
