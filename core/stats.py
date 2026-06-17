@@ -8,7 +8,7 @@ import os
 
 import logging
 from services.yt_service import YTService
-
+from core.bose_routes import check_power, ctrl
 from flask import current_app
 from core.settings import PLAYLIST_DIR
 from dotenv import load_dotenv
@@ -167,6 +167,24 @@ def remove_from_queue(index):
         "status": "removed",
         "title": removed["title"]
     })
+
+@stats_bp.route("/power", methods=["POST"])
+def power():
+    """Handles the power off request and clears the queue."""
+    # Clear the queue and stop playback
+    current_app.playback._reset_player()
+
+    # Send the power off command to the Bose speaker
+    bose_power = check_power().get_json() if check_power else None
+    print(f"BOSE POWER STATUS: {bose_power}")
+    if bose_power and bose_power.get("is_on"):
+        stop()
+        ctrl("bose_power")
+    else:
+        ctrl("bose_power")
+        
+
+    return jsonify({"status": "powering off"})
 
 @stats_bp.route("/stop", methods=["POST"])
 def stop():

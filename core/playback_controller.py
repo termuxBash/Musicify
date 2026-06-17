@@ -84,7 +84,7 @@ class PlaybackController:
     def stop(self):
         with self._lock:
             #Allow any bp to stop the track, but not shift ownership
-            self.player.stop()
+            self._reset_player()
             return True
 
     def skip(self):
@@ -99,7 +99,7 @@ class PlaybackController:
         data["owner"] = self._owner
         return data
 
-    def _reset_player(self):
+    def _reset_player(self, ):
         # stop currently playing track
         self.player.skip()
 

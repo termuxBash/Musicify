@@ -68,7 +68,14 @@ window.playlistState = {
 async function sendControl(cmd) { 
     await fetch("/ctrl/" + cmd); 
 }
-
+async function power() {
+    if( !(await fetch("/is_on").then(res => res.json()).then(data => data.is_on)) ) {
+        await fetch("/power", { method: "POST" });
+    }
+    else {
+    if (!confirm("Are you sure you want to power off?")) return;
+    await fetch("/power", { method: "POST" }); }
+}
 async function setVolume(val) {
     const volVal = document.getElementById("vol-val");
     if (volVal) volVal.textContent = val + "%";
