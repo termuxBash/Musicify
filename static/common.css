@@ -142,6 +142,16 @@ nav {
     font-size: 30px;
 }
 
+.switch-player-link {
+    display: block;
+    margin-top: 30px;
+    text-align: center;
+    color: var(--spotify-green);
+    font-weight: bold;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
 /* ==========================================================================
    4. MAIN CONTENT AREA
    ========================================================================== */
