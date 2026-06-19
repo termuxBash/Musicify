@@ -3,6 +3,7 @@ Settings file that can be imported for access to all environment variables and c
 
 """
 from dotenv import load_dotenv
+import requests
 load_dotenv()
 import os
 
@@ -24,11 +25,25 @@ APP_PORT = int(os.getenv("APP_PORT", "5000"))
 
 # Bose SoundTouch settings
 BOSE_IP = os.getenv("BOSE_IP", "192.168.29.234")
+
 STREAM_URL = os.getenv("STREAM_URL", "http://192.168.29.157:8000/mpv.ogg")
-STREAM_FALLBACK_URLS = env_list(
-    "STREAM_FALLBACK_URLS",
-    ["http://192.168.29.229:8000/mpv.ogg", "http://127.0.0.1:8000/mpv.ogg"]
+raw_fallbacks = os.getenv("STREAM_FALLBACK_URLS", "")
+
+STREAM_FALLBACK_URLS = (
+    [u.strip() for u in raw_fallbacks.split(",") if u.strip()]
+    if raw_fallbacks
+    else ["http://192.168.29.229:8000/mpv.ogg", "http://127.0.0.1:8000/mpv.ogg"]
 )
+
+active_stream_url = STREAM_URL
+
+for url in [STREAM_URL] + STREAM_FALLBACK_URLS:
+    try:
+        if requests.get(url, timeout=2.0, stream=True).status_code == 200:
+            active_stream_url = url
+            break
+    except requests.RequestException:
+        continue
 
 #Local file and playlist settings
 ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
