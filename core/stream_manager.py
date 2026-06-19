@@ -28,8 +28,14 @@ class QueuePlayer:
 
         self.running = False
         self.thread = None
+        self._playback_generation = 0
         
         self.autoplay_enabled = autoplay_enabled 
+
+    def _bump_playback_generation(self):
+        with self.lock:
+            self._playback_generation += 1
+            return self._playback_generation
 
     def start(self):
         if self.running:
@@ -39,6 +45,7 @@ class QueuePlayer:
         self.thread.start()
 
     def stop(self):
+        self._bump_playback_generation()
         self.running = False
         self.skip()
         with self.lock:
@@ -59,6 +66,7 @@ class QueuePlayer:
         return None
 
     def skip(self):
+        self._bump_playback_generation()
         if self.current_process:
             logger.info("Skip button clicked. Terminating FFmpeg process.")
             try:
@@ -228,6 +236,7 @@ class QueuePlayer:
 
             with self.lock:
                 self.current_song = song
+                song_generation = self._playback_generation
 
             # --- DYNAMIC AUTOPLAY CANCELLATION CHECK ---
             if self.autoplay_enabled:
@@ -255,9 +264,17 @@ class QueuePlayer:
                 
                 self.current_process = self.ffmpeg.start_stream(target)
 
-                if self.bose and self.bose.is_on():
+                if self.bose:
                     time.sleep(2)
-                    self.bose.trigger_upnp_stream(STREAM_URL)
+                    with self.lock:
+                        still_current = (
+                            self.running
+                            and self.current_song == song
+                            and self._playback_generation == song_generation
+                        )
+
+                    if still_current and self.bose.is_on():
+                        self.bose.trigger_upnp_stream(STREAM_URL)
 
                 self.current_process.wait()
 

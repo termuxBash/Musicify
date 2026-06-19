@@ -172,20 +172,13 @@ def remove_from_queue(index):
 @stats_bp.route("/power", methods=["POST"])
 def power():
     """Handles the power off request and clears the queue."""
-    # Clear the queue and stop playback
-    current_app.playback._reset_player()
-
-    # Send the power off command to the Bose speaker
     bose_power = check_power().get_json() if check_power else None
-    print(f"BOSE POWER STATUS: {bose_power}")
     if bose_power and bose_power.get("is_on"):
         stop()
         ctrl("bose_power")
     else:
         ctrl("bose_power")
-    sleep(4)  # Give it a moment to process the power command
-    ctrl("bose_power")  # Ensure the power command is sent to the Bose speaker
-    return jsonify({"status": "powering off"})
+    return jsonify({"status": "success"})
 
 @stats_bp.route("/stop", methods=["POST"])
 def stop():
