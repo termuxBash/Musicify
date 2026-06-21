@@ -36,6 +36,7 @@ def ctrl(cmd):
     elif cmd == "listen":
         # Uses the configured network stream URL
         bose.trigger_upnp_stream(STREAM_URL)
+        status = STREAM_URL
     else:
         status = "unknown command"
 
