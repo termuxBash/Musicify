@@ -97,12 +97,17 @@
             {% if not item.is_dir %}
             <div class="card-actions">
                 <button class="btn"
-                        onclick='addToQueue({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'>
+                        type="button"
+                        data-url="{{ item.rel_path|e('html_attr') }}"
+                        data-title="{{ item.name|e('html_attr') }}"
+                        onclick="addToQueue(this.dataset, this)">
                     + Add to Queue
                 </button>
                 <button class="playlist-btn"
                         type="button"
-                        onclick='openPlaylistMenu({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'
+                        data-url="{{ item.rel_path|e('html_attr') }}"
+                        data-title="{{ item.name|e('html_attr') }}"
+                        onclick="openPlaylistMenu(this.dataset, this)"
                         title="Add to playlist">
                     🎶️
                 </button>
