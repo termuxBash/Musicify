@@ -45,6 +45,8 @@ for url in [STREAM_URL] + STREAM_FALLBACK_URLS:
     except requests.RequestException:
         continue
 
+STREAM_URL = active_stream_url
+
 #Local file and playlist settings
 ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
 PLAYLIST_DIR = os.getenv("PLAYLIST_DIR", "/opt/radio/playlists")
