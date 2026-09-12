@@ -14,29 +14,42 @@ ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
 
 class FFmpegService:
     def start_stream(self, target):
-        """
-        Starts an FFmpeg process for either a local file path or a web URL.
-        """
-        # Common flags for audio-only streaming to Icecast
         cmd = [
             "ffmpeg",
-            "-re",               # Read input at native frame/sample rate
-            "-i", target,        # Input source (file path or URL)
-            "-vn",               # Disable video
-            "-c:a", "libvorbis", # Codec
-            '-content_type', 'application/ogg',
-                '-ar', '44100', '-ac', '2',
-                '-f', 'ogg', ICECAST_URL
+            "-hide_banner",
+            "-loglevel", "error",
+
+            # Real-time playback
+            "-re",
+
+            # Input
+            "-i", target,
+
+            # Audio only
+            "-vn",
+
+            # Normalize loudness
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+
+            # Encode
+            "-c:a", "libvorbis",
+            "-ar", "44100",
+            "-ac", "2",
+
+            # Icecast
+            "-content_type", "application/ogg",
+            "-f", "ogg",
+            ICECAST_URL
         ]
-        
-        # Start process in a new session group for reliable termination
-        process = subprocess.Popen(
+
+        return subprocess.Popen(
             cmd,
             preexec_fn=os.setsid,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-        return process
+
 
     def kill_process(self, process):
         """Safely stops a running FFmpeg instance."""
