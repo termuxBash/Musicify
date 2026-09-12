@@ -14,6 +14,10 @@ ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
 
 class FFmpegService:
     def start_stream(self, target):
+        """
+        Starts an FFmpeg process for either a local file path or a web URL.
+        """
+        # Common flags for audio-only streaming to Icecast
         cmd = [
             "ffmpeg",
             "-hide_banner",
