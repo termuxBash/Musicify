@@ -263,7 +263,7 @@ document.getElementById("aiPromptForm").addEventListener("submit", async (event)
         closeAiPrompt();
         input.value = "";
         results.textContent = "";
-        showPopup(`${data.count} AI recommendation${data.count === 1 ? "" : "s"} added to the queue.`);
+        showPopup(`${data.count} AI recommendation${data.count === 1 ? "" : "s"} will be added to the queue.`);
     } catch (error) {
         results.textContent = "Could not contact AI recommendations.";
     } finally {

@@ -342,27 +342,32 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
         "https://generativelanguage.googleapis.com/v1beta/models/"
         f"{GEMINI_MODEL}:generateContent"
     )
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        #"tools": [{"googleSearch": {}}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-        },
-    }
+    def build_payload(include_tools):
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+            },
+        }
+        if include_tools:
+            payload["tools"] = [{"googleSearch": {}}]
+        return payload
 
     try:
         response = requests.post(
             endpoint,
             params={"key": GEMINI_API_KEY},
-            json=payload,
+            json=build_payload(include_tools=True),
             timeout=20,
         )
 
-        if not response.ok:
-            logger.error(
-                "Gemini API error: status=%s body=%s",
-                response.status_code,
-                response.text,
+        if response.status_code == 429:
+            logger.warning("Gemini request with Google Search was rate limited; retrying without tools")
+            response = requests.post(
+                endpoint,
+                params={"key": GEMINI_API_KEY},
+                json=build_payload(include_tools=False),
+                timeout=20,
             )
 
         response.raise_for_status()
@@ -401,6 +406,44 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
     return validated
 
 
+def _queue_ai_recommendations(app, recommendations):
+    with app.app_context():
+        record_history = not app.incogni_mode
+
+        for recommendation in recommendations:
+            result = {
+                "title": recommendation["song_name"],
+                "videoId": recommendation["song_id"],
+                "thumbnail": f"https://img.youtube.com/vi/{recommendation['song_id']}/hqdefault.jpg",
+            }
+
+            try:
+                success = YTService.enqueue_youtube_result(
+                    result,
+                    record_history=record_history,
+                )
+            except Exception as direct_error:
+                logger.warning(
+                    f"AI recommendation ID failed for '{result['title']}', searching by title: {direct_error}"
+                )
+                result = YTService.auto_pick_song(result["title"])
+                if not result:
+                    continue
+                try:
+                    success = YTService.enqueue_youtube_result(
+                        result,
+                        record_history=record_history,
+                    )
+                except Exception as fallback_error:
+                    logger.error(
+                        f"Failed to queue AI title fallback '{result['title']}': {fallback_error}"
+                    )
+                    continue
+
+            if not success:
+                logger.warning(f"AI recommendation was not queued: {result['title']}")
+
+
 @youtube_bp.route("/ai_recommendations", methods=["POST"])
 def ai_recommendations():
     data = request.get_json(silent=True) or {}
@@ -415,46 +458,22 @@ def ai_recommendations():
 
     if current_app.playback.owner is None:
         current_app.playback.acquire("youtube")
+    if current_app.playback.owner != "youtube":
+        return jsonify({
+            "error": "youtube blueprint does not own player",
+            "owner": current_app.playback.owner,
+        }), 403
 
-    added_songs = []
-    record_history = not current_app.incogni_mode
-
-    for recommendation in recommendations:
-        result = {
-            "title": recommendation["song_name"],
-            "videoId": recommendation["song_id"],
-            "thumbnail": f"https://img.youtube.com/vi/{recommendation['song_id']}/hqdefault.jpg",
-        }
-
-        try:
-            success = YTService.enqueue_youtube_result(
-                result,
-                record_history=record_history,
-            )
-        except Exception as direct_error:
-            logger.warning(
-                f"AI recommendation ID failed for '{result['title']}', searching by title: {direct_error}"
-            )
-            result = YTService.auto_pick_song(result["title"])
-            success = (
-                YTService.enqueue_youtube_result(
-                    result,
-                    record_history=record_history,
-                )
-                if result
-                else False
-            )
-
-        if success:
-            added_songs.append(result["title"])
-
-    if not added_songs:
-        return jsonify({"error": "Could not queue AI recommendations"}), 502
+    app = current_app._get_current_object()
+    threading.Thread(
+        target=_queue_ai_recommendations,
+        args=(app, recommendations),
+        daemon=True,
+    ).start()
 
     return jsonify({
-        "status": "queued",
-        "count": len(added_songs),
-        "songs": added_songs,
+        "status": "queueing",
+        "count": len(recommendations),
     })
 # ---------------- ROUTES ----------------
 
