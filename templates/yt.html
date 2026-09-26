@@ -260,9 +260,10 @@ document.getElementById("aiPromptForm").addEventListener("submit", async (event)
             return;
         }
 
-        results.innerHTML = data.recommendations.map(song =>
-            `<div class="ai-recommendation"><strong>${song.song_name}</strong><span>${song.song_id}</span></div>`
-        ).join("");
+        closeAiPrompt();
+        input.value = "";
+        results.textContent = "";
+        showPopup(`${data.count} AI recommendation${data.count === 1 ? "" : "s"} added to the queue.`);
     } catch (error) {
         results.textContent = "Could not contact AI recommendations.";
     } finally {

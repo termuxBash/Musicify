@@ -344,7 +344,7 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
     )
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "tools": [{"googleSearch": {}}],
+        #"tools": [{"googleSearch": {}}],
         "generationConfig": {
             "responseMimeType": "application/json",
         },
@@ -357,12 +357,28 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
             json=payload,
             timeout=20,
         )
+
+        if not response.ok:
+            logger.error(
+                "Gemini API error: status=%s body=%s",
+                response.status_code,
+                response.text,
+            )
+
         response.raise_for_status()
-        response_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+        response_json = response.json()
+        response_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
         recommendations = json.loads(response_text)
-    except (requests.RequestException, KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
-        logger.error(f"Gemini recommendation request failed: {error}")
+
+    except requests.RequestException as error:
+        logger.error(
+            "Gemini recommendation request failed: %s; response=%s",
+            error,
+            getattr(error.response, "text", None),
+        )
         return []
+
 
     if not isinstance(recommendations, list) or len(recommendations) != 3:
         logger.error("Gemini returned an invalid recommendation count")
@@ -397,7 +413,49 @@ def ai_recommendations():
     if not recommendations:
         return jsonify({"error": "AI recommendations unavailable"}), 502
 
-    return jsonify({"recommendations": recommendations})
+    if current_app.playback.owner is None:
+        current_app.playback.acquire("youtube")
+
+    added_songs = []
+    record_history = not current_app.incogni_mode
+
+    for recommendation in recommendations:
+        result = {
+            "title": recommendation["song_name"],
+            "videoId": recommendation["song_id"],
+            "thumbnail": f"https://img.youtube.com/vi/{recommendation['song_id']}/hqdefault.jpg",
+        }
+
+        try:
+            success = YTService.enqueue_youtube_result(
+                result,
+                record_history=record_history,
+            )
+        except Exception as direct_error:
+            logger.warning(
+                f"AI recommendation ID failed for '{result['title']}', searching by title: {direct_error}"
+            )
+            result = YTService.auto_pick_song(result["title"])
+            success = (
+                YTService.enqueue_youtube_result(
+                    result,
+                    record_history=record_history,
+                )
+                if result
+                else False
+            )
+
+        if success:
+            added_songs.append(result["title"])
+
+    if not added_songs:
+        return jsonify({"error": "Could not queue AI recommendations"}), 502
+
+    return jsonify({
+        "status": "queued",
+        "count": len(added_songs),
+        "songs": added_songs,
+    })
 # ---------------- ROUTES ----------------
 
 
