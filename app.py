@@ -11,7 +11,7 @@ from core.playback_controller import PlaybackController
 from core.stream_manager import QueuePlayer
 from services.ffmpeg_service import FFmpegService
 from services.lyrics_service import LyricsService
-from core.settings import APP_HOST, APP_PORT, BOSE_IP, DEFAULT_AUTOPLAY_ENABLED, DEFAULT_LYRICS_ENABLED
+from core.settings import APP_HOST, APP_PORT, BOSE_IP, DEFAULT_AUTOPLAY_ENABLED, DEFAULT_INCOGNI_MODE, DEFAULT_LYRICS_ENABLED
 
 
 
@@ -23,6 +23,7 @@ def create_app():
     # Instantiate services
     app.lyrics_service = LyricsService(enabled=DEFAULT_LYRICS_ENABLED)
     app.last_known_title = None
+    app.incogni_mode = DEFAULT_INCOGNI_MODE
 
     app.player = QueuePlayer(
         ffmpeg_service=FFmpegService(),
@@ -61,4 +62,4 @@ if __name__ == "__main__":
 
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
-    app.run(host=APP_HOST, port=APP_PORT, debug=False, use_reloader=True)
+    app.run(host=APP_HOST, port=APP_PORT, debug=False, use_reloader=False)

@@ -52,6 +52,8 @@ ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
 PLAYLIST_DIR = os.getenv("PLAYLIST_DIR", "/opt/radio/playlists")
 DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)
 DEFAULT_AUTOPLAY_ENABLED = env_bool("AUTOPLAY_ENABLED", True)
+DEFAULT_INCOGNI_MODE = env_bool("INCOGNI_MODE", False)
+
 
 
 

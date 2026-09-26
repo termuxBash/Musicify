@@ -52,6 +52,7 @@ def stats():
         "now_playing": current_song,
         "is_playing": is_playing,
         "autoplay_enabled": player_status.get("autoplay_enabled", False),
+        "incogni_mode": current_app.incogni_mode,
         "show_lyrics": lyrics_svc.enabled,
         "current_lyric": lyrics_svc.get_current_line(),  # This returns the raw line string
         "rt_exec": rt_payload
@@ -73,6 +74,15 @@ def toggle_autoplay():
     return jsonify({
         "status": "success",
         "autoplay_enabled": current_app.player.status().get("autoplay_enabled")
+    })
+
+
+@stats_bp.route("/toggle_incogni", methods=["POST"])
+def toggle_incogni():
+    current_app.incogni_mode = not current_app.incogni_mode
+    return jsonify({
+        "status": "success",
+        "incogni_mode": current_app.incogni_mode
     })
 
 @stats_bp.route("/playlists")

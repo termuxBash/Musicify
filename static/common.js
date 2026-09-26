@@ -57,6 +57,17 @@ async function toggleAutoplay(){
         method: "POST"
     });
 }
+async function toggleIncogni(){
+    const res = await fetch("/toggle_incogni", {
+        method: "POST"
+    });
+    if (!res.ok) return;
+
+    const data = await res.json();
+    window.incogniMode = data.incogni_mode;
+    const incogniToggle = document.getElementById("incogniToggle");
+    if (incogniToggle) incogniToggle.checked = data.incogni_mode;
+}
 
 // Global state container to avoid collisions
 window.playlistState = {
@@ -341,6 +352,10 @@ async function updateStats() {
 
         const autoplayToggle = document.getElementById("autoplayToggle");
         if (autoplayToggle) autoplayToggle.checked = data.autoplay_enabled;
+
+        window.incogniMode = data.incogni_mode;
+        const incogniToggle = document.getElementById("incogniToggle");
+        if (incogniToggle) incogniToggle.checked = data.incogni_mode;
 
     } catch (e) {
         console.error("Poller encountered an error fetching stats:", e);

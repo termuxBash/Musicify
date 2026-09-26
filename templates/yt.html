@@ -35,7 +35,7 @@
         <div style="display:flex;align-items:center;gap:6px;">
             <span style="font-size:12px;color:#aaa;">Incogni</span>
             <label class="switch">
-                <input type="checkbox" id="incogniToggle">
+                <input type="checkbox" id="incogniToggle" onchange="toggleIncogni()">
                 <span class="slider"></span>
             </label>
         </div>
@@ -278,7 +278,7 @@ async function addToQueue(song, btn){
         btn.classList.remove("queued");
     }, 1500);
 
-    const enqueueRoute = document.getElementById("incogniToggle").checked
+    const enqueueRoute = window.incogniMode
         ? "/enqueue_incognito"
         : "/enqueue";
 
