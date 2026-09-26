@@ -4,21 +4,21 @@
     <div class="menu-toggle" onclick="toggleMenu()">☰</div>
     <h3 style="color:var(--spotify-green); margin-right:auto;">{{ page_title }}</h3>
 
-    <div style="display:flex; align-items:center; gap:15px; margin-right:15px;">
-        <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-size:12px; color:#aaa;">Lyrics</span>
-            <label class="switch">
+    <div class="nav-settings">
+        <div class="nav-setting">
+            <label class="switch" for="lyricsToggle">
                 <input type="checkbox" id="lyricsToggle" onchange="toggleLyrics()">
                 <span class="slider"></span>
             </label>
+            <label class="nav-setting-label" for="lyricsToggle">Lyrics</label>
         </div>
 
-        <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-size:12px; color:#aaa;">Autoplay</span>
-            <label class="switch">
+        <div class="nav-setting">
+            <label class="switch" for="autoplayToggle">
                 <input type="checkbox" id="autoplayToggle" onchange="toggleAutoplay()">
                 <span class="slider"></span>
             </label>
+            <label class="nav-setting-label" for="autoplayToggle">Autoplay</label>
         </div>
     </div>
 

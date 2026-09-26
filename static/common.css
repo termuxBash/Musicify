@@ -616,6 +616,26 @@ nav {
     height: 24px;
 }
 
+.nav-settings {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    margin-right: 15px;
+}
+
+.nav-setting {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.nav-setting-label {
+    color: #aaa;
+    cursor: pointer;
+    font-size: 12px;
+}
+
 .switch input {
     opacity: 0;
     width: 0;
