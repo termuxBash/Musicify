@@ -145,6 +145,8 @@ nav {
 .switch-player-link {
     display: block;
     margin-top: 30px;
+    margin-bottom: 12px;
+    padding: 8px 0;
     text-align: center;
     color: var(--spotify-green);
     font-weight: bold;

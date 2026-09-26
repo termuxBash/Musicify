@@ -32,13 +32,6 @@
             </label>
         </div>
 
-        <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:12px;color:#aaa;">Incogni</span>
-            <label class="switch">
-                <input type="checkbox" id="incogniToggle" onchange="toggleIncogni()">
-                <span class="slider"></span>
-            </label>
-        </div>
     </div>
     
     <div class="system-monitor">CPU: <span id="cpu-load">0%</span></div>
@@ -74,7 +67,15 @@
     <div class="queue-list" id="queueList">
         <p style="color: #666; text-align: center; margin-top: 40px;">No songs queued.</p>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0;">
+        <span style="font-size:12px;color:#aaa;">Incogni</span>
+        <label class="switch">
+            <input type="checkbox" id="incogniToggle" onchange="toggleIncogni()">
+            <span class="slider"></span>
+        </label>
+    </div>
     <a href="{{ url_for('local.browse') }}" class="switch-player-link">Switch to Local Player</a>
+    <button type="button" class="queue-playlist-btn" onclick="reconnectStream()">Reconnect 🔄</button>
 </div>
 
 <div class="main-content">

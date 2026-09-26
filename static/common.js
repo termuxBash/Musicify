@@ -79,6 +79,14 @@ window.playlistState = {
 async function sendControl(cmd) { 
     await fetch("/ctrl/" + cmd); 
 }
+async function reconnectStream() {
+    const response = await fetch("/ctrl/listen");
+    if (response.ok) {
+        showPopup("Stream reconnected");
+    } else {
+        showPopup("Stream reconnect failed");
+    }
+}
 async function power() {
     if( !(await fetch("/is_on").then(res => res.json()).then(data => data.is_on)) ) {
         await fetch("/power", { method: "POST" });
