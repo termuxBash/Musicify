@@ -92,8 +92,8 @@ ffmpeg_process = None
 state = {
     "queue": [],
     "queue_titles": [],
-    "current_url": None,
-    "current_title": None,
+    "last_requested_url": None,
+    "last_requested_title": None,
     "is_playing": False,
     "lock": threading.Lock()
 }
@@ -408,7 +408,7 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
 
 def _queue_ai_recommendations(app, recommendations):
     with app.app_context():
-        record_history = not app.incogni_mode
+        record_history = not app.history_recording_disabled
 
         for recommendation in recommendations:
             result = {
@@ -583,8 +583,8 @@ def auto_pick():
     })
 
 @youtube_bp.route('/play', methods=['POST'])
-def play_youtube():
-    """Queue a YouTube URL for playback"""
+def enqueue_youtube_url():
+    """Queue a YouTube URL for playback."""
     data = request.get_json()
     youtube_url = data.get('url') if data else None
     title = data.get('title', 'Unknown') if data else 'Unknown'
@@ -595,6 +595,8 @@ def play_youtube():
     with state["lock"]:
         state["queue"].append(youtube_url)
         state["queue_titles"].append(title)
+        state["last_requested_url"] = youtube_url
+        state["last_requested_title"] = title
     
     return jsonify({
         "status": "queued",
@@ -617,8 +619,8 @@ def stop_playback():
 
 
 @youtube_bp.route('/toggle', methods=['POST'])
-def toggle_playback():
-    """Toggle play/pause (simplified for YouTube player)"""
+def acknowledge_playback_toggle():
+    """Acknowledge the legacy toggle request without changing player state."""
     return jsonify({"status": "toggled"})
 
 @youtube_bp.route("/acquire", methods=["POST"])
@@ -666,7 +668,7 @@ def enqueue():
 
 
 @youtube_bp.route("/enqueue_incognito", methods=["POST"])
-def enqueue_incognito():
+def enqueue_without_history():
     return _enqueue_song(add_to_history=False)
 
 @youtube_bp.route("/recommend_and_enqueue", methods=["POST"])
@@ -677,8 +679,6 @@ def recommend_and_enqueue():
     """
     data = request.get_json() or {}
     input_song = data.get("song")
-    limit = data.get("limit", 5)
-
     if not input_song:
         return jsonify({"error": "Input 'song' string is required"}), 400
 
@@ -741,8 +741,10 @@ def get_status():
     with state["lock"]:
         return jsonify({
             "is_playing": state["is_playing"],
-            "current_url": state["current_url"],
-            "current_title": state["current_title"],
+            "last_requested_url": state["last_requested_url"],
+            "last_requested_title": state["last_requested_title"],
+            "current_url": state["last_requested_url"],
+            "current_title": state["last_requested_title"],
             "queue": state["queue_titles"][:5],
             "stream_url": STREAM_URL
         })

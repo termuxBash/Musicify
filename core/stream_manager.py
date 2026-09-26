@@ -31,7 +31,7 @@ class QueuePlayer:
         self._playback_generation = 0
         
         self.autoplay_enabled = autoplay_enabled 
-        self.incogni_mode = False
+        self.history_recording_disabled = False
 
     def _bump_playback_generation(self):
         with self.lock:
@@ -250,7 +250,7 @@ class QueuePlayer:
                         
                         if stream_url:
                             resolved["url"] = stream_url
-                            resolved["record_history"] = not self.incogni_mode
+                            resolved["record_history"] = not self.history_recording_disabled
                             resolved.setdefault(
                                 "thumbnail",
                                 f"https://img.youtube.com/vi/{resolved['videoId']}/hqdefault.jpg",

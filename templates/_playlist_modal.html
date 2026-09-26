@@ -1,10 +1,10 @@
 <div class="playlist-modal" id="playlistModal" onclick="if(event.target === this) closePlaylistMenu()">
     <div class="playlist-modal-card">
         <h4>Add to Playlist</h4>
-        <select class="queue-playlist-select" id="addtoPlaylistSelect" onmouseover="refreshPlaylistDropdown()" onchange="addPlaylist()">
+        <select class="queue-playlist-select" id="addtoPlaylistSelect" onmouseover="refreshPlaylistDropdown()" onchange="selectPlaylistCombination()">
             <option value="">Select Playlist</option>
         </select>
-        <p id="playlistSongTitle">{{ playlist_song_placeholder }}</p>
+        <p id="playlistSongTitle">{{ playlist_modal_message }}</p>
         <div class="playlist-digits">
             {% for digit in range(1, 7) %}
             <button type="button" class="playlist-digit-btn" data-digit="{{ digit }}" onclick="togglePlaylistDigit('{{ digit }}')">{{ digit }}</button>

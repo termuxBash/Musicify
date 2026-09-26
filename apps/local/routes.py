@@ -194,7 +194,7 @@ def status():
     return jsonify({"status": "ok", "service": "local"})
 
 @local_bp.route("/search")
-def search_tracks():
+def search_local_items():
     query = request.args.get('q', '').lower().strip()
     if not query:
         return jsonify([])

@@ -16,12 +16,12 @@
         <p style="color:#666;text-align:center;margin-top:40px;">No songs queued.</p>
     </div>
 
-    {% if show_incogni %}
+    {% if show_history_recording_control %}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0;">
         <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:12px;color:#aaa;">Incogni</span>
+            <span style="font-size:12px;color:#aaa;">Save History</span>
             <label class="switch">
-                <input type="checkbox" id="incogniToggle" onchange="toggleIncogni()">
+                <input type="checkbox" id="historyRecordingToggle" onchange="toggleHistoryRecording()">
                 <span class="slider"></span>
             </label>
         </div>

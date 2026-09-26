@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 {% set page_title = "Musicify Pro" %}
-{% set show_incogni = true %}
+{% set show_history_recording_control = true %}
 {% set show_live_lyrics = true %}
 {% set switch_player_url = url_for('local.browse') %}
 {% set switch_player_label = "Local Player" %}
-{% set playlist_song_placeholder = "Enter any combination of digits 1 through 6." %}
+{% set playlist_modal_message = "Enter any combination of digits 1 through 6." %}
 {% include "_head.html" %}
 <body>
 {% include "_nav.html" %}
@@ -156,7 +156,7 @@ async function addToQueue(song, btn){
         btn.classList.remove("queued");
     }, 1500);
 
-    const enqueueRoute = window.incogniMode
+    const enqueueRoute = window.historyRecordingDisabled
         ? "/enqueue_incognito"
         : "/enqueue";
 

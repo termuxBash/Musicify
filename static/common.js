@@ -54,28 +54,26 @@ function toggleMenu(){
 }
 
 async function toggleLyrics(){
-    const isChecked = document.getElementById("lyricsToggle").checked;
     await fetch("/toggle_lyrics", {
         method: "POST"
     });
 }
 /* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */
 async function toggleAutoplay(){
-    const isChecked = document.getElementById("autoplayToggle").checked;
     await fetch("/toggle_autoplay", {
         method: "POST"
     });
 }
-async function toggleIncogni(){
+async function toggleHistoryRecording(){
     const res = await fetch("/toggle_incogni", {
         method: "POST"
     });
     if (!res.ok) return;
 
     const data = await res.json();
-    window.incogniMode = data.incogni_mode;
-    const incogniToggle = document.getElementById("incogniToggle");
-    if (incogniToggle) incogniToggle.checked = data.incogni_mode;
+    window.historyRecordingDisabled = data.history_recording_disabled;
+    const historyRecordingToggle = document.getElementById("historyRecordingToggle");
+    if (historyRecordingToggle) historyRecordingToggle.checked = data.history_recording_disabled;
 }
 
 // Global state container to avoid collisions
@@ -243,7 +241,7 @@ async function confirmPlaylistAdd() {
     closePlaylistMenu();
 }
 
-async function addPlaylist() {
+async function selectPlaylistCombination() {
     const playlist = document.getElementById("addtoPlaylistSelect").value;
     if (!playlist) {
         showPopup("Please select a playlist first.");
@@ -370,9 +368,9 @@ async function updateStats() {
         const autoplayToggle = document.getElementById("autoplayToggle");
         if (autoplayToggle) autoplayToggle.checked = data.autoplay_enabled;
 
-        window.incogniMode = data.incogni_mode;
-        const incogniToggle = document.getElementById("incogniToggle");
-        if (incogniToggle) incogniToggle.checked = data.incogni_mode;
+        window.historyRecordingDisabled = data.history_recording_disabled;
+        const historyRecordingToggle = document.getElementById("historyRecordingToggle");
+        if (historyRecordingToggle) historyRecordingToggle.checked = data.history_recording_disabled;
 
     } catch (e) {
         console.error("Poller encountered an error fetching stats:", e);
