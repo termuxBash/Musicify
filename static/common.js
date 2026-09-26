@@ -42,7 +42,16 @@ function showPopup(message) {
     setTimeout(() => window.addEventListener('click', removePopup), 10);
 }
 
-
+function toggleMenu(){
+    const panel = document.getElementById("sidePanel");
+    const overlay = document.getElementById("overlay");
+    const main = document.getElementById("main");
+    panel.classList.toggle("open");
+    overlay.classList.toggle("show");
+    if(window.innerWidth >= 768 && main){
+        main.classList.toggle("shift");
+    }
+}
 
 async function toggleLyrics(){
     const isChecked = document.getElementById("lyricsToggle").checked;

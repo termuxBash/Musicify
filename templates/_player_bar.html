@@ -1,0 +1,29 @@
+<div class="player-bar">
+    {% if show_live_lyrics %}
+    <div id="live-lyrics" style="font-size:0.85rem;color:#1db954;font-weight:bold;margin-top:4px;min-height:1.2em;"></div>
+    {% endif %}
+
+    <div class="player-top">
+        <div class="now-playing">
+            <img id="playing-thumb" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E" alt="">
+            <div class="now-playing-info">
+                <p id="playing-status">IDLE</p>
+                <h4 id="playing-title">Ready to stream</h4>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="skip-btn" onclick="skipTrack()">SKIP ⏭</button>
+            <button class="power-btn" onclick="power()">POWER ⏻</button>
+        </div>
+    </div>
+
+    <div class="player-bottom">
+        <div class="volume-cluster">
+            <button class="vol-btn" onclick="sendControl('vol_down')">-</button>
+            <input type="range" id="vol-slider" min="0" max="100" value="0" oninput="setVolume(this.value)">
+            <button class="vol-btn" onclick="sendControl('vol_up')">+</button>
+            <span id="vol-val">0%</span>
+        </div>
+        <div style="font-size:10px;color:#555;">SYSTEM CONTROL</div>
+    </div>
+</div>

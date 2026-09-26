@@ -1,56 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Musicify local</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='common.css') }}">
-<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
-</head>
+{% set page_title = "Musicify local" %}
+{% set show_incogni = false %}
+{% set show_live_lyrics = false %}
+{% set switch_player_url = url_for('youtube.index') %}
+{% set switch_player_label = "Online Player" %}
+{% set playlist_song_placeholder = "Select a playlist" %}
+{% include "_head.html" %}
 <body>
-<div class="overlay" id="overlay" onclick="toggleMenu()"></div>
-<nav>
-    <div class="menu" onclick="toggleMenu()">☰</div>
-    <h3 style="color:var(--spotify-green); margin-right: auto;">Musicify local</h3>
-
-    <div style="display:flex; align-items:center; gap:15px; margin-right:15px;">
-        <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-size:12px; color:#aaa;">Lyrics</span>
-            <label class="switch">
-                <input type="checkbox" id="lyricsToggle" onchange="toggleLyrics()">
-                <span class="slider"></span>
-            </label>
-        </div>
-
-        <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-size:12px; color:#aaa;">Autoplay</span>
-            <label class="switch">
-                <input type="checkbox" id="autoplayToggle" onchange="toggleAutoplay()">
-                <span class="slider"></span>
-            </label>
-        </div>
-    </div>
-    
-    <div class="system-monitor">CPU: <span id="cpu-load">0%</span></div>
-</nav>
-
-<div class="side-panel" id="sidePanel">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3>Music Queue</h3><button class="clear-queue-btn" onclick="clearQueue()">Clear Queue & Stop Music</button>
-        <span onclick="toggleMenu()" style="cursor:pointer;font-size:24px;">✕</span>
-    </div>
-    <div class="queue-playlist-controls">
-        <select id="playlistQueueSelect" class="queue-playlist-select" onmouseover="refreshPlaylistDropdown()">
-            <option value="">Select Playlist</option>
-        </select>
-        <button class="queue-playlist-btn" onclick="enqueueSelectedPlaylist()">Queue</button>
-    </div>
-    <div class="queue-list" id="queueList">
-        <p style="color:#666;text-align:center;margin-top:40px;">No songs queued.</p>
-    </div>
-    <a href="{{ url_for('youtube.index') }}" class="switch-player-link">Switch to Online Player</a>
-    <button type="button" class="queue-playlist-btn" onclick="reconnectStream()">Reconnect 🔄</button>
-</div>
+{% include "_nav.html" %}
+{% include "_side_panel.html" %}
 
 <div class="main" id="main">
 
@@ -115,55 +74,8 @@
 
 </div>
 
-<div class="player-bar">
-    <div class="player-top">
-        <div class="now-playing">
-            <img id="playing-thumb" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E">
-            <div class="now-playing-info">
-                <p id="playing-status">IDLE</p>
-                <h4 id="playing-title">Ready to stream</h4>
-            </div>
-        </div>
-
-        <div class="btn-group">
-            <button class="skip-btn" onclick="skipTrack()">SKIP ⏭</button>
-            <button class="power-btn" onclick="power()">POWER ⏻</button>
-        </div>
-    </div>
-
-    <div class="player-bottom">
-        <div class="volume-cluster">
-            <button class="vol-btn" onclick="sendControl('vol_down')">-</button>
-            <input type="range" id="vol-slider" min="0" max="100" value="0" oninput="setVolume(this.value)">
-            <button class="vol-btn" onclick="sendControl('vol_up')">+</button>
-            <span id="vol-val">0%</span>
-        </div>
-        <div style="font-size:10px;color:#555;">SYSTEM CONTROL</div>
-    </div>
-</div>
-
-<div class="playlist-modal" id="playlistModal" onclick="if(event.target === this) closePlaylistMenu()">
-    <div class="playlist-modal-card">
-        <h4>Add to Playlist</h4>
-        <select class="queue-playlist-select" id="addtoPlaylistSelect" onmouseover="refreshPlaylistDropdown()" onchange="addPlaylist()">
-            <option value="">Select Playlist</option>
-        </select>
-        <p id="playlistSongTitle">Select a playlist</p>
-        <div class="playlist-digits">
-            <button type="button" class="playlist-digit-btn" data-digit="1" onclick="togglePlaylistDigit('1')">1</button>
-            <button type="button" class="playlist-digit-btn" data-digit="2" onclick="togglePlaylistDigit('2')">2</button>
-            <button type="button" class="playlist-digit-btn" data-digit="3" onclick="togglePlaylistDigit('3')">3</button>
-            <button type="button" class="playlist-digit-btn" data-digit="4" onclick="togglePlaylistDigit('4')">4</button>
-            <button type="button" class="playlist-digit-btn" data-digit="5" onclick="togglePlaylistDigit('5')">5</button>
-            <button type="button" class="playlist-digit-btn" data-digit="6" onclick="togglePlaylistDigit('6')">6</button>
-        </div>
-        <input id="playlistComboInput" class="playlist-combo-input" type="text" maxlength="6" oninput="syncPlaylistComboInput()">
-        <div class="playlist-modal-actions">
-            <button class="playlist-cancel" type="button" onclick="closePlaylistMenu()">Cancel</button>
-            <button class="playlist-save" type="button" id="playlistSaveBtn" onclick="confirmPlaylistAdd()">Add</button>
-        </div>
-    </div>
-</div>
+{% include "_player_bar.html" %}
+{% include "_playlist_modal.html" %}
 
 <script>
     window.API_PREFIX = "{{ api_prefix }}";
@@ -172,17 +84,6 @@
 <script src="{{ url_for('static', filename='common.js') }}"></script>
 
 <script>
-const panel=document.getElementById("sidePanel");
-const overlay=document.getElementById("overlay");
-const main=document.getElementById("main");
-
-function toggleMenu(){
-    panel.classList.toggle("open");
-    overlay.classList.toggle("show");
-    if(window.innerWidth>=768){
-        main.classList.toggle("shift");
-    }
-}
 
 /* Base DOM Nodes cached for folder recovery lookup toggling */
 const backupOriginalGridContent = document.getElementById("fileGridContainer").innerHTML;

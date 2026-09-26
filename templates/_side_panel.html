@@ -1,0 +1,34 @@
+<div class="side-panel" id="sidePanel">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3>Music Queue</h3>
+        <button class="clear-queue-btn" onclick="clearQueue()">Clear Queue & Stop Music</button>
+        <span onclick="toggleMenu()" style="cursor:pointer;font-size:24px;">✕</span>
+    </div>
+
+    <div class="queue-playlist-controls">
+        <select id="playlistQueueSelect" class="queue-playlist-select" onmouseover="refreshPlaylistDropdown()">
+            <option value="">Select Playlist</option>
+        </select>
+        <button class="queue-playlist-btn" onclick="enqueueSelectedPlaylist()">Queue</button>
+    </div>
+
+    <div class="queue-list" id="queueList">
+        <p style="color:#666;text-align:center;margin-top:40px;">No songs queued.</p>
+    </div>
+
+    {% if show_incogni %}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0;">
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:#aaa;">Incogni</span>
+            <label class="switch">
+                <input type="checkbox" id="incogniToggle" onchange="toggleIncogni()">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <button type="button" class="queue-playlist-btn" id="aiRecommendationsBtn" onclick="openAiPrompt()">✨ Ai</button>
+    </div>
+    {% endif %}
+
+    <a href="{{ switch_player_url }}" class="switch-player-link">Switch to {{ switch_player_label }}</a>
+    <button type="button" class="queue-playlist-btn" onclick="reconnectStream()">Reconnect 🔄</button>
+</div>

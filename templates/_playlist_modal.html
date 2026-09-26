@@ -1,0 +1,19 @@
+<div class="playlist-modal" id="playlistModal" onclick="if(event.target === this) closePlaylistMenu()">
+    <div class="playlist-modal-card">
+        <h4>Add to Playlist</h4>
+        <select class="queue-playlist-select" id="addtoPlaylistSelect" onmouseover="refreshPlaylistDropdown()" onchange="addPlaylist()">
+            <option value="">Select Playlist</option>
+        </select>
+        <p id="playlistSongTitle">{{ playlist_song_placeholder }}</p>
+        <div class="playlist-digits">
+            {% for digit in range(1, 7) %}
+            <button type="button" class="playlist-digit-btn" data-digit="{{ digit }}" onclick="togglePlaylistDigit('{{ digit }}')">{{ digit }}</button>
+            {% endfor %}
+        </div>
+        <input id="playlistComboInput" class="playlist-combo-input" type="text" inputmode="numeric" maxlength="6" placeholder="e.g. 13 or 246" oninput="syncPlaylistComboInput()">
+        <div class="playlist-modal-actions">
+            <button class="playlist-cancel" type="button" onclick="closePlaylistMenu()">Cancel</button>
+            <button class="playlist-save" type="button" id="playlistSaveBtn" onclick="confirmPlaylistAdd()">Add</button>
+        </div>
+    </div>
+</div>
