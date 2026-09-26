@@ -179,9 +179,27 @@ class QueuePlayer:
         # ---- PATH B: YOUTUBE / PLAYLIST LAST.FM RECOMMENDATIONS ----
         try:
             from services.yt_service import YTService
-            from apps.yt.routes import get_lastfm_recommendations
+            from apps.yt.routes import (
+                get_gemini_recommendations,
+                get_lastfm_recommendations,
+            )
 
-            recommended_tracks = get_lastfm_recommendations(full_title)
+            gemini_prompt = (
+                f"Recommend songs based on '{full_title}'. It is okay to stray "
+                "from the exact song, but preferably make 1 or 2 of the 3 "
+                "recommendations from the same artist. Don't make all 3 of the same artist if possible."
+            )
+            gemini_tracks = get_gemini_recommendations(gemini_prompt)
+            recommended_tracks = [
+                {
+                    "title": track["song_name"],
+                    "videoId": track["song_id"],
+                }
+                for track in gemini_tracks
+            ]
+
+            if not recommended_tracks:
+                recommended_tracks = get_lastfm_recommendations(full_title)
             
             if not recommended_tracks:
                 logger.warning("Recommendation engine returned empty. Falling back to default search queries.")
@@ -198,17 +216,43 @@ class QueuePlayer:
             for track in recommended_tracks:
                 query = track["title"]
                 try:
-                    resolved = YTService.auto_pick_song(query)
+                    resolved = (
+                        {
+                            "title": query,
+                            "videoId": track["videoId"],
+                        }
+                        if track.get("videoId")
+                        else YTService.auto_pick_song(query)
+                    )
                     if resolved and resolved.get("videoId"):
                         if resolved["videoId"] == reference_song.get("videoId"):
                             logger.info(f"Skipping duplicate videoId match for query: {query}")
                             continue
                             
                         watch_url = f"https://www.youtube.com/watch?v={resolved['videoId']}"
-                        stream_url = YTService.resolve_stream(watch_url)
+                        try:
+                            stream_url = YTService.resolve_stream(watch_url)
+                        except Exception as resolve_error:
+                            if not track.get("videoId"):
+                                raise
+
+                            logger.warning(
+                                f"Gemini YouTube ID failed for '{query}', searching by title instead: "
+                                f"{resolve_error}"
+                            )
+                            resolved = YTService.auto_pick_song(query)
+                            if not resolved or not resolved.get("videoId"):
+                                continue
+
+                            watch_url = f"https://www.youtube.com/watch?v={resolved['videoId']}"
+                            stream_url = YTService.resolve_stream(watch_url)
                         
                         if stream_url:
                             resolved["url"] = stream_url
+                            resolved.setdefault(
+                                "thumbnail",
+                                f"https://img.youtube.com/vi/{resolved['videoId']}/hqdefault.jpg",
+                            )
                             autoplays_to_append.append(resolved)
                             logger.info(f"YouTube Autoplay resolved stream for: {resolved.get('title')}")
                             

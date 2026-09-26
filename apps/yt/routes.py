@@ -3,11 +3,22 @@ Music Routes - Stream audio via FFmpeg to Bose
 """
 import subprocess
 import threading
+import json
+import os
 from flask import Blueprint, jsonify, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
 from services.ffmpeg_service import FFmpegService
 from core.bose_worker import BoseSoundTouchWorker
-from core.settings import BOSE_IP, STREAM_FALLBACK_URLS, STREAM_URL, MUSIC_ATLAS_KEY, LASTFM_KEY
+from core.settings import (
+    BOSE_IP,
+    STREAM_FALLBACK_URLS,
+    STREAM_URL,
+    MUSIC_ATLAS_KEY,
+    LASTFM_KEY,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    PLAYLIST_DIR,
+)
 import logging
 import random
 import requests # type: ignore
@@ -296,6 +307,82 @@ def get_lastfm_recommendations(query):
     except Exception as e:
         logger.error(f"Recommendation failed: {e}")
         return []
+
+
+def get_gemini_recommendations(user_prompt=""):
+    """Return three YouTube song recommendations based on playback history."""
+    if not GEMINI_API_KEY:
+        logger.error("Missing GEMINI_API_KEY")
+        return []
+
+    history_path = os.path.join(PLAYLIST_DIR, "history.txt")
+    try:
+        with open(history_path, "r", encoding="utf8") as history_file:
+            history = history_file.read().strip()
+    except FileNotFoundError:
+        history = ""
+    except OSError as error:
+        logger.error(f"Failed to read playback history: {error}")
+        return []
+
+    prompt = f"""Recommend exactly 3 songs based on this playback history.
+The history uses one entry per line in this exact format:
+Song Name>YouTubeID>PlayCount
+
+Playback history:
+{history or "(no playback history yet)"}
+
+{user_prompt.strip()}
+
+Respond with exactly valid JSON and no markdown. The response must be a JSON
+array containing exactly 3 objects. Every object must contain only these two
+string fields: song_name and song_id. song_id must be a YouTube video ID."""
+
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL}:generateContent"
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "tools": [{"googleSearch": {}}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+        },
+    }
+
+    try:
+        response = requests.post(
+            endpoint,
+            params={"key": GEMINI_API_KEY},
+            json=payload,
+            timeout=20,
+        )
+        response.raise_for_status()
+        response_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        recommendations = json.loads(response_text)
+    except (requests.RequestException, KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        logger.error(f"Gemini recommendation request failed: {error}")
+        return []
+
+    if not isinstance(recommendations, list) or len(recommendations) != 3:
+        logger.error("Gemini returned an invalid recommendation count")
+        return []
+
+    validated = []
+    for recommendation in recommendations:
+        if not isinstance(recommendation, dict):
+            return []
+        if set(recommendation) != {"song_name", "song_id"}:
+            return []
+        if not all(isinstance(recommendation[field], str) and recommendation[field].strip()
+                   for field in ("song_name", "song_id")):
+            return []
+        validated.append({
+            "song_name": recommendation["song_name"].strip(),
+            "song_id": recommendation["song_id"].strip(),
+        })
+
+    return validated
 # ---------------- ROUTES ----------------
 
 
