@@ -8,6 +8,7 @@ from services.yt_service import YTService
 from services.ffmpeg_service import FFmpegService
 from core.bose_worker import BoseSoundTouchWorker
 from core.settings import BOSE_IP, STREAM_FALLBACK_URLS, STREAM_URL, MUSIC_ATLAS_KEY, LASTFM_KEY
+from core.stats import _append_to_playlist
 import logging
 import random
 import requests # type: ignore
@@ -461,8 +462,7 @@ def acquire():
 
 # ---------- QUEUE ----------
 
-@youtube_bp.route("/enqueue", methods=["POST"])
-def enqueue():
+def _enqueue_song(add_to_history):
 
     if current_app.playback.owner is None:
         current_app.playback.acquire("youtube")
@@ -477,9 +477,26 @@ def enqueue():
             "owner": current_app.playback.owner
         }), 403
 
+    if add_to_history:
+        _append_to_playlist(
+            "history",
+            song.get("title", "").strip(),
+            song.get("videoId") or song.get("url") or ""
+        )
+
     return jsonify({
         "status": "queued"
     })
+
+
+@youtube_bp.route("/enqueue", methods=["POST"])
+def enqueue():
+    return _enqueue_song(add_to_history=True)
+
+
+@youtube_bp.route("/enqueue_incognito", methods=["POST"])
+def enqueue_incognito():
+    return _enqueue_song(add_to_history=False)
 
 @youtube_bp.route("/recommend_and_enqueue", methods=["POST"])
 def recommend_and_enqueue():

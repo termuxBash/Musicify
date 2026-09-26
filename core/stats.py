@@ -110,16 +110,6 @@ def add_to_playlist():
             error="playlist required"
         ), 400
 
-    os.makedirs(
-        PLAYLIST_DIR,
-        exist_ok=True
-    )
-
-    path = os.path.join(
-        PLAYLIST_DIR,
-        f"{playlist}.txt"
-    )
-
     title = song.get("title", "").strip()
 
     source = (
@@ -133,24 +123,19 @@ def add_to_playlist():
             error="song title required"
         ), 400
 
-    with open(
-        path,
-        "a",
-        encoding="utf8"
-    ) as f:
-
-        if source:
-            f.write(
-                f"{title}>{source}\n"
-            )
-        else:
-            f.write(
-                f"{title}\n"
-            )
+    _append_to_playlist(playlist, title, source)
 
     return jsonify(
         status="success"
     )
+
+
+def _append_to_playlist(playlist, title, source=""):
+    os.makedirs(PLAYLIST_DIR, exist_ok=True)
+    path = os.path.join(PLAYLIST_DIR, f"{playlist}.txt")
+
+    with open(path, "a", encoding="utf8") as playlist_file:
+        playlist_file.write(f"{title}>{source}\n" if source else f"{title}\n")
 @stats_bp.route(
     "/remove_from_queue/<int:index>",
     methods=["POST"]

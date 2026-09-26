@@ -31,6 +31,14 @@
                 <span class="slider"></span>
             </label>
         </div>
+
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:#aaa;">Incogni</span>
+            <label class="switch">
+                <input type="checkbox" id="incogniToggle">
+                <span class="slider"></span>
+            </label>
+        </div>
     </div>
     
     <div class="system-monitor">CPU: <span id="cpu-load">0%</span></div>
@@ -270,7 +278,11 @@ async function addToQueue(song, btn){
         btn.classList.remove("queued");
     }, 1500);
 
-    let res = await fetch(API_PREFIX + "/enqueue", {
+    const enqueueRoute = document.getElementById("incogniToggle").checked
+        ? "/enqueue_incognito"
+        : "/enqueue";
+
+    let res = await fetch(API_PREFIX + enqueueRoute, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -313,7 +325,7 @@ async function addToQueue(song, btn){
                 return;
             }
 
-            res = await fetch(API_PREFIX + "/enqueue", {
+            res = await fetch(API_PREFIX + enqueueRoute, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
