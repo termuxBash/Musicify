@@ -82,6 +82,7 @@ def toggle_autoplay():
 @stats_bp.route("/toggle_incogni", methods=["POST"])
 def toggle_incogni():
     current_app.incogni_mode = not current_app.incogni_mode
+    current_app.player.incogni_mode = current_app.incogni_mode
     return jsonify({
         "status": "success",
         "incogni_mode": current_app.incogni_mode

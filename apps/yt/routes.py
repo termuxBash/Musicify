@@ -383,6 +383,21 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
         })
 
     return validated
+
+
+@youtube_bp.route("/ai_recommendations", methods=["POST"])
+def ai_recommendations():
+    data = request.get_json(silent=True) or {}
+    user_prompt = (data.get("user_prompt") or "").strip()
+
+    if not user_prompt:
+        return jsonify({"error": "prompt required"}), 400
+
+    recommendations = get_gemini_recommendations(user_prompt)
+    if not recommendations:
+        return jsonify({"error": "AI recommendations unavailable"}), 502
+
+    return jsonify({"recommendations": recommendations})
 # ---------------- ROUTES ----------------
 
 
