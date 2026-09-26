@@ -22,13 +22,16 @@ YOUTUBE_API_KEYS = [
 
 class YTService:
 
-    def resolve_stream(youtube_url):
+    def resolve_stream_info(youtube_url):
 
         with YoutubeDL({
             "format": "bestaudio",
             "quiet": True,
             'nocheckcertificate': True,
-            "remote_components": ["ejs:github"]
+            "remote_components": ["ejs:github"],
+            "extractor_args": {
+                "youtube": {"player_client": ["web_embedded"]}
+            }
         }) as ydl:
 
             info = ydl.extract_info(
@@ -36,7 +39,13 @@ class YTService:
                 download=False
             )
 
-        return info["url"]
+        return {
+            "url": info["url"],
+            "http_headers": info.get("http_headers", {})
+        }
+
+    def resolve_stream(youtube_url):
+        return YTService.resolve_stream_info(youtube_url)["url"]
     
     def enqueue_youtube_result( result):
         """
@@ -51,9 +60,9 @@ class YTService:
             f"https://www.youtube.com/watch?v={result['videoId']}"
         )
 
-        stream_url = YTService.resolve_stream(video_url)
+        stream_info = YTService.resolve_stream_info(video_url)
 
-        if not stream_url:
+        if not stream_info.get("url"):
             return False
 
         return current_app.playback.enqueue(
@@ -61,7 +70,9 @@ class YTService:
             {
                 "title": result["title"],
                 "thumbnail": result["thumbnail"],
-                "url": stream_url
+                "url": stream_info["url"],
+                "source_url": video_url,
+                "stream_headers": stream_info.get("http_headers", {})
             }
         )
 

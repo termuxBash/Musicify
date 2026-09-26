@@ -8,6 +8,7 @@ import os
 import signal
 import threading
 import queue
+import sys
 from flask import current_app
 
 ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
@@ -18,6 +19,28 @@ class FFmpegService:
         Starts an FFmpeg process for either a local file path or a web URL.
         """
         # Common flags for audio-only streaming to Icecast
+        source_process = None
+        stream_headers = target.get("stream_headers", {}) if isinstance(target, dict) else {}
+        target_url = target.get("url") if isinstance(target, dict) else target
+        source_url = target.get("source_url") if isinstance(target, dict) else None
+        if source_url:
+            source_process = subprocess.Popen(
+                [
+                    sys.executable, "-m", "yt_dlp",
+                    "--quiet", "--no-warnings", "--no-check-certificates",
+                    "--remote-components", "ejs:github",
+                    "--extractor-args", "youtube:player_client=web_embedded",
+                    "--format", "bestaudio",
+                    "--output", "-", source_url
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL
+            )
+            target_url = "-"
+        header_value = "".join(
+            f"{key}: {value}\r\n" for key, value in stream_headers.items()
+        )
+
         cmd = [
             "ffmpeg",
             "-hide_banner",
@@ -27,7 +50,8 @@ class FFmpegService:
             "-re",
 
             # Input
-            "-i", target,
+            *( ["-headers", header_value] if header_value and not source_process else [] ),
+            "-i", target_url,
 
             # Audio only
             "-vn",
@@ -47,12 +71,15 @@ class FFmpegService:
             ICECAST_URL
         ]
 
-        return subprocess.Popen(
+        process = subprocess.Popen(
             cmd,
-            preexec_fn=os.setsid,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stdin=source_process.stdout if source_process else None,
+            preexec_fn=os.setsid
         )
+        if source_process:
+            source_process.stdout.close()
+            process.source_process = source_process
+        return process
 
 
     def kill_process(self, process):
@@ -61,6 +88,9 @@ class FFmpegService:
             return
         try:
             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            source_process = getattr(process, "source_process", None)
+            if source_process:
+                source_process.terminate()
             process.wait(timeout=2)
         except Exception:
             try:

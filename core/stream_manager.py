@@ -260,7 +260,7 @@ class QueuePlayer:
 
             try:
                 logger.info(f"Playing: {song.get('title', 'Unknown')}")
-                target = song["url"]
+                target = song
                 
                 self.current_process = self.ffmpeg.start_stream(target)
 
