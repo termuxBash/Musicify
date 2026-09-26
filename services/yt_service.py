@@ -47,7 +47,7 @@ class YTService:
     def resolve_stream(youtube_url):
         return YTService.resolve_stream_info(youtube_url)["url"]
     
-    def enqueue_youtube_result( result):
+    def enqueue_youtube_result(result, record_history=False):
         """
         Enqueue a YouTube search result into the playback queue.
         Expected keys:
@@ -72,6 +72,8 @@ class YTService:
                 "thumbnail": result["thumbnail"],
                 "url": stream_info["url"],
                 "source_url": video_url,
+                "videoId": result["videoId"],
+                "record_history": record_history,
                 "stream_headers": stream_info.get("http_headers", {})
             }
         )

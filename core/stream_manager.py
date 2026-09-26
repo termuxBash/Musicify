@@ -238,6 +238,10 @@ class QueuePlayer:
                 self.current_song = song
                 song_generation = self._playback_generation
 
+            # Record only normal YouTube tracks when playback actually starts.
+            from core.stats import record_played_song
+            record_played_song(song)
+
             # --- DYNAMIC AUTOPLAY CANCELLATION CHECK ---
             if self.autoplay_enabled:
                 listeners = self._get_icecast_listeners()

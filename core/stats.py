@@ -3,6 +3,7 @@ This module defines the Flask routes that provide real-time system statistics an
 It has endpoints for retrieving CPU usage, current volume, queue status, now playing details, autoplay and lyrics settings, as well as toggling autoplay and lyrics display.
 It also includes routes for managing playlists and removing songs from the queue."""
 from time import sleep
+import threading
 
 from flask import Blueprint, jsonify, request ,current_app
 import psutil
@@ -21,6 +22,7 @@ from core.bose_routes import get_status
 logger = logging.getLogger(__name__)
 stats_bp = Blueprint("stats", __name__)
 stats_bp = Blueprint("stats", __name__)
+history_lock = threading.Lock()
 
 @stats_bp.route("/stats")
 def stats():
@@ -146,6 +148,43 @@ def _append_to_playlist(playlist, title, source=""):
 
     with open(path, "a", encoding="utf8") as playlist_file:
         playlist_file.write(f"{title}>{source}\n" if source else f"{title}\n")
+
+
+def record_played_song(song):
+    if not song.get("record_history"):
+        return
+
+    title = (song.get("title") or "").strip()
+    video_id = (song.get("videoId") or "").strip()
+    if not title or not video_id:
+        return
+
+    os.makedirs(PLAYLIST_DIR, exist_ok=True)
+    path = os.path.join(PLAYLIST_DIR, "history.txt")
+
+    with history_lock:
+        try:
+            with open(path, "r", encoding="utf8") as history_file:
+                lines = [line.strip() for line in history_file if line.strip()]
+        except FileNotFoundError:
+            lines = []
+
+        updated = False
+        history_lines = []
+        for line in lines:
+            parts = line.split(">", 2)
+            if len(parts) >= 2 and parts[0].strip() == title and parts[1].strip() == video_id:
+                count = int(parts[2].strip()) if len(parts) == 3 and parts[2].strip().isdigit() else 0
+                history_lines.append(f"{title}>{video_id}>{count + 1}")
+                updated = True
+            else:
+                history_lines.append(line)
+
+        if not updated:
+            history_lines.append(f"{title}>{video_id}>1")
+
+        with open(path, "w", encoding="utf8") as history_file:
+            history_file.write("\n".join(history_lines) + "\n")
 @stats_bp.route(
     "/remove_from_queue/<int:index>",
     methods=["POST"]

@@ -8,7 +8,6 @@ from services.yt_service import YTService
 from services.ffmpeg_service import FFmpegService
 from core.bose_worker import BoseSoundTouchWorker
 from core.settings import BOSE_IP, STREAM_FALLBACK_URLS, STREAM_URL, MUSIC_ATLAS_KEY, LASTFM_KEY
-from core.stats import _append_to_playlist
 import logging
 import random
 import requests # type: ignore
@@ -469,20 +468,13 @@ def _enqueue_song(add_to_history):
 
     song = request.get_json()
 
-    success = YTService.enqueue_youtube_result(song)
+    success = YTService.enqueue_youtube_result(song, record_history=add_to_history)
 
     if not success:
         return jsonify({
             "error": "youtube blueprint does not own player",
             "owner": current_app.playback.owner
         }), 403
-
-    if add_to_history:
-        _append_to_playlist(
-            "history",
-            song.get("title", "").strip(),
-            song.get("videoId") or song.get("url") or ""
-        )
 
     return jsonify({
         "status": "queued"
