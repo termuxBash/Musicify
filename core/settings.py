@@ -19,6 +19,12 @@ def env_list(name, default):
         return default
     return [item.strip() for item in value.split(",") if item.strip()]
 
+def env_hex(name, default=0):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return int(value.strip(), 16)
+
 #Server settings
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "5000"))
@@ -50,6 +56,7 @@ STREAM_URL = active_stream_url
 #Local file and playlist settings
 ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
 PLAYLIST_DIR = os.getenv("PLAYLIST_DIR", "/opt/radio/playlists")
+TIME_OFFSET = env_hex("TIME_OFFSET")
 DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)
 DEFAULT_AUTOPLAY_ENABLED = env_bool("AUTOPLAY_ENABLED", True)
 DEFAULT_INCOGNI_MODE = env_bool("INCOGNI_MODE", False)

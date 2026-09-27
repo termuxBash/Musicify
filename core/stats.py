@@ -2,7 +2,7 @@
 This module defines the Flask routes that provide real-time system statistics and player status information to the front.
 It has endpoints for retrieving CPU usage, current volume, queue status, now playing details, autoplay and lyrics settings, as well as toggling autoplay and lyrics display.
 It also includes routes for managing playlists and removing songs from the queue."""
-from time import sleep
+from time import sleep, time
 import threading
 
 from flask import Blueprint, jsonify, request ,current_app
@@ -13,7 +13,7 @@ import logging
 from services.yt_service import YTService
 from core.bose_routes import check_power, ctrl
 from flask import current_app
-from core.settings import PLAYLIST_DIR, ROOT_DIR
+from core.settings import PLAYLIST_DIR, ROOT_DIR, TIME_OFFSET
 from dotenv import load_dotenv
 import random
 load_dotenv()
@@ -161,6 +161,7 @@ def record_played_song(song):
 
     os.makedirs(PLAYLIST_DIR, exist_ok=True)
     path = os.path.join(PLAYLIST_DIR, "history.txt")
+    elapsed_timestamp = format(max(0, int(time()) - TIME_OFFSET), "x")
 
     with history_lock:
         try:
@@ -172,16 +173,16 @@ def record_played_song(song):
         updated = False
         history_lines = []
         for line in lines:
-            parts = line.split(">", 2)
+            parts = line.split(">")
             if len(parts) >= 2 and parts[0].strip() == title and parts[1].strip() == video_id:
-                count = int(parts[2].strip()) if len(parts) == 3 and parts[2].strip().isdigit() else 0
-                history_lines.append(f"{title}>{video_id}>{count + 1}")
+                count = int(parts[2].strip()) if len(parts) >= 3 and parts[2].strip().isdigit() else 0
+                history_lines.append(f"{title}>{video_id}>{count + 1}>{elapsed_timestamp}")
                 updated = True
             else:
                 history_lines.append(line)
 
         if not updated:
-            history_lines.append(f"{title}>{video_id}>1")
+            history_lines.append(f"{title}>{video_id}>1>{elapsed_timestamp}")
 
         with open(path, "w", encoding="utf8") as history_file:
             history_file.write("\n".join(history_lines) + "\n")

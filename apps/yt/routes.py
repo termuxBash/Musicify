@@ -284,18 +284,26 @@ def get_gemini_recommendations(user_prompt=""):
         re.IGNORECASE,
     )
 
-    cleaned_history_lines = []
-    for line in history.splitlines():
-        song_name, separator, play_count = line.partition(">")
-        if not separator:
+    history_entries = []
+    for line_number, line in enumerate(history.splitlines()):
+        parts = line.split(">")
+        if len(parts) < 3:
             continue
-        _, separator, play_count = play_count.partition(">")
-        if not separator:
-            continue
+        song_name, play_count = parts[0].strip(), parts[2].strip()
+        timestamp = 0
+        if len(parts) >= 4:
+            try:
+                timestamp = int(parts[3].strip(), 16)
+            except ValueError:
+                pass
+
         cleaned_name = cleanup_pattern.sub(" ", song_name)
         cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip(" -")
         if cleaned_name and play_count.strip():
-            cleaned_history_lines.append(f"{cleaned_name}>{play_count.strip()}")
+            history_entries.append((timestamp, line_number, f"{cleaned_name}>{play_count}"))
+
+    history_entries.sort(key=lambda entry: (entry[0], entry[1]))
+    cleaned_history_lines = [entry[2] for entry in history_entries]
 
     cleaned_history = "\n".join(cleaned_history_lines)
     prompt = f"""Recommend exactly 3 songs based on this playback history.
