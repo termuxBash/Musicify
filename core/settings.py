@@ -54,6 +54,31 @@ DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)
 DEFAULT_AUTOPLAY_ENABLED = env_bool("AUTOPLAY_ENABLED", True)
 DEFAULT_INCOGNI_MODE = env_bool("INCOGNI_MODE", False)
 
+SONG_NAME_CLEANUP = [
+    "official music video",
+    "official lyrics video",
+    "official lyric video",
+    "official audio",
+    "official video",
+    "official lyrics",
+    "official lyric",
+    "lyrics video",
+    "lyric video",
+    "music video",
+    "club mix",
+    "extended mix",
+    "radio mix",
+    "remix",
+    "mix",
+    "version",
+    "official",
+    "lyrics",
+    "lyric",
+    "audio",
+    "video",
+]
+SONG_NAME_CLEANUP.extend(env_list("SONG_NAME_CLEANUP", []))
+
 
 
 

@@ -31,6 +31,7 @@ class QueuePlayer:
         self._playback_generation = 0
         
         self.autoplay_enabled = autoplay_enabled 
+        self._autoplay_suppressed = False
         self.incogni_mode = False
 
     def _bump_playback_generation(self):
@@ -79,6 +80,16 @@ class QueuePlayer:
         with self.lock:
             self.autoplay_enabled = status
             logger.info(f"Autoplay state explicitly shifted to: {self.autoplay_enabled}")
+
+    def suppress_autoplay(self):
+        with self.lock:
+            self._autoplay_suppressed = True
+            logger.info("Autoplay temporarily suppressed while an AI queue is being built")
+
+    def resume_autoplay(self):
+        with self.lock:
+            self._autoplay_suppressed = False
+            logger.info("Autoplay suppression released")
 
     def status(self):
         with self.lock:
@@ -186,9 +197,10 @@ class QueuePlayer:
             )
 
             gemini_prompt = (
-                f"Recommend songs based on '{full_title}'. It is okay to stray "
-                "from the exact song, but preferably make 1 or 2 of the 3 "
-                "recommendations from the same artist. Don't make all 3 of the same artist if possible."
+                f"Current playing track: '{full_title}'. "
+                "Recommend 3 songs that fit this vibe. "
+                "Constraint: Include 1 or 2 songs by the same artist as the current track, "
+                "but ensure at least 1 recommendation is from a different, matching artist (do not make all 3 by the same artist)."
             )
             gemini_tracks = get_gemini_recommendations(gemini_prompt)
             recommended_tracks = [
@@ -302,7 +314,11 @@ class QueuePlayer:
 
             # Assess if autoplay needs to trigger now that we popped the last song
             with self.lock:
-                should_trigger_now = (len(self.queue) == 0) and self.autoplay_enabled
+                should_trigger_now = (
+                    len(self.queue) == 0
+                    and self.autoplay_enabled
+                    and not self._autoplay_suppressed
+                )
 
             if should_trigger_now:
                 logger.info(f"Queue dropped to 0 while launching track. Generating proactive recommendations...")

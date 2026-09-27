@@ -3,8 +3,8 @@ Music Routes - Stream audio via FFmpeg to Bose
 """
 import subprocess
 import threading
-import json
 import os
+import re
 from flask import Blueprint, jsonify, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
 from services.ffmpeg_service import FFmpegService
@@ -18,6 +18,7 @@ from core.settings import (
     GEMINI_API_KEY,
     GEMINI_MODEL,
     PLAYLIST_DIR,
+    SONG_NAME_CLEANUP,
 )
 import logging
 import random
@@ -325,18 +326,42 @@ def get_gemini_recommendations(user_prompt=""):
         logger.error(f"Failed to read playback history: {error}")
         return []
 
+    cleanup_pattern = re.compile(
+        r"(?:^|[\s\[\(\-])(?:"
+        + "|".join(re.escape(term) for term in sorted(SONG_NAME_CLEANUP, key=len, reverse=True))
+        + r")(?:$|[\s\]\)\-])",
+        re.IGNORECASE,
+    )
+
+    cleaned_history_lines = []
+    for line in history.splitlines():
+        song_name, separator, play_count = line.partition(">")
+        if not separator:
+            continue
+        _, separator, play_count = play_count.partition(">")
+        if not separator:
+            continue
+        cleaned_name = cleanup_pattern.sub(" ", song_name)
+        cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip(" -")
+        if cleaned_name and play_count.strip():
+            cleaned_history_lines.append(f"{cleaned_name}>{play_count.strip()}")
+
+    cleaned_history = "\n".join(cleaned_history_lines)
     prompt = f"""Recommend exactly 3 songs based on this playback history.
-The history uses one entry per line in this exact format:
-Song Name>YouTubeID>PlayCount
+The history uses one entry per line in this exact compact format:
+Song Name>PlayCount
+Use the song names and play counts
+as context, then find the best matching YouTube video IDs yourself.
 
 Playback history:
-{history or "(no playback history yet)"}
+{cleaned_history or "(no playback history yet)"}
 
 {user_prompt.strip()}
 
-Respond with exactly valid JSON and no markdown. The response must be a JSON
-array containing exactly 3 objects. Every object must contain only these two
-string fields: song_name and song_id. song_id must be a YouTube video ID."""
+Respond with exactly 3 lines and no markdown, numbering, or explanation.
+Each line must use this format and contain no other > characters:
+SongName>YouTubeVideoId
+YouTubeVideoId must be a valid YouTube video ID."""
 
     endpoint = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -371,12 +396,19 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
             )
 
         response.raise_for_status()
-
+        # print("Gemini response:", response.text)  # Debugging output
         response_json = response.json()
         response_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
-        recommendations = json.loads(response_text)
+        recommendations = []
+        for line in response_text.splitlines():
+            song_name, separator, song_id = line.strip().partition(">")
+            if separator and song_name.strip() and song_id.strip() and ">" not in song_id:
+                recommendations.append({
+                    "song_name": song_name.strip(),
+                    "song_id": song_id.strip(),
+                })
 
-    except requests.RequestException as error:
+    except (requests.RequestException, KeyError, IndexError, TypeError) as error:
         logger.error(
             "Gemini recommendation request failed: %s; response=%s",
             error,
@@ -407,41 +439,44 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
 
 
 def _queue_ai_recommendations(app, recommendations):
-    with app.app_context():
-        record_history = not app.incogni_mode
+    try:
+        with app.app_context():
+            record_history = not app.incogni_mode
 
-        for recommendation in recommendations:
-            result = {
-                "title": recommendation["song_name"],
-                "videoId": recommendation["song_id"],
-                "thumbnail": f"https://img.youtube.com/vi/{recommendation['song_id']}/hqdefault.jpg",
-            }
+            for recommendation in recommendations:
+                result = {
+                    "title": recommendation["song_name"],
+                    "videoId": recommendation["song_id"],
+                    "thumbnail": f"https://img.youtube.com/vi/{recommendation['song_id']}/hqdefault.jpg",
+                }
 
-            try:
-                success = YTService.enqueue_youtube_result(
-                    result,
-                    record_history=record_history,
-                )
-            except Exception as direct_error:
-                logger.warning(
-                    f"AI recommendation ID failed for '{result['title']}', searching by title: {direct_error}"
-                )
-                result = YTService.auto_pick_song(result["title"])
-                if not result:
-                    continue
                 try:
                     success = YTService.enqueue_youtube_result(
                         result,
                         record_history=record_history,
                     )
-                except Exception as fallback_error:
-                    logger.error(
-                        f"Failed to queue AI title fallback '{result['title']}': {fallback_error}"
+                except Exception as direct_error:
+                    logger.warning(
+                        f"AI recommendation ID failed for '{result['title']}', searching by title: {direct_error}"
                     )
-                    continue
+                    result = YTService.auto_pick_song(result["title"])
+                    if not result:
+                        continue
+                    try:
+                        success = YTService.enqueue_youtube_result(
+                            result,
+                            record_history=record_history,
+                        )
+                    except Exception as fallback_error:
+                        logger.error(
+                            f"Failed to queue AI title fallback '{result['title']}': {fallback_error}"
+                        )
+                        continue
 
-            if not success:
-                logger.warning(f"AI recommendation was not queued: {result['title']}")
+                if not success:
+                    logger.warning(f"AI recommendation was not queued: {result['title']}")
+    finally:
+        app.player.resume_autoplay()
 
 
 @youtube_bp.route("/ai_recommendations", methods=["POST"])
@@ -452,24 +487,32 @@ def ai_recommendations():
     if not user_prompt:
         return jsonify({"error": "prompt required"}), 400
 
+    current_app.player.suppress_autoplay()
     recommendations = get_gemini_recommendations(user_prompt)
     if not recommendations:
+        current_app.player.resume_autoplay()
         return jsonify({"error": "AI recommendations unavailable"}), 502
 
     if current_app.playback.owner is None:
         current_app.playback.acquire("youtube")
     if current_app.playback.owner != "youtube":
+        current_app.player.resume_autoplay()
         return jsonify({
             "error": "youtube blueprint does not own player",
             "owner": current_app.playback.owner,
         }), 403
 
     app = current_app._get_current_object()
-    threading.Thread(
-        target=_queue_ai_recommendations,
-        args=(app, recommendations),
-        daemon=True,
-    ).start()
+    try:
+        threading.Thread(
+            target=_queue_ai_recommendations,
+            args=(app, recommendations),
+            daemon=True,
+        ).start()
+    except Exception:
+        current_app.player.resume_autoplay()
+        logger.exception("Failed to start AI recommendation queue worker")
+        return jsonify({"error": "AI recommendations unavailable"}), 502
 
     return jsonify({
         "status": "queueing",
