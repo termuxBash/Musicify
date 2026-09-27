@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import requests
 load_dotenv()
 import os
+import threading
 
 def env_bool(name, default=False):
     value = os.getenv(name)
@@ -56,6 +57,18 @@ STREAM_URL = active_stream_url
 #Local file and playlist settings
 ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
 PLAYLIST_DIR = os.getenv("PLAYLIST_DIR", "/opt/radio/playlists")
+HISTORY_FILE = os.getenv("HISTORY_FILE", "history.txt")
+_history_file_lock = threading.Lock()
+
+def get_history_file():
+    with _history_file_lock:
+        return HISTORY_FILE
+
+def set_history_file(filename):
+    global HISTORY_FILE
+    with _history_file_lock:
+        HISTORY_FILE = filename
+
 TIME_OFFSET = env_hex("TIME_OFFSET")
 DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)
 DEFAULT_AUTOPLAY_ENABLED = env_bool("AUTOPLAY_ENABLED", True)

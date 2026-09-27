@@ -13,7 +13,7 @@ import logging
 from services.yt_service import YTService
 from core.bose_routes import check_power, ctrl
 from flask import current_app
-from core.settings import PLAYLIST_DIR, ROOT_DIR, TIME_OFFSET
+from core.settings import get_history_file, PLAYLIST_DIR, ROOT_DIR, TIME_OFFSET
 from dotenv import load_dotenv
 import random
 load_dotenv()
@@ -160,7 +160,7 @@ def record_played_song(song):
         return
 
     os.makedirs(PLAYLIST_DIR, exist_ok=True)
-    path = os.path.join(PLAYLIST_DIR, "history.txt")
+    path = os.path.join(PLAYLIST_DIR, get_history_file())
     elapsed_timestamp = format(max(0, int(time()) - TIME_OFFSET), "x")
 
     with history_lock:

@@ -4,14 +4,16 @@ Music Routes - Stream audio via FFmpeg to Bose
 import threading
 import os
 import re
-from flask import Blueprint, jsonify, request, render_template, url_for, current_app  # type: ignore
+from flask import Blueprint, jsonify, redirect, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
 from core.settings import (
     MUSIC_ATLAS_KEY,
     LASTFM_KEY,
     GEMINI_API_KEY,
     GEMINI_MODEL,
+    get_history_file,
     PLAYLIST_DIR,
+    set_history_file,
     SONG_NAME_CLEANUP,
 )
 import logging
@@ -267,7 +269,7 @@ def get_gemini_recommendations(user_prompt=""):
         logger.error("Missing GEMINI_API_KEY")
         return []
 
-    history_path = os.path.join(PLAYLIST_DIR, "history.txt")
+    history_path = os.path.join(PLAYLIST_DIR, get_history_file())
     try:
         with open(history_path, "r", encoding="utf8") as history_file:
             history = history_file.read().strip()
@@ -483,6 +485,16 @@ def ai_recommendations():
 @youtube_bp.route('/')
 def index():
     return render_template('yt.html', api_prefix=url_for("youtube.index").rstrip("/"))
+
+
+@youtube_bp.route("/hist")
+def switch_history_file():
+    filename = (request.args.get("file") or "").strip()
+    if not filename or os.path.basename(filename) != filename:
+        return jsonify({"error": "file must be a filename"}), 400
+
+    set_history_file(filename)
+    return redirect(url_for("youtube.index").rstrip("/"))
 
 
 @youtube_bp.route("/search", methods=["POST"])
