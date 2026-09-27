@@ -54,8 +54,7 @@ def stats():
         "now_playing": current_song,
         "is_playing": is_playing,
         "autoplay_enabled": player_status.get("autoplay_enabled", False),
-        "history_recording_disabled": current_app.history_recording_disabled,
-        "incogni_mode": current_app.history_recording_disabled,
+        "incogni_mode": current_app.incogni_mode,
         "show_lyrics": lyrics_svc.enabled,
         "current_lyric": lyrics_svc.get_current_line(),  # This returns the raw line string
         "rt_exec": rt_payload
@@ -81,13 +80,12 @@ def toggle_autoplay():
 
 
 @stats_bp.route("/toggle_incogni", methods=["POST"])
-def toggle_history_recording():
-    current_app.history_recording_disabled = not current_app.history_recording_disabled
-    current_app.player.history_recording_disabled = current_app.history_recording_disabled
+def toggle_incogni():
+    current_app.incogni_mode = not current_app.incogni_mode
+    current_app.player.incogni_mode = current_app.incogni_mode
     return jsonify({
         "status": "success",
-        "history_recording_disabled": current_app.history_recording_disabled,
-        "incogni_mode": current_app.history_recording_disabled,
+        "incogni_mode": current_app.incogni_mode,
     })
 
 @stats_bp.route("/playlists")

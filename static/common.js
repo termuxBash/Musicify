@@ -64,16 +64,16 @@ async function toggleAutoplay(){
         method: "POST"
     });
 }
-async function toggleHistoryRecording(){
+async function toggleIncogni(){
     const res = await fetch("/toggle_incogni", {
         method: "POST"
     });
     if (!res.ok) return;
 
     const data = await res.json();
-    window.historyRecordingDisabled = data.history_recording_disabled;
-    const historyRecordingToggle = document.getElementById("historyRecordingToggle");
-    if (historyRecordingToggle) historyRecordingToggle.checked = data.history_recording_disabled;
+    window.incogniMode = data.incogni_mode;
+    const incogniToggle = document.getElementById("incogniToggle");
+    if (incogniToggle) incogniToggle.checked = data.incogni_mode;
 }
 
 // Global state container to avoid collisions
@@ -368,9 +368,9 @@ async function updateStats() {
         const autoplayToggle = document.getElementById("autoplayToggle");
         if (autoplayToggle) autoplayToggle.checked = data.autoplay_enabled;
 
-        window.historyRecordingDisabled = data.history_recording_disabled;
-        const historyRecordingToggle = document.getElementById("historyRecordingToggle");
-        if (historyRecordingToggle) historyRecordingToggle.checked = data.history_recording_disabled;
+        window.incogniMode = data.incogni_mode;
+        const incogniToggle = document.getElementById("incogniToggle");
+        if (incogniToggle) incogniToggle.checked = data.incogni_mode;
 
     } catch (e) {
         console.error("Poller encountered an error fetching stats:", e);

@@ -23,7 +23,7 @@ def create_app():
     # Instantiate services
     app.lyrics_service = LyricsService(enabled=DEFAULT_LYRICS_ENABLED)
     app.last_known_title = None
-    app.history_recording_disabled = DEFAULT_INCOGNI_MODE
+    app.incogni_mode = DEFAULT_INCOGNI_MODE
 
     app.player = QueuePlayer(
         ffmpeg_service=FFmpegService(),
@@ -32,7 +32,7 @@ def create_app():
             ip_address=BOSE_IP
         )
     )
-    app.player.history_recording_disabled = app.history_recording_disabled
+    app.player.incogni_mode = app.incogni_mode
 
     app.player.start()
     app.playback = PlaybackController(app.player)

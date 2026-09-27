@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 {% set page_title = "Musicify Pro" %}
-{% set show_history_recording_control = true %}
+{% set show_incogni = true %}
 {% set show_live_lyrics = true %}
 {% set switch_player_url = url_for('local.browse') %}
 {% set switch_player_label = "Local Player" %}
@@ -156,7 +156,7 @@ async function addToQueue(song, btn){
         btn.classList.remove("queued");
     }, 1500);
 
-    const enqueueRoute = window.historyRecordingDisabled
+    const enqueueRoute = window.incogniMode
         ? "/enqueue_incognito"
         : "/enqueue";
 

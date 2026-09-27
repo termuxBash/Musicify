@@ -408,7 +408,7 @@ string fields: song_name and song_id. song_id must be a YouTube video ID."""
 
 def _queue_ai_recommendations(app, recommendations):
     with app.app_context():
-        record_history = not app.history_recording_disabled
+        record_history = not app.incogni_mode
 
         for recommendation in recommendations:
             result = {
