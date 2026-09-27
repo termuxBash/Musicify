@@ -6,10 +6,7 @@ allowing the rest of the application to simply call start_stream with a file pat
 import subprocess
 import os
 import signal
-import threading
-import queue
 import sys
-from flask import current_app
 
 ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
 
@@ -45,27 +42,14 @@ class FFmpegService:
             "ffmpeg",
             "-hide_banner",
             "-loglevel", "error",
-
-            # Real-time playback
             "-re",
-
-            # Input
             *( ["-headers", header_value] if header_value and not source_process else [] ),
             "-i", target_url,
-
-            # Audio only
             "-vn",
-
-            # Normalize loudness
-            "-af",
-            "loudnorm=I=-16:TP=-1.5:LRA=11",
-
-            # Encode
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
             "-c:a", "libvorbis",
             "-ar", "44100",
             "-ac", "2",
-
-            # Icecast
             "-content_type", "application/ogg",
             "-f", "ogg",
             ICECAST_URL
@@ -81,7 +65,6 @@ class FFmpegService:
             process.source_process = source_process
         return process
 
-
     def kill_process(self, process):
         """Safely stops a running FFmpeg instance."""
         if not process:
@@ -95,76 +78,5 @@ class FFmpegService:
         except Exception:
             try:
                 process.kill()
-            except:
+            except Exception:
                 pass
-
-
-
-
-class StreamQueueManager:
-    def __init__(self):
-        self.ffmpeg_service = FFmpegService()
-        self.play_queue = queue.Queue()
-        self.current_process = None
-        self.is_running = False
-        self.worker_thread = None
-        
-    def add_to_queue(self, target):
-        """Adds a single file path or URL to the end of the queue."""
-        self.play_queue.put(target)
-        
-    def add_multiple_to_queue(self, targets):
-        """Adds a list of file paths or URLs to the end of the queue."""
-        for target in targets:
-            self.play_queue.put(target)
-
-    def start(self):
-        """Starts the background playback loop."""
-        if self.is_running:
-            return
-        
-        self.is_running = True
-        self.worker_thread = threading.Thread(target=self._playback_loop, daemon=True)
-        self.worker_thread.start()
-
-    def stop(self):
-        """Stops the playback loop and kills any currently running stream."""
-        self.is_running = False
-        # Clear out remaining items in queue
-        while not self.play_queue.empty():
-            try:
-                self.play_queue.get_nowait()
-                self.play_queue.task_done()
-            except queue.Empty:
-                break
-                
-        if self.current_process:
-            self.ffmpeg_service.kill_process(self.current_process)
-            self.current_process = None
-
-    def skip_current(self):
-        """Skips the currently playing song/URL."""
-        if self.current_process:
-            # Killing the process forces the playback loop to move to the next item
-            self.ffmpeg_service.kill_process(self.current_process)
-
-    def _playback_loop(self):
-        """Internal background loop that constantly processes the queue."""
-        while self.is_running:
-            try:
-                # Blocks for 1 second waiting for an item. 
-                # Using a timeout allows the loop to check `self.is_running` periodically.
-                target = self.play_queue.get(timeout=1)
-            except queue.Empty:
-                continue
-
-            # Start streaming the track
-            self.current_process = self.ffmpeg_service.start_stream(target)
-            
-            # Wait for the FFmpeg process to naturally finish (or be killed externally)
-            if self.current_process:
-                self.current_process.wait()
-                self.current_process = None
-            
-            # Signal to the queue that the item has been completely processed
-            self.play_queue.task_done()

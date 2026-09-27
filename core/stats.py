@@ -48,7 +48,7 @@ def stats():
         lyrics_svc.song_start_time += 2  # Match front-end poll loop interval
 
     return jsonify({
-        "cpu": psutil.cpu_percent(),
+        "cpu": int(round(psutil.cpu_percent())),
         "volume": volume,
         "queue": list(player_status.get("queue", [])),
         "now_playing": current_song,

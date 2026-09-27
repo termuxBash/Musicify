@@ -1,18 +1,12 @@
 """#yt/rotes.py - Flask routes for Online Music integration
 Music Routes - Stream audio via FFmpeg to Bose
 """
-import subprocess
 import threading
 import os
 import re
 from flask import Blueprint, jsonify, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
-from services.ffmpeg_service import FFmpegService
-from core.bose_worker import BoseSoundTouchWorker
 from core.settings import (
-    BOSE_IP,
-    STREAM_FALLBACK_URLS,
-    STREAM_URL,
     MUSIC_ATLAS_KEY,
     LASTFM_KEY,
     GEMINI_API_KEY,
@@ -31,13 +25,11 @@ logger = logging.getLogger(__name__)
 # Blueprint setup
 youtube_bp = Blueprint('youtube', __name__, template_folder='templates')
 
-# Initialize services
-ffmpeg = FFmpegService()
-bose = BoseSoundTouchWorker(ip_address=BOSE_IP)
 # ---------------- DISPLAY ----------------
 
 def show_lyric(text):
     try:
+        import subprocess
         subprocess.Popen(["python3", "display.py", text])
     except Exception as e:
         print("DISPLAY ERROR:", e)
@@ -85,47 +77,6 @@ def fetch_synced_lyrics(title):
         return []
 
 
-
-current_song = None
-ffmpeg_process = None
-
-# State management
-state = {
-    "queue": [],
-    "queue_titles": [],
-    "last_requested_url": None,
-    "last_requested_title": None,
-    "is_playing": False,
-    "lock": threading.Lock()
-}
-
-
-def get_stream_url():
-    """Detect local Icecast stream URL"""
-    import socket
-    candidate_urls = [STREAM_URL, *STREAM_FALLBACK_URLS]
-
-    for url in candidate_urls:
-        try:
-            import requests # type: ignore
-            r = requests.get(url, timeout=1, stream=True)
-            if r.status_code == 200:
-                return url
-        except:
-            pass
-    
-    # Fallback to local auto-detect
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-        return f"http://{local_ip}:8000/mpv.ogg"
-    except:
-        return "http://127.0.0.1:8000/mpv.ogg"
-
-
-STREAM_URL = get_stream_url()
 
 # ---------- PLAYBACK CONTROL ----------
 
@@ -534,7 +485,7 @@ def search():
 
     # Fetch data using our new robust key rotation function
     res, status_code = YTService.get_youtube_search_results(query, max_results=12)
-    
+
     if status_code != 200:
         return jsonify(res if res else {"error": "Lookup failed"}), status_code
 
@@ -558,12 +509,12 @@ def get_musicatlas_recommendations(song_title, limit=5):
 
     # Using MusicAtlas endpoint for single-track or prompt similarity
     url = "https://api.musicatlas.ai/v1/similar_tracks"
-    
+
     headers = {
         "Authorization": f"Bearer {MUSIC_ATLAS_KEY}",
         "Content-Type": "application/json"
     }
-    
+
     payload = {
         "text": song_title,
         "limit": limit
@@ -571,29 +522,29 @@ def get_musicatlas_recommendations(song_title, limit=5):
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=10)
-        
+
         if response.status_code != 200:
             logger.error(f"MusicAtlas API error: {response.status_code} - {response.text}")
             return []
-            
+
         data = response.json()
         recommendations = []
-        
+
         # Iterate through the returned recommendations map
         for track in data.get("tracks", []):
             title = track.get("title", "Unknown Track")
             artists = track.get("artists", [])
             artist_name = artists[0].get("name") if artists else "Unknown Artist"
-            
+
             # Extract YouTube videoId safely from platform mappings if present
             platform_ids = track.get("platform_ids", {})
             youtube_id = platform_ids.get("youtube")
-            
+
             recommendations.append({
                 "title": f"{artist_name} - {title}",
                 "videoId": youtube_id # Could be None if unavailable
             })
-                
+
         return recommendations
 
     except Exception as e:
@@ -624,47 +575,6 @@ def auto_pick():
         "status": "queued",
         "song": result
     })
-
-@youtube_bp.route('/play', methods=['POST'])
-def enqueue_youtube_url():
-    """Queue a YouTube URL for playback."""
-    data = request.get_json()
-    youtube_url = data.get('url') if data else None
-    title = data.get('title', 'Unknown') if data else 'Unknown'
-    
-    if not youtube_url:
-        return jsonify({"error": "URL required"}), 400
-    
-    with state["lock"]:
-        state["queue"].append(youtube_url)
-        state["queue_titles"].append(title)
-        state["last_requested_url"] = youtube_url
-        state["last_requested_title"] = title
-    
-    return jsonify({
-        "status": "queued",
-        "url": youtube_url,
-        "title": title,
-        "queue_length": len(state["queue"])
-    })
-
-
-@youtube_bp.route('/stop', methods=['POST'])
-def stop_playback():
-    """Stop current playback"""
-    ffmpeg.stop()
-    with state["lock"]:
-        state["queue"].clear()
-        state["queue_titles"].clear()
-        state["is_playing"] = False
-    
-    return jsonify({"status": "stopped"})
-
-
-@youtube_bp.route('/toggle', methods=['POST'])
-def acknowledge_playback_toggle():
-    """Acknowledge the legacy toggle request without changing player state."""
-    return jsonify({"status": "toggled"})
 
 @youtube_bp.route("/acquire", methods=["POST"])
 def acquire():
@@ -713,85 +623,3 @@ def enqueue():
 @youtube_bp.route("/enqueue_incognito", methods=["POST"])
 def enqueue_without_history():
     return _enqueue_song(add_to_history=False)
-
-@youtube_bp.route("/recommend_and_enqueue", methods=["POST"])
-def recommend_and_enqueue():
-    """
-    Route to recommend songs based on an input query and inject them into the queue.
-    Uses Direct YouTube ID from MusicAtlas if present; falls back to search if not.
-    """
-    data = request.get_json() or {}
-    input_song = data.get("song")
-    if not input_song:
-        return jsonify({"error": "Input 'song' string is required"}), 400
-
-    if current_app.playback.owner is None:
-        current_app.playback.acquire("youtube")
-
-    # 1. Fetch recommendations from MusicAtlas
-    recommended_tracks = get_lastfm_recommendations(input_song)
-    
-    if not recommended_tracks:
-        return jsonify({"error": "No recommendations found or API error"}), 404
-
-    added_songs = []
-
-    # 2. Process recommendations
-    for track in recommended_tracks:
-        try:
-            result = None
-            
-            # PATH A: Direct match found in MusicAtlas metadata
-            if track["videoId"]:
-                logger.info(f"Direct YouTube ID found via MusicAtlas for: {track['title']}")
-                result = {
-                    "title": track["title"],
-                    "videoId": track["videoId"],
-                    "thumbnail": f"https://img.youtube.com/vi/{track['videoId']}/hqdefault.jpg"
-                }
-            
-            # PATH B: Fallback to your heuristic search engine
-            else:
-                logger.warning(f"No YouTube ID in MusicAtlas data for: {track['title']}. Falling back to search.")
-                result = YTService.auto_pick_song(track["title"])
-
-            # 3. Stream link resolution and queue execution
-            if result:
-                success = YTService.enqueue_youtube_result(result)
-                if success:
-                    added_songs.append({
-                        "title": result["title"],
-                        "videoId": result["videoId"]
-                    })
-
-        except Exception as e:
-            logger.error(f"Recommendation handling failed for '{track.get('title')}': {e}")
-
-    return jsonify({
-        "status": "completed",
-        "input_song": input_song,
-        "count_requested": len(recommended_tracks),
-        "count_enqueued": len(added_songs),
-        "enqueued_songs": added_songs
-    })
-
-
-
-
-@youtube_bp.route('/status', methods=['GET'])
-def get_status():
-    """Get playback status"""
-    with state["lock"]:
-        return jsonify({
-            "is_playing": state["is_playing"],
-            "last_requested_url": state["last_requested_url"],
-            "last_requested_title": state["last_requested_title"],
-            "current_url": state["last_requested_url"],
-            "current_title": state["last_requested_title"],
-            "queue": state["queue_titles"][:5],
-            "stream_url": STREAM_URL
-        })
-
-
-
-    

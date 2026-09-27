@@ -189,10 +189,6 @@ def play_folder():
     })
 
 
-@local_bp.route("/status")
-def status():
-    return jsonify({"status": "ok", "service": "local"})
-
 @local_bp.route("/search")
 def search_local_items():
     query = request.args.get('q', '').lower().strip()
