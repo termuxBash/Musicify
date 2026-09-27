@@ -602,7 +602,13 @@ def _enqueue_song(add_to_history):
 
     song = request.get_json()
 
-    success = YTService.enqueue_youtube_result(song, record_history=add_to_history)
+    try:
+        success = YTService.enqueue_youtube_result(song, record_history=add_to_history)
+    except Exception as error:
+        logger.warning("YouTube video could not be resolved during queueing: %s", error)
+        return jsonify({
+            "error": "YouTube video is unavailable or could not be resolved"
+        }), 422
 
     if not success:
         return jsonify({
