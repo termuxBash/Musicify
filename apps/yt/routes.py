@@ -487,9 +487,9 @@ def index():
     return render_template('yt.html', api_prefix=url_for("youtube.index").rstrip("/"))
 
 
-@youtube_bp.route("/hist")
-def switch_history_file():
-    filename = (request.args.get("file") or "").strip()
+@youtube_bp.route("/<filename>")
+def switch_history_file(filename):
+    filename = filename.strip()
     if not filename or os.path.basename(filename) != filename:
         return jsonify({"error": "file must be a filename"}), 400
 
