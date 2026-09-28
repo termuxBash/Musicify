@@ -56,7 +56,7 @@ STREAM_URL = active_stream_url
 
 #Local file and playlist settings
 ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
-PLAYLIST_DIR = os.getenv("PLAYLIST_DIR", "/opt/radio/playlists")
+PLAYLIST_DIR = os.getenv("PLAYLIST_DIR", os.path.expanduser("~/Music/playlists"))
 HISTORY_FILE = os.getenv("HISTORY_FILE", "history.txt")
 _history_file_lock = threading.Lock()
 
