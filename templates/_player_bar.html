@@ -4,11 +4,11 @@
     {% endif %}
 
     <div class="player-top">
-        <div class="now-playing">
+        <div class="now-playing" id="nowPlaying" role="button" tabindex="0" onclick="openNowPlaying()" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNowPlaying(); }" aria-label="Open now playing details">
             <img id="playing-thumb" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E" alt="">
             <div class="now-playing-info">
                 <p id="playing-status">IDLE</p>
-                <h4 id="playing-title">Ready to stream</h4>
+                <h4 id="playing-title"><span id="playing-title-text">Ready to stream</span></h4>
             </div>
         </div>
         <div class="btn-group">
@@ -25,5 +25,15 @@
             <span id="vol-val">0%</span>
         </div>
         <div style="font-size:10px;color:#555;">SYSTEM CONTROL</div>
+    </div>
+</div>
+
+<div class="now-playing-modal" id="nowPlayingModal" onclick="if(event.target === this) closeNowPlaying()">
+    <div class="now-playing-modal-card" role="dialog" aria-modal="true" aria-labelledby="nowPlayingModalTitle">
+        <button class="now-playing-modal-close" type="button" onclick="closeNowPlaying()" aria-label="Close now playing details">&times;</button>
+        <img class="now-playing-modal-thumb" id="nowPlayingModalThumb" src="" alt="">
+        <p class="now-playing-modal-status" id="nowPlayingModalStatus">IDLE</p>
+        <h2 id="nowPlayingModalTitle">Ready to stream</h2>
+        <div class="now-playing-modal-lyrics" id="nowPlayingModalLyrics">No lyrics available</div>
     </div>
 </div>

@@ -114,6 +114,18 @@ async function setVolume(val) {
     await fetch("/set_vol/" + val);
 }
 
+function openNowPlaying() {
+    document.getElementById("nowPlayingModal")?.classList.add("open");
+}
+
+function closeNowPlaying() {
+    document.getElementById("nowPlayingModal")?.classList.remove("open");
+}
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeNowPlaying();
+});
+
 async function skipTrack() {
     await fetch("/skip", { method: "POST" }); 
 }
@@ -354,17 +366,40 @@ async function updateStats() {
 
         if (data.now_playing) {
             const titleEl = document.getElementById("playing-title");
+            const titleTextEl = document.getElementById("playing-title-text");
             const thumbEl = document.getElementById("playing-thumb");
             const statusEl = document.getElementById("playing-status");
             const lyricsEl = document.getElementById("live-lyrics");
+            const modalThumbEl = document.getElementById("nowPlayingModalThumb");
+            const modalTitleEl = document.getElementById("nowPlayingModalTitle");
+            const modalStatusEl = document.getElementById("nowPlayingModalStatus");
+            const modalLyricsEl = document.getElementById("nowPlayingModalLyrics");
+            const title = data.now_playing.title || "Unknown track";
+            const thumbnail = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
+            const modalThumbnail = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='72' text-anchor='middle' font-size='88' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
+            const playbackStatus = data.is_playing ? "BROADCASTING" : "PAUSED";
 
-            if (titleEl) titleEl.textContent = data.now_playing.title;
+            if (titleEl && titleTextEl) {
+                titleTextEl.textContent = title;
+                requestAnimationFrame(() => {
+                    titleEl.classList.add("ticker");
+                    const shouldTicker = titleTextEl.scrollWidth > titleEl.clientWidth;
+                    titleEl.classList.toggle("ticker", shouldTicker);
+                });
+            }
             
             if (thumbEl) {
-                thumbEl.src = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
+                thumbEl.src = thumbnail;
             }
-            if (statusEl) statusEl.textContent = data.is_playing ? "BROADCASTING" : "PAUSED";
+            if (statusEl) statusEl.textContent = playbackStatus;
             if (lyricsEl) lyricsEl.textContent = data.current_lyric || "";
+            if (modalThumbEl) {
+                modalThumbEl.src = modalThumbnail;
+                modalThumbEl.classList.toggle("no-thumbnail", !data.now_playing.thumbnail);
+            }
+            if (modalTitleEl) modalTitleEl.textContent = title;
+            if (modalStatusEl) modalStatusEl.textContent = playbackStatus;
+            if (modalLyricsEl) modalLyricsEl.textContent = data.current_lyric || "No lyrics available";
         } else {
             const lyricsEl = document.getElementById("live-lyrics");
             if (lyricsEl) lyricsEl.textContent = "No lyrics available";
