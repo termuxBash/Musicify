@@ -46,7 +46,6 @@ class FFmpegService:
             *( ["-headers", header_value] if header_value and not source_process else [] ),
             "-i", target_url,
             "-vn",
-            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
             "-c:a", "libvorbis",
             "-ar", "44100",
             "-ac", "2",

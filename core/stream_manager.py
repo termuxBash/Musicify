@@ -331,7 +331,6 @@ class QueuePlayer:
                 self.current_process = self.ffmpeg.start_stream(target)
 
                 if self.bose:
-                    time.sleep(2)
                     with self.lock:
                         still_current = (
                             self.running
