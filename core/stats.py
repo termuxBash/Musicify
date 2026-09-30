@@ -49,6 +49,8 @@ def stats():
     return jsonify({
         "cpu": int(round(psutil.cpu_percent())),
         "volume": volume,
+        "bose_is_on": bose.get("is_on", False) if bose else False,
+        "bose_power_state": bose.get("power_state", "disconnected") if bose else "disconnected",
         "queue": list(player_status.get("queue", [])),
         "now_playing": current_song,
         "is_playing": is_playing,

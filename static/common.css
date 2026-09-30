@@ -8,6 +8,12 @@
     --card-bg: #1a1a1a;
     --border-color: #2a2a2a;
     --danger-red: #d32f2f;
+    --button-text: #fff;
+    --search-gradient: linear-gradient(135deg, #16a34a, #0f766e);
+    --queue-gradient: linear-gradient(135deg, #2563eb, #7c3aed);
+    --skip-gradient: linear-gradient(135deg, #06b6d4, #2563eb);
+    --power-on-gradient: linear-gradient(135deg, #bef264, #16a34a);
+    --power-off-gradient: linear-gradient(135deg, #ef4444, #b91c1c);
 }
 
 * { 
@@ -199,13 +205,36 @@ nav {
 }
 
 .search-form button, .search-btn { 
-    background: var(--spotify-green); 
+    background: var(--search-gradient);
     border: none; 
     padding: 12px 20px; 
     border-radius: 25px; 
     font-weight: bold; 
     cursor: pointer;
-    color: white;
+    color: var(--button-text);
+    min-height: 41px;
+    box-shadow: 0 6px 16px rgba(15, 118, 110, 0.25);
+    transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-form button:hover, .search-btn:hover,
+.auto-pick-btn:hover, .queue-playlist-btn:hover,
+.skip-btn:hover, .power-btn:hover {
+    filter: brightness(1.1) saturate(1.08);
+    transform: translateY(-1px);
+}
+
+.search-form button:focus-visible, .search-btn:focus-visible,
+.auto-pick-btn:focus-visible, .queue-playlist-btn:focus-visible,
+.skip-btn:focus-visible, .power-btn:focus-visible {
+    outline: 2px solid #f8fafc;
+    outline-offset: 2px;
+}
+
+.search-form button:active, .search-btn:active,
+.auto-pick-btn:active, .queue-playlist-btn:active,
+.skip-btn:active, .power-btn:active {
+    transform: translateY(0);
 }
 
 /* ==========================================================================
@@ -283,6 +312,7 @@ nav {
 .auto-pick-btn:disabled {
     opacity: 0.7;
     cursor: wait;
+    transform: none;
 }
 
 .card-actions {
@@ -317,14 +347,16 @@ nav {
 }
 
 .queue-playlist-btn {
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-    color: white;
+    background: var(--queue-gradient);
+    color: var(--button-text);
     border: none;
     border-radius: 12px;
     padding: 10px 12px;
     cursor: pointer;
     font-weight: bold;
     white-space: nowrap;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
+    transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
 }
 
 .playlist-btn {
@@ -575,14 +607,16 @@ nav {
 }
 
 .skip-btn { 
-    background: var(--spotify-green); 
+    background: var(--skip-gradient);
     border: none; 
-    color: white; 
+    color: var(--button-text);
     cursor: pointer;
     padding: 8px 15px; 
     border-radius: 20px; 
     font-weight: bold; 
     font-size: 0.75rem; 
+    box-shadow: 0 5px 14px rgba(37, 99, 235, 0.3);
+    transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
 }
 .clear-queue-btn { 
     background: var(--danger-red); 
@@ -596,14 +630,61 @@ nav {
 }
 
 .power-btn { 
-    background: var(--danger-red); 
+    background: var(--power-off-gradient);
     border: none; 
-    color: white; 
+    color: var(--button-text);
     cursor: pointer;
     padding: 8px 15px; 
     border-radius: 20px; 
     font-weight: bold; 
     font-size: 0.75rem; 
+    box-shadow: 0 5px 14px rgba(185, 28, 28, 0.3);
+    transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+
+.power-btn.is-on {
+    background: var(--power-on-gradient);
+    color: #111;
+    box-shadow: 0 5px 16px rgba(22, 163, 74, 0.4);
+    animation: power-on-glow 1.8s ease-in-out infinite;
+}
+
+.power-btn.is-off {
+    color: var(--button-text);
+    background: var(--power-off-gradient);
+    box-shadow: 0 5px 14px rgba(185, 28, 28, 0.3);
+    animation: power-off-glow 1.8s ease-in-out infinite;
+}
+
+.power-btn.is-disconnected {
+    background: #4b5563;
+    color: #f8fafc;
+    cursor: not-allowed;
+    box-shadow: 0 0 0 1px rgba(248, 250, 252, 0.18), 0 4px 12px rgba(15, 23, 42, 0.35);
+    animation: none;
+}
+
+.power-btn:disabled {
+    opacity: 1;
+    transform: none;
+}
+
+@keyframes power-off-glow {
+    0%, 100% {
+        box-shadow: 0 5px 14px rgba(185, 28, 28, 0.3), 0 0 0 0 rgba(239, 68, 68, 0.35);
+    }
+    50% {
+        box-shadow: 0 5px 18px rgba(185, 28, 28, 0.5), 0 0 0 6px rgba(239, 68, 68, 0.12);
+    }
+}
+
+@keyframes power-on-glow {
+    0%, 100% {
+        box-shadow: 0 5px 16px rgba(22, 163, 74, 0.4), 0 0 0 0 rgba(190, 242, 100, 0.3);
+    }
+    50% {
+        box-shadow: 0 5px 20px rgba(22, 163, 74, 0.55), 0 0 0 6px rgba(190, 242, 100, 0.14);
+    }
 }
 
 /* ==========================================================================

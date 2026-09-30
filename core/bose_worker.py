@@ -116,25 +116,23 @@ class BoseSoundTouchWorker:
             print(f"[Bose Worker] Failed fetching now_playing node")#: {e}")
         return {"source": "UNKNOWN", "track": "", "artist": ""}
 
-    def is_on(self):
-        """
-        Queries the device to check its current power state.
-        Returns True if the device is active, False if it is in STANDBY or unreachable.
-        """
+    def power_state(self):
+        """Returns ``on``, ``off``, or ``disconnected`` for the speaker."""
         url = f"{self.base_url}/now_playing"
         try:
             r = requests.get(url, timeout=2)
             if r.status_code == 200:
                 root = ET.fromstring(r.text)
                 source_attr = root.get("source")
-                
-                # If the source is 'STANDBY', the speaker is off.
-                if source_attr == "STANDBY":
-                    return False
-                return True
+
+                return "off" if source_attr == "STANDBY" else "on"
         except Exception as e:
             print(f"[Bose Worker] Failed checking power state (device may be offline): {e}")
-        return False
+        return "disconnected"
+
+    def is_on(self):
+        """Returns True only when the speaker is powered on."""
+        return self.power_state() == "on"
         
     def trigger_upnp_stream(self, stream_url):
         """

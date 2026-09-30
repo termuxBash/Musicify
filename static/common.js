@@ -95,12 +95,18 @@ async function reconnectStream() {
     }
 }
 async function power() {
-    if( !(await fetch("/is_on").then(res => res.json()).then(data => data.is_on)) ) {
+    const powerStatus = await fetch("/is_on").then(res => res.json());
+    if (powerStatus.power_state === "disconnected") {
+        await updateStats();
+        return;
+    }
+    if (!powerStatus.is_on) {
+        await fetch("/power", { method: "POST" });
+    } else {
+        if (!confirm("Are you sure you want to power off?")) return;
         await fetch("/power", { method: "POST" });
     }
-    else {
-    if (!confirm("Are you sure you want to power off?")) return;
-    await fetch("/power", { method: "POST" }); }
+    await updateStats();
 }
 async function setVolume(val) {
     const volVal = document.getElementById("vol-val");
@@ -321,6 +327,23 @@ async function updateStats() {
         // ==========================================
         const cpuLoadEl = document.getElementById("cpu-load");
         if (cpuLoadEl) cpuLoadEl.textContent = data.cpu + "%";
+
+        const powerButton = document.getElementById("powerButton");
+        if (powerButton) {
+            const powerState = data.bose_power_state || (data.bose_is_on ? "on" : "off");
+            const isDisconnected = powerState === "disconnected";
+            powerButton.classList.toggle("is-on", powerState === "on");
+            powerButton.classList.toggle("is-off", powerState === "off");
+            powerButton.classList.toggle("is-disconnected", isDisconnected);
+            powerButton.textContent = isDisconnected ? "🚫️" : "POWER ⏻";
+            powerButton.disabled = isDisconnected;
+            powerButton.setAttribute(
+                "aria-label",
+                isDisconnected
+                    ? "Bose speaker status unavailable"
+                    : `Bose speaker power status: ${powerState}`
+            );
+        }
 
         const volSlider = document.getElementById("vol-slider");
         const volVal = document.getElementById("vol-val");
