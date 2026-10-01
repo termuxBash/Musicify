@@ -81,8 +81,10 @@ class BoseSoundTouchWorker:
                 actual_vol = root.find("actualvolume")
                 if actual_vol is not None:
                     return int(actual_vol.text)
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
+            print("[Bose Offline] Failed to get volume.")
         except Exception as e:
-            print(f"[Bose Worker] Failed get volume") #: {e}")
+            print(f"[Bose Worker] Failed get volume: {e}")
         return 0
 
     def toggle_mute(self):
@@ -112,9 +114,11 @@ class BoseSoundTouchWorker:
                     "track": track_name,
                     "artist": artist_name
                 }
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
+            print("[Bose Offline] Failed to fetch now_playing node.")
         except Exception as e:
-            print(f"[Bose Worker] Failed fetching now_playing node")#: {e}")
-        return {"source": "UNKNOWN", "track": "", "artist": ""}
+            print(f"[Bose Worker] Failed fetching now_playing node: {e}")
+        return {"source": "UNKNOWN", "track": "NA", "artist": "NA"}
 
     def power_state(self):
         """Returns ``on``, ``off``, or ``disconnected`` for the speaker."""
@@ -126,8 +130,10 @@ class BoseSoundTouchWorker:
                 source_attr = root.get("source")
 
                 return "off" if source_attr == "STANDBY" else "on"
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
+            print("[Bose Offline] Failed to check power state.")
         except Exception as e:
-            print(f"[Bose Worker] Failed checking power state (device may be offline): {e}")
+            print(f"[Bose Worker] Failed checking power state: {e}")
         return "disconnected"
 
     def is_on(self):
