@@ -115,7 +115,7 @@ class YTService:
             # Clean any accidental linebreaks or spaces from your configuration file
             cleaned_key = str(api_key).strip().replace('"', '').replace("'", "")
             
-            logger.info(f"Testing Key #{idx+1}. Length: {len(cleaned_key)}. Starts with: {cleaned_key[:4]}")
+            logger.info(f"Testing YouTube API key #{idx+1}.")
             # ----------------------------------
 
             params = {
