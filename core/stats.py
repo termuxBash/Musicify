@@ -230,7 +230,11 @@ def skip():
 
 @stats_bp.route("/playlist/<name>", methods=["GET"])
 def playlist(name):
-    path = os.path.join(PLAYLIST_DIR, f"{name}.txt")
+    base_dir = os.path.realpath(PLAYLIST_DIR)
+    path = os.path.realpath(os.path.join(base_dir, f"{name}.txt"))
+
+    if os.path.commonpath([base_dir, path]) != base_dir:
+        return jsonify({"error": "invalid playlist name"}), 400
 
     if not os.path.exists(path):
         return jsonify({"error": "playlist not found"}), 404
