@@ -23,6 +23,22 @@ logger = logging.getLogger(__name__)
 stats_bp = Blueprint("stats", __name__)
 history_lock = threading.Lock()
 
+
+def _safe_path(base_dir, relative_path):
+    base_path = os.path.realpath(base_dir)
+    candidate_path = os.path.realpath(os.path.join(base_path, relative_path))
+
+    try:
+        is_within_base = os.path.commonpath([base_path, candidate_path]) == base_path
+    except ValueError:
+        is_within_base = False
+
+    if not is_within_base:
+        raise ValueError("path escapes its base directory")
+
+    return candidate_path
+
+
 @stats_bp.route("/stats")
 def stats():
     bose = get_status().get_json() if get_status else None
@@ -135,7 +151,10 @@ def add_to_playlist():
             error="song title required"
         ), 400
 
-    _append_to_playlist(playlist, title, source)
+    try:
+        _append_to_playlist(playlist, title, source)
+    except ValueError:
+        return jsonify(error="invalid playlist name"), 400
 
     return jsonify(
         status="success"
@@ -144,7 +163,7 @@ def add_to_playlist():
 
 def _append_to_playlist(playlist, title, source=""):
     os.makedirs(PLAYLIST_DIR, exist_ok=True)
-    path = os.path.join(PLAYLIST_DIR, f"{playlist}.txt")
+    path = _safe_path(PLAYLIST_DIR, f"{playlist}.txt")
 
     with open(path, "a", encoding="utf8") as playlist_file:
         playlist_file.write(f"{title}>{source}\n" if source else f"{title}\n")
@@ -160,7 +179,7 @@ def record_played_song(song):
         return
 
     os.makedirs(PLAYLIST_DIR, exist_ok=True)
-    path = os.path.join(PLAYLIST_DIR, get_history_file())
+    path = _safe_path(PLAYLIST_DIR, get_history_file())
     elapsed_timestamp = format(max(0, int(time()) - TIME_OFFSET), "x")
 
     with history_lock:
@@ -231,9 +250,9 @@ def skip():
 @stats_bp.route("/playlist/<name>", methods=["GET"])
 def playlist(name):
     base_dir = os.path.realpath(PLAYLIST_DIR)
-    path = os.path.realpath(os.path.join(base_dir, f"{name}.txt"))
-
-    if os.path.commonpath([base_dir, path]) != base_dir:
+    try:
+        path = _safe_path(base_dir, f"{name}.txt")
+    except ValueError:
         return jsonify({"error": "invalid playlist name"}), 400
 
     if not os.path.exists(path):
@@ -271,8 +290,11 @@ def playlist(name):
             if source and source.lower().endswith(
                 (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".webm")
             ):
-                # Build the absolute system path using ROOT_DIR
-                full_local_url = f"{ROOT_DIR}/{source}"
+                try:
+                    full_local_url = _safe_path(ROOT_DIR, source)
+                except ValueError:
+                    logger.warning("Skipping local playlist path outside ROOT_DIR: %s", source)
+                    continue
 
                 # Safely enqueue using the "playlist" lock identifier
                 success = current_app.playback.enqueue(

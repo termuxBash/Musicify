@@ -27,6 +27,22 @@ logger = logging.getLogger(__name__)
 # Blueprint setup
 youtube_bp = Blueprint('youtube', __name__, template_folder='templates')
 
+
+def _safe_path(base_dir, relative_path):
+    base_path = os.path.realpath(base_dir)
+    candidate_path = os.path.realpath(os.path.join(base_path, relative_path))
+
+    try:
+        is_within_base = os.path.commonpath([base_path, candidate_path]) == base_path
+    except ValueError:
+        is_within_base = False
+
+    if not is_within_base:
+        raise ValueError("path escapes its base directory")
+
+    return candidate_path
+
+
 # ---------------- DISPLAY ----------------
 
 def show_lyric(text):
@@ -269,7 +285,12 @@ def get_gemini_recommendations(user_prompt=""):
         logger.error("Missing GEMINI_API_KEY")
         return []
 
-    history_path = os.path.join(PLAYLIST_DIR, get_history_file())
+    try:
+        history_path = _safe_path(PLAYLIST_DIR, get_history_file())
+    except ValueError:
+        logger.error("Invalid playback history path")
+        return []
+
     try:
         with open(history_path, "r", encoding="utf8") as history_file:
             history = history_file.read().strip()

@@ -9,11 +9,30 @@ from flask import Blueprint, current_app, jsonify, render_template, request, url
 local_bp = Blueprint("local", __name__, template_folder="templates")
 
 
+def _safe_path(base_dir, relative_path):
+    base_path = os.path.realpath(base_dir)
+    candidate_path = os.path.realpath(os.path.join(base_path, relative_path))
+
+    try:
+        is_within_base = os.path.commonpath([base_path, candidate_path]) == base_path
+    except ValueError:
+        is_within_base = False
+
+    if not is_within_base:
+        raise ValueError("path escapes its base directory")
+
+    return candidate_path
+
+
 @local_bp.route('/')
 @local_bp.route('/browse/')
 @local_bp.route('/browse/<path:subpath>')
 def browse(subpath=""):
-    full_path = os.path.join(ROOT_DIR, subpath)
+    try:
+        full_path = _safe_path(ROOT_DIR, subpath)
+    except ValueError:
+        return jsonify({"error": "invalid path"}), 400
+
     items = []
     if os.path.exists(full_path):
         for entry in os.scandir(full_path):
@@ -62,7 +81,7 @@ def get_random_local_track_payload():
     for root, _, filenames in os.walk(ROOT_DIR):
         for f in filenames:
             if f.lower().endswith(audio_exts):
-                abs_path = os.path.join(root, f)
+                abs_path = _safe_path(root, f)
                 rel_path = os.path.relpath(abs_path, ROOT_DIR)
                 all_files.append({
                     "title": f,
@@ -106,7 +125,10 @@ def enqueue():
     if current_app.playback.owner is None:
         current_app.playback.acquire("local")
     song = request.get_json()
-    url = f"{ROOT_DIR}/{song['rel_path']}"
+    try:
+        url = _safe_path(ROOT_DIR, song["rel_path"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "invalid local path"}), 400
 
     success = current_app.playback.enqueue(
         "local",
@@ -131,7 +153,10 @@ def play_folder():
     data = request.get_json(silent=True) or {}
     subpath = data.get("path", "")
 
-    full_path = os.path.join(ROOT_DIR, subpath)
+    try:
+        full_path = _safe_path(ROOT_DIR, subpath)
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid folder path"}), 400
 
     if not os.path.exists(full_path):
         return jsonify({"error": "folder not found"}), 404
@@ -148,7 +173,7 @@ def play_folder():
     for root, _, filenames in os.walk(full_path):
         for f in filenames:
             if f.lower().endswith(audio_exts):
-                abs_path = os.path.join(root, f)
+                abs_path = _safe_path(root, f)
                 rel_path = os.path.relpath(abs_path, ROOT_DIR)
 
                 files.append({
@@ -174,9 +199,7 @@ def play_folder():
             {
                 "title": song["title"],
                 "thumbnail": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E",
-                "url": song["url"]  # If playback manager uses the resolved absolute path directly
-                # If your playback manager actually relies on `rel_path` parsing (like /enqueue does), 
-                # change the line above to: "url": f"{ROOT_DIR}/{song['rel_path']}"
+                "url": song["url"]
             }
         )
         if ok:
@@ -204,7 +227,7 @@ def search_local_items():
         # 1. Evaluate matching directories
         for d in dirs:
             if query in d.lower():
-                full_path = os.path.join(root, d)
+                full_path = _safe_path(root, d)
                 rel_path = os.path.relpath(full_path, ROOT_DIR)
                 results.append({
                     "name": d,
@@ -215,7 +238,7 @@ def search_local_items():
         # 2. Evaluate matching files
         for f in files:
             if f.endswith(audio_extensions) and query in f.lower():
-                full_path = os.path.join(root, f)
+                full_path = _safe_path(root, f)
                 rel_path = os.path.relpath(full_path, ROOT_DIR)
                 results.append({
                     "name": f,
