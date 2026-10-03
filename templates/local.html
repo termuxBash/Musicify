@@ -107,8 +107,8 @@ async function performSearch() {
                 card.className = "file-card";
                 
                 // Keep identical structure with structural escaping logic for safety strings
-                let escapingTitle = item.name.replace(/'/g, "\\'");
-                let escapingPath = item.rel_path.replace(/'/g, "\\'");
+                let escapingTitle = item.name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+                let escapingPath = item.rel_path.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 
                 card.innerHTML = `
                     <div class="file-icon">${item.is_dir ? "📁" : "🎵"}</div>
