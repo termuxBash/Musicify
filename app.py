@@ -63,4 +63,5 @@ if __name__ == "__main__":
 
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
+    print("Music Link: http://127.0.0.1:8000/")
     app.run(host=APP_HOST, port=APP_PORT, debug=True, use_reloader=True)

@@ -39,20 +39,23 @@ class FFmpegService:
         )
 
         cmd = [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel", "error",
-            "-re",
-            *( ["-headers", header_value] if header_value and not source_process else [] ),
-            "-i", target_url,
-            "-vn",
-            "-c:a", "libvorbis",
-            "-ar", "44100",
-            "-ac", "2",
-            "-content_type", "application/ogg",
-            "-f", "ogg",
-            ICECAST_URL
-        ]
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel", "error",
+                "-re",
+                *( ["-headers", header_value] if header_value and not source_process else [] ),
+                "-i", target_url,
+                "-vn",
+                "-af", "dynaudnorm=f=250:g=15:m=10:p=0.95",  # Adds lightweight dynamic normalization
+                "-threads", "1",                             # Restricts FFmpeg to 1 core (saves CPU)
+                "-c:a", "libvorbis",
+                "-qscale:a", "3",                            # Optimized variable bitrate encoding
+                "-ar", "44100",
+                "-ac", "2",
+                "-content_type", "application/ogg",
+                "-f", "ogg",
+                ICECAST_URL
+            ]
 
         process = subprocess.Popen(
             cmd,
