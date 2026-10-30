@@ -50,7 +50,7 @@ class FFmpegService:
                 "-threads", "1",                             # Restricts FFmpeg to 1 core (saves CPU)
                 "-c:a", "libvorbis",
                 "-qscale:a", "3",                            # Optimized variable bitrate encoding
-                "-ar", "44100",
+                #"-ar", "44100",                             # Helps reduce CPU usage on some systems, but may cause issues with certain streams
                 "-ac", "2",
                 "-content_type", "application/ogg",
                 "-f", "ogg",
