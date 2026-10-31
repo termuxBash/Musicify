@@ -46,11 +46,13 @@ class FFmpegService:
                 *( ["-headers", header_value] if header_value and not source_process else [] ),
                 "-i", target_url,
                 "-vn",
-                "-af", "dynaudnorm=f=250:g=15:m=10:p=0.95",  # Adds lightweight dynamic normalization
-                "-threads", "1",                             # Restricts FFmpeg to 1 core (saves CPU)
+                # Optimized filter: slightly larger frame length (f=500) and smaller gaussian window (g=5) 
+                # to drastically lower CPU usage while keeping volume consistent.
+                "-af", "dynaudnorm=f=500:g=5:m=10:p=0.95",
+                "-threads", "1",                             # Restricts FFmpeg to 1 core
+                #"-ar", "44100",                              # Enforce fixed sample rate to prevent resampling CPU spikes
                 "-c:a", "libvorbis",
-                "-qscale:a", "3",                            # Optimized variable bitrate encoding
-                #"-ar", "44100",                             # Helps reduce CPU usage on some systems, but may cause issues with certain streams
+                "-qscale:a", "3",                            # Good balance of quality and encoding speed
                 "-ac", "2",
                 "-content_type", "application/ogg",
                 "-f", "ogg",
