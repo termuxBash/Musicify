@@ -303,7 +303,7 @@ class QueuePlayer:
             # --- DYNAMIC AUTOPLAY CANCELLATION CHECK ---
             if self.autoplay_enabled:
                 listeners = self._get_icecast_listeners()
-                bose_on = self.bose.is_on() if self.bose else False
+                bose_on = self.bose.get_status()["is_on"] if self.bose else False
                 
                 logger.info(f"Autoplay Status Check -> Connected Listeners: {listeners} | Bose Speaker Awake: {bose_on}")
                 
@@ -339,7 +339,7 @@ class QueuePlayer:
                             and self._playback_generation == song_generation
                         )
 
-                    if still_current and self.bose.is_on():
+                    if still_current and self.bose.get_status()["is_on"]:
                         self.bose.trigger_upnp_stream(STREAM_URL)
 
                 self.current_process.wait()

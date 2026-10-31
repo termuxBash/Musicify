@@ -91,11 +91,8 @@ class BoseSoundTouchWorker:
         """Sends the discrete MUTE keystroke sequence."""
         return self.send_key("MUTE")
 
-    def get_now_playing(self):
-        """
-        Retrieves the current source and metadata mapping.
-        Useful to verify if the speaker is actively on your UPnP stream.
-        """
+    def get_status(self):
+        """Fetch current playback metadata and power state in one request."""
         url = f"{self.base_url}/now_playing"
         try:
             r = requests.get(url, timeout=0.5)
@@ -109,36 +106,38 @@ class BoseSoundTouchWorker:
                 track_name = track.text if track is not None else ""
                 artist_name = artist.text if artist is not None else ""
                 
-                return {
+                now_playing = {
                     "source": source_attr,
                     "track": track_name,
                     "artist": artist_name
                 }
+                power_state = "off" if source_attr == "STANDBY" else "on"
+                return {
+                    "now_playing": now_playing,
+                    "power_state": power_state,
+                    "is_on": power_state == "on",
+                }
         except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
             print("[Bose Offline] Failed to fetch now_playing node.")
         except Exception as e:
-            print(f"[Bose Worker] Failed fetching now_playing node: {e}")
-        return {"source": "UNKNOWN", "track": "NA", "artist": "NA"}
+            print(f"[Bose Worker] Failed fetching status: {e}")
+        return {
+            "now_playing": {"source": "UNKNOWN", "track": "NA", "artist": "NA"},
+            "power_state": "disconnected",
+            "is_on": False,
+        }
+
+    def get_now_playing(self):
+        """Retrieves playback metadata while preserving the legacy return shape."""
+        return self.get_status()["now_playing"]
 
     def power_state(self):
         """Returns ``on``, ``off``, or ``disconnected`` for the speaker."""
-        url = f"{self.base_url}/now_playing"
-        try:
-            r = requests.get(url, timeout=0.5)
-            if r.status_code == 200:
-                root = ET.fromstring(r.text)
-                source_attr = root.get("source")
-
-                return "off" if source_attr == "STANDBY" else "on"
-        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
-            print("[Bose Offline] Failed to check power state.")
-        except Exception as e:
-            print(f"[Bose Worker] Failed checking power state: {e}")
-        return "disconnected"
+        return self.get_status()["power_state"]
 
     def is_on(self):
         """Returns True only when the speaker is powered on."""
-        return self.power_state() == "on"
+        return self.get_status()["is_on"]
         
     def trigger_upnp_stream(self, stream_url):
         """

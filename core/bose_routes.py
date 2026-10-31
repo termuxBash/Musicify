@@ -51,8 +51,9 @@ def set_volume(level):
 @bose_control_bp.route("/get_status")
 def get_status():
     """Returns current hardware volume and input source."""
-    now_playing = bose.get_now_playing()
-    power_state = bose.power_state()
+    device_status = bose.get_status()
+    now_playing = device_status["now_playing"]
+    power_state = device_status["power_state"]
     return jsonify({
         "volume": bose.get_volume(),
         "is_on": power_state == "on",
@@ -65,8 +66,8 @@ def get_status():
 @bose_control_bp.route("/is_on")
 def check_power():
     """Returns a JSON payload indicating if the speaker is turned on."""
-    power_state = bose.power_state()
+    device_status = bose.get_status()
     return jsonify({
-        "is_on": power_state == "on",
-        "power_state": power_state,
+        "is_on": device_status["is_on"],
+        "power_state": device_status["power_state"],
     })
