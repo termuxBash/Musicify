@@ -436,5 +436,44 @@ async function updateStats() {
     }
 }
 
-// Start the loop securely
-setInterval(updateStats, 2000);
+// --- FOCUS-AWARE POLLING MANAGER ---
+let statsInterval = null;
+const STATS_POLL_INTERVAL_MS = 2000;
+
+function startStatsPolling() {
+    if (!statsInterval) {
+        updateStats(); // Refresh immediately when focus is gained
+        statsInterval = setInterval(updateStats, STATS_POLL_INTERVAL_MS);
+    }
+}
+
+function stopStatsPolling() {
+    if (statsInterval) {
+        clearInterval(statsInterval);
+        statsInterval = null;
+    }
+}
+
+// Automatically pause polling when tab is hidden or window loses focus
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+        stopStatsPolling();
+    } else {
+        startStatsPolling();
+    }
+});
+
+window.addEventListener("blur", () => {
+    stopStatsPolling();
+});
+
+window.addEventListener("focus", () => {
+    if (!document.hidden) {
+        startStatsPolling();
+    }
+});
+
+// Start loop only if tab is initially active
+if (!document.hidden) {
+    startStatsPolling();
+}

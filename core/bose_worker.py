@@ -23,6 +23,7 @@ class BoseSoundTouchWorker:
         self.base_url = f"http://{ip_address}:8090"
         self.upnp_xml = upnp_xml_url or f"http://{ip_address}:8091/XD/BO5EBO5E-F00D-F00D-FEED-38D2697D7E7B.xml"
         self._upnp_device = None
+        self.session = requests.Session()
 
     def send_key(self, key_value):
         """
@@ -38,9 +39,9 @@ class BoseSoundTouchWorker:
         release_xml = f'<key state="release" sender="Gabbo">{key_value}</key>'
         
         try:
-            requests.post(url, data=press_xml, headers=headers, timeout=0.5)
+            self.session.post(url, data=press_xml, headers=headers, timeout=0.5)
             time.sleep(0.05)  # small buffer to simulate human click cadence
-            requests.post(url, data=release_xml, headers=headers, timeout=0.5)
+            self.session.post(url, data=release_xml, headers=headers, timeout=0.5)
             return True
         except Exception as e:
             print(f"[Bose Worker] Failed sending key {key_value}: {e}")
@@ -65,7 +66,7 @@ class BoseSoundTouchWorker:
         level = max(0, min(100, level))
         volume_xml = f'<volume>{level}</volume>'
         try:
-            r = requests.post(url, data=volume_xml, headers=headers, timeout=0.5)
+            r = self.session.post(url, data=volume_xml, headers=headers, timeout=0.5)
             return r.status_code == 200
         except Exception as e:
             print(f"[Bose Worker] Volume set exception: {e}")
@@ -75,7 +76,7 @@ class BoseSoundTouchWorker:
         """Fetches current volume state by parsing system XML returns."""
         url = f"{self.base_url}/volume"
         try:
-            r = requests.get(url, timeout=0.5)
+            r = self.session.get(url, timeout=0.5)
             if r.status_code == 200:
                 root = ET.fromstring(r.text)
                 actual_vol = root.find("actualvolume")
@@ -95,7 +96,7 @@ class BoseSoundTouchWorker:
         """Fetch current playback metadata and power state in one request."""
         url = f"{self.base_url}/now_playing"
         try:
-            r = requests.get(url, timeout=0.5)
+            r = self.session.get(url, timeout=0.5)
             if r.status_code == 200:
                 root = ET.fromstring(r.text)
                 source_attr = root.get("source")
