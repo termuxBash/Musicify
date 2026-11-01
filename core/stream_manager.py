@@ -52,6 +52,7 @@ class QueuePlayer:
         self.skip()
         with self.lock:
             self.queue.clear()
+            self.current_song = None
 
     def enqueue(self, song):
         with self.lock:

@@ -365,16 +365,18 @@ async function updateStats() {
             if (volVal) volVal.textContent = data.volume + "%";
         }
 
+        const titleEl = document.getElementById("playing-title");
+        const titleTextEl = document.getElementById("playing-title-text");
+        const thumbEl = document.getElementById("playing-thumb");
+        const statusEl = document.getElementById("playing-status");
+        const lyricsEl = document.getElementById("live-lyrics");
+        const modalThumbEl = document.getElementById("nowPlayingModalThumb");
+        const modalTitleEl = document.getElementById("nowPlayingModalTitle");
+        const modalStatusEl = document.getElementById("nowPlayingModalStatus");
+        const modalLyricsEl = document.getElementById("nowPlayingModalLyrics");
+        const defaultSpeakerThumb = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E";
+
         if (data.now_playing) {
-            const titleEl = document.getElementById("playing-title");
-            const titleTextEl = document.getElementById("playing-title-text");
-            const thumbEl = document.getElementById("playing-thumb");
-            const statusEl = document.getElementById("playing-status");
-            const lyricsEl = document.getElementById("live-lyrics");
-            const modalThumbEl = document.getElementById("nowPlayingModalThumb");
-            const modalTitleEl = document.getElementById("nowPlayingModalTitle");
-            const modalStatusEl = document.getElementById("nowPlayingModalStatus");
-            const modalLyricsEl = document.getElementById("nowPlayingModalLyrics");
             const title = data.now_playing.title || "Unknown track";
             const thumbnail = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
             const modalThumbnail = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='72' text-anchor='middle' font-size='88' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
@@ -402,8 +404,19 @@ async function updateStats() {
             if (modalStatusEl) modalStatusEl.textContent = playbackStatus;
             if (modalLyricsEl) modalLyricsEl.textContent = data.current_lyric || "No lyrics available";
         } else {
-            const lyricsEl = document.getElementById("live-lyrics");
-            if (lyricsEl) lyricsEl.textContent = "No lyrics available";
+            if (titleTextEl) titleTextEl.textContent = "Ready to stream";
+            if (titleEl) titleEl.classList.remove("ticker");
+            if (thumbEl) thumbEl.src = defaultSpeakerThumb;
+            if (statusEl) statusEl.textContent = "IDLE";
+            if (lyricsEl) lyricsEl.textContent = "";
+
+            if (modalThumbEl) {
+                modalThumbEl.src = "";
+                modalThumbEl.classList.add("no-thumbnail");
+            }
+            if (modalTitleEl) modalTitleEl.textContent = "Ready to stream";
+            if (modalStatusEl) modalStatusEl.textContent = "IDLE";
+            if (modalLyricsEl) modalLyricsEl.textContent = "No lyrics available";
         }
 
         const qList = document.getElementById("queueList");

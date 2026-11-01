@@ -99,13 +99,14 @@ class PlaybackController:
         data["owner"] = self._owner
         return data
 
-    def _reset_player(self, ):
+    def _reset_player(self):
         # stop currently playing track
         self.player.skip()
 
-        # clear queue
+        # clear queue and active song
         with self.player.lock:
             self.player.queue.clear()
+            self.player.current_song = None
 
 
 
