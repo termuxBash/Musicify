@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+{% set page_title = "History Database - Musicify" %}
+{% set show_incogni = false %}
+{% set show_live_lyrics = true %}
+{% set switch_player_url = url_for('youtube.index') %}
+{% set switch_player_label = "Online Player" %}
+{% include "_head.html" %}
+<style>
+.hist-page-container {
+    padding: 80px 20px 130px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.hist-header-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.hist-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.hist-title-row h2 {
+    font-size: 1.5rem;
+    color: var(--spotify-green);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.table-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.hist-select {
+    background: #242424;
+    color: white;
+    border: 1px solid var(--border-color);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    outline: none;
+    cursor: pointer;
+}
+
+.hist-btn {
+    background: #282828;
+    color: white;
+    border: 1px solid var(--border-color);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.hist-btn:hover {
+    background: #383838;
+    border-color: #555;
+}
+
+.hist-btn-primary {
+    background: var(--spotify-green);
+    color: black;
+    font-weight: 600;
+    border: none;
+}
+
+.hist-btn-primary:hover {
+    background: #1ed760;
+    transform: translateY(-1px);
+}
+
+.hist-btn-danger {
+    background: #7f1d1d;
+    border-color: #991b1b;
+}
+
+.hist-btn-danger:hover {
+    background: #991b1b;
+}
+
+.active-pill {
+    background: rgba(29, 185, 84, 0.2);
+    color: var(--spotify-green);
+    border: 1px solid var(--spotify-green);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.search-filter-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.hist-search-input {
+    flex: 1;
+    min-width: 240px;
+    background: #141414;
+    color: white;
+    border: 1px solid var(--border-color);
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.hist-search-input:focus {
+    border-color: var(--spotify-green);
+    outline: none;
+}
+
+.table-wrapper {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow-x: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.hist-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.hist-table th {
+    background: #141414;
+    padding: 14px 16px;
+    color: #888;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.hist-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #222;
+    vertical-align: middle;
+}
+
+.hist-table tr:hover {
+    background: rgba(255,255,255,0.02);
+}
+
+.hist-input {
+    background: #181818;
+    color: white;
+    border: 1px solid #333;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.hist-input:focus {
+    border-color: var(--spotify-green);
+    outline: none;
+    background: #202020;
+}
+
+.input-sm {
+    width: 75px;
+    text-align: center;
+}
+
+.hist-datetime-picker {
+    background: #181818;
+    color: white;
+    border: 1px solid #333;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color-scheme: dark;
+}
+
+.hist-datetime-picker:focus {
+    border-color: var(--spotify-green);
+    outline: none;
+}
+
+.cell-song-id {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.yt-link-btn {
+    color: #888;
+    text-decoration: none;
+    font-size: 1rem;
+    padding: 2px 4px;
+}
+
+.yt-link-btn:hover {
+    color: #ff0000;
+}
+
+.row-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.btn-icon {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #777;
+    font-style: italic;
+}
+
+/* Modals */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.modal-overlay.open {
+    display: flex;
+}
+
+.modal-content {
+    background: #1a1a1a;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+    width: 90%;
+    max-width: 480px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+
+.modal-content h3 {
+    margin-bottom: 16px;
+    color: var(--spotify-green);
+}
+
+.form-group {
+    margin-bottom: 14px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.85rem;
+    color: #aaa;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+</style>
+
+<body>
+{% include "_nav.html" %}
+{% include "_side_panel.html" %}
+
+<div class="hist-page-container">
+    <div class="hist-header-card">
+        <div class="hist-title-row">
+            <h2>📜 History Database <code>history.sqlite3</code></h2>
+            
+            <div class="table-controls">
+                <label for="tableSelect" style="color:#aaa;font-size:0.9rem;">Table:</label>
+                <select id="tableSelect" class="hist-select" onchange="changeTable(this.value)">
+                    {% for t in tables %}
+                    <option value="{{ t }}" {% if t == current_table %}selected{% endif %}>
+                        {{ t }}{% if t == active_table %} ★ (Active){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                {% if current_table == active_table %}
+                    <span class="active-pill">● Active Recording Table</span>
+                {% else %}
+                    <button class="hist-btn" onclick="setActiveTable('{{ current_table }}')" title="Set this table to record new playback">
+                        Set as Active
+                    </button>
+                {% endif %}
+
+                <button class="hist-btn" onclick="openNewTableModal()">
+                    + New Table
+                </button>
+
+                {% if current_table != 'history' %}
+                <button class="hist-btn hist-btn-danger" onclick="deleteCurrentTable('{{ current_table }}')">
+                    🗑 Delete Table
+                </button>
+                {% endif %}
+
+                <button class="hist-btn hist-btn-primary" onclick="openAddRecordModal()">
+                    + Add Song
+                </button>
+            </div>
+        </div>
+
+        <div class="search-filter-bar">
+            <input type="text" id="searchInput" class="hist-search-input" placeholder="Search song name or ID..." oninput="filterTable()">
+            <span id="recordCount" style="color:#888;font-size:0.85rem;">{{ rows|length }} records found</span>
+            <a href="{{ url_for('youtube.index') }}" class="hist-btn" style="text-decoration:none;">
+                ← Back to Music
+            </a>
+        </div>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="hist-table" id="historyTable">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">#</th>
+                    <th>Song Name</th>
+                    <th style="width: 170px;">Video ID</th>
+                    <th style="width: 90px;">Listens</th>
+                    <th style="width: 220px;">Date & Time (Picker)</th>
+                    <th style="width: 150px; text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                {% if not rows %}
+                <tr>
+                    <td colspan="6" class="empty-state">No playback history records in table "{{ current_table }}".</td>
+                </tr>
+                {% else %}
+                {% for r in rows %}
+                <tr id="row-{{ r.id }}" data-search="{{ r.song_name|lower }} {{ r.song_id|lower }}">
+                    <td style="color:#666;font-family:monospace;">{{ r.id }}</td>
+                    <td>
+                        <input type="text" class="hist-input song-name-input" value="{{ r.song_name }}">
+                    </td>
+                    <td>
+                        <div class="cell-song-id">
+                            <input type="text" class="hist-input song-id-input" value="{{ r.song_id }}">
+                            <a href="https://www.youtube.com/watch?v={{ r.song_id }}" target="_blank" class="yt-link-btn" title="Open YouTube Video">↗</a>
+                        </div>
+                    </td>
+                    <td>
+                        <input type="number" min="0" class="hist-input input-sm listens-input" value="{{ r.number_of_listens }}">
+                    </td>
+                    <td>
+                        <input type="datetime-local" class="hist-datetime-picker datetime-input" value="{{ r.datetime_str }}">
+                    </td>
+                    <td style="text-align: right;">
+                        <div class="row-actions" style="justify-content: flex-end;">
+                            <button class="hist-btn hist-btn-primary btn-icon" onclick="saveRow({{ r.id }})" title="Save changes">
+                                💾
+                            </button>
+                            <button class="hist-btn btn-icon" onclick="queueSong('{{ r.song_name|replace('\'', '\\\'') }}', '{{ r.song_id }}')" title="Queue track now">
+                                🎵
+                            </button>
+                            <button class="hist-btn hist-btn-danger btn-icon" onclick="deleteRow({{ r.id }})" title="Delete row">
+                                ✕
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Add New Record -->
+<div class="modal-overlay" id="addRecordModal" onclick="if(event.target === this) closeAddRecordModal()">
+    <div class="modal-content">
+        <h3>+ Add Song to History</h3>
+        <form id="addRecordForm" onsubmit="submitAddRecord(event)">
+            <div class="form-group">
+                <label>Song Name</label>
+                <input type="text" id="addSongName" class="hist-input" required placeholder="Artist - Title">
+            </div>
+            <div class="form-group">
+                <label>YouTube Video ID</label>
+                <input type="text" id="addSongId" class="hist-input" required placeholder="e.g. dQw4w9WgXcQ">
+            </div>
+            <div class="form-group">
+                <label>Number of Listens</label>
+                <input type="number" id="addListens" class="hist-input" min="1" value="1" required>
+            </div>
+            <div class="form-group">
+                <label>Date and Time</label>
+                <input type="datetime-local" id="addDateTime" class="hist-datetime-picker" style="width:100%;" required>
+            </div>
+            <div class="modal-buttons">
+                <button type="button" class="hist-btn" onclick="closeAddRecordModal()">Cancel</button>
+                <button type="submit" class="hist-btn hist-btn-primary">Add Record</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: New Table -->
+<div class="modal-overlay" id="newTableModal" onclick="if(event.target === this) closeNewTableModal()">
+    <div class="modal-content">
+        <h3>+ Create History Table</h3>
+        <form id="newTableForm" onsubmit="submitNewTable(event)">
+            <div class="form-group">
+                <label>Table Name</label>
+                <input type="text" id="newTableName" class="hist-input" required placeholder="e.g. party, workout, favs" pattern="[a-zA-Z0-9_]+" title="Alphanumeric and underscores only">
+            </div>
+            <div class="modal-buttons">
+                <button type="button" class="hist-btn" onclick="closeNewTableModal()">Cancel</button>
+                <button type="submit" class="hist-btn hist-btn-primary">Create Table</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% include "_player_bar.html" %}
+{% include "_playlist_modal.html" %}
+
+<script>
+window.API_PREFIX = "{{ api_prefix }}";
+const CURRENT_TABLE = "{{ current_table }}";
+
+function changeTable(tbl) {
+    window.location.href = window.API_PREFIX + "/hist?table=" + encodeURIComponent(tbl);
+}
+
+function filterTable() {
+    const q = document.getElementById("searchInput").value.toLowerCase().trim();
+    const rows = document.querySelectorAll("#tableBody tr[data-search]");
+    let visible = 0;
+    rows.forEach(r => {
+        const text = r.getAttribute("data-search");
+        if (!q || text.includes(q)) {
+            r.style.display = "";
+            visible++;
+        } else {
+            r.style.display = "none";
+        }
+    });
+    document.getElementById("recordCount").textContent = `${visible} records found`;
+}
+
+async function saveRow(id) {
+    const tr = document.getElementById("row-" + id);
+    if (!tr) return;
+
+    const songName = tr.querySelector(".song-name-input").value.trim();
+    const songId = tr.querySelector(".song-id-input").value.trim();
+    const listens = parseInt(tr.querySelector(".listens-input").value, 10);
+    const dtStr = tr.querySelector(".datetime-input").value;
+
+    if (!songName || !songId) {
+        showPopup("Song name and ID are required.");
+        return;
+    }
+
+    try {
+        const res = await fetch(window.API_PREFIX + "/hist/api/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                table: CURRENT_TABLE,
+                id: id,
+                song_name: songName,
+                song_id: songId,
+                number_of_listens: isNaN(listens) ? 1 : listens,
+                datetime_str: dtStr
+            })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            tr.setAttribute("data-search", `${songName.toLowerCase()} ${songId.toLowerCase()}`);
+            showPopup("Record #" + id + " saved successfully!");
+        } else {
+            showPopup(data.error || "Failed to update record.");
+        }
+    } catch (err) {
+        showPopup("Network error updating record.");
+    }
+}
+
+async function deleteRow(id) {
+    if (!confirm("Are you sure you want to delete record #" + id + "?")) {
+        return;
+    }
+
+    try {
+        const res = await fetch(window.API_PREFIX + "/hist/api/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                table: CURRENT_TABLE,
+                id: id
+            })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            const tr = document.getElementById("row-" + id);
+            if (tr) tr.remove();
+            filterTable();
+            showPopup("Record #" + id + " deleted.");
+        } else {
+            showPopup(data.error || "Failed to delete record.");
+        }
+    } catch (err) {
+        showPopup("Network error deleting record.");
+    }
+}
+
+async function queueSong(title, videoId) {
+    try {
+        const songObj = {
+            title: title,
+            videoId: videoId,
+            thumbnail: "https://img.youtube.com/vi/" + videoId + "/hqdefault.jpg"
+        };
+        const res = await fetch(window.API_PREFIX + "/enqueue", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(songObj)
+        });
+        if (res.ok) {
+            showPopup("Queued: " + title);
+        } else {
+            showPopup("Failed to queue song.");
+        }
+    } catch (e) {
+        showPopup("Queue error.");
+    }
+}
+
+async function setActiveTable(tbl) {
+    try {
+        const res = await fetch(window.API_PREFIX + "/hist/api/set_active", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table_name: tbl })
+        });
+        if (res.ok) {
+            showPopup("Active recording table switched to: " + tbl);
+            setTimeout(() => window.location.reload(), 400);
+        } else {
+            showPopup("Failed to set active table.");
+        }
+    } catch (e) {
+        showPopup("Error setting active table.");
+    }
+}
+
+async function deleteCurrentTable(tbl) {
+    if (!confirm(`Are you sure you want to completely delete the table "${tbl}"? All records inside it will be permanently dropped.`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(window.API_PREFIX + "/hist/api/delete_table", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table_name: tbl })
+        });
+        if (res.ok) {
+            showPopup("Table " + tbl + " deleted.");
+            setTimeout(() => {
+                window.location.href = window.API_PREFIX + "/hist";
+            }, 500);
+        } else {
+            showPopup("Failed to delete table.");
+        }
+    } catch (e) {
+        showPopup("Error deleting table.");
+    }
+}
+
+function openAddRecordModal() {
+    // Default datetime-local to current local datetime
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById("addDateTime").value = now.toISOString().slice(0, 16);
+    document.getElementById("addRecordModal").classList.add("open");
+}
+
+function closeAddRecordModal() {
+    document.getElementById("addRecordModal").classList.remove("open");
+}
+
+async function submitAddRecord(e) {
+    e.preventDefault();
+    const songName = document.getElementById("addSongName").value.trim();
+    const songId = document.getElementById("addSongId").value.trim();
+    const listens = parseInt(document.getElementById("addListens").value, 10);
+    const dtStr = document.getElementById("addDateTime").value;
+
+    try {
+        const res = await fetch(window.API_PREFIX + "/hist/api/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                table: CURRENT_TABLE,
+                song_name: songName,
+                song_id: songId,
+                number_of_listens: listens || 1,
+                datetime_str: dtStr
+            })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            showPopup("Added to history!");
+            closeAddRecordModal();
+            setTimeout(() => window.location.reload(), 300);
+        } else {
+            showPopup(data.error || "Failed to add song.");
+        }
+    } catch (err) {
+        showPopup("Network error adding song.");
+    }
+}
+
+function openNewTableModal() {
+    document.getElementById("newTableName").value = "";
+    document.getElementById("newTableModal").classList.add("open");
+}
+
+function closeNewTableModal() {
+    document.getElementById("newTableModal").classList.remove("open");
+}
+
+async function submitNewTable(e) {
+    e.preventDefault();
+    const name = document.getElementById("newTableName").value.trim();
+    if (!name) return;
+
+    try {
+        const res = await fetch(window.API_PREFIX + "/hist/api/create_table", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table_name: name })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showPopup("Created table: " + data.table);
+            closeNewTableModal();
+            setTimeout(() => {
+                changeTable(data.table);
+            }, 300);
+        } else {
+            showPopup(data.error || "Failed to create table.");
+        }
+    } catch (err) {
+        showPopup("Error creating table.");
+    }
+}
+</script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+</body>
+</html>

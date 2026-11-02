@@ -286,17 +286,9 @@ def get_gemini_recommendations(user_prompt=""):
         return []
 
     try:
-        history_path = _safe_path(PLAYLIST_DIR, get_history_file())
-    except ValueError:
-        logger.error("Invalid playback history path")
-        return []
-
-    try:
-        with open(history_path, "r", encoding="utf8") as history_file:
-            history = history_file.read().strip()
-    except FileNotFoundError:
-        history = ""
-    except OSError as error:
+        from core.history_db import get_history_text
+        history = get_history_text().strip()
+    except Exception as error:
         logger.error(f"Failed to read playback history: {error}")
         return []
 
@@ -508,13 +500,145 @@ def index():
     return render_template('yt.html', api_prefix=url_for("youtube.index").rstrip("/"))
 
 
+# ---------------- HISTORY ROUTES ----------------
+
+@youtube_bp.route('/hist')
+@youtube_bp.route('/hist/')
+def history_manager():
+    from core.history_db import get_all_tables, get_active_table, get_history_rows, sanitize_table_name, create_table
+    tables = get_all_tables()
+    active_table = get_active_table()
+    requested_table = request.args.get("table", "").strip()
+    current_table = sanitize_table_name(requested_table) if requested_table else active_table
+
+    if current_table not in tables:
+        create_table(current_table)
+        tables = get_all_tables()
+
+    rows = get_history_rows(current_table)
+    return render_template(
+        'hist.html',
+        tables=tables,
+        current_table=current_table,
+        active_table=active_table,
+        rows=rows,
+        api_prefix=url_for("youtube.index").rstrip("/")
+    )
+
+
+@youtube_bp.route('/hist/api/update', methods=['POST'])
+def hist_update_record():
+    from core.history_db import update_entry
+    data = request.get_json(silent=True) or {}
+    table = data.get("table", "")
+    row_id = data.get("id")
+    song_name = data.get("song_name", "").strip()
+    song_id = data.get("song_id", "").strip()
+    number_of_listens = data.get("number_of_listens", 1)
+    datetime_str = data.get("datetime_str")
+
+    if not table or not row_id or not song_name or not song_id:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    success = update_entry(
+        table_name=table,
+        row_id=row_id,
+        song_name=song_name,
+        song_id=song_id,
+        number_of_listens=number_of_listens,
+        datetime_str=datetime_str
+    )
+    if success:
+        return jsonify({"status": "success"})
+    return jsonify({"error": "Record not found or update failed"}), 404
+
+
+@youtube_bp.route('/hist/api/delete', methods=['POST'])
+def hist_delete_record():
+    from core.history_db import delete_entry
+    data = request.get_json(silent=True) or {}
+    table = data.get("table", "")
+    row_id = data.get("id")
+
+    if not table or not row_id:
+        return jsonify({"error": "Table and row ID required"}), 400
+
+    success = delete_entry(table, row_id)
+    if success:
+        return jsonify({"status": "success"})
+    return jsonify({"error": "Delete failed"}), 404
+
+
+@youtube_bp.route('/hist/api/add', methods=['POST'])
+def hist_add_record():
+    from core.history_db import add_entry
+    data = request.get_json(silent=True) or {}
+    table = data.get("table", "")
+    song_name = data.get("song_name", "").strip()
+    song_id = data.get("song_id", "").strip()
+    number_of_listens = data.get("number_of_listens", 1)
+    datetime_str = data.get("datetime_str")
+
+    if not table or not song_name or not song_id:
+        return jsonify({"error": "Table, song name, and song ID required"}), 400
+
+    new_id = add_entry(
+        table_name=table,
+        song_name=song_name,
+        song_id=song_id,
+        number_of_listens=number_of_listens,
+        datetime_str=datetime_str
+    )
+    return jsonify({"status": "success", "id": new_id})
+
+
+@youtube_bp.route('/hist/api/set_active', methods=['POST'])
+def hist_set_active():
+    from core.history_db import set_active_table
+    data = request.get_json(silent=True) or {}
+    table_name = data.get("table_name", "").strip()
+    if not table_name:
+        return jsonify({"error": "Table name required"}), 400
+
+    active = set_active_table(table_name)
+    return jsonify({"status": "success", "active_table": active})
+
+
+@youtube_bp.route('/hist/api/create_table', methods=['POST'])
+def hist_create_table():
+    from core.history_db import create_table
+    data = request.get_json(silent=True) or {}
+    table_name = data.get("table_name", "").strip()
+    if not table_name:
+        return jsonify({"error": "Table name required"}), 400
+
+    clean = create_table(table_name)
+    return jsonify({"status": "success", "table": clean})
+
+
+@youtube_bp.route('/hist/api/delete_table', methods=['POST'])
+def hist_delete_table():
+    from core.history_db import delete_table
+    data = request.get_json(silent=True) or {}
+    table_name = data.get("table_name", "").strip()
+    if not table_name or table_name == "history":
+        return jsonify({"error": "Cannot delete default history table"}), 400
+
+    success = delete_table(table_name)
+    if success:
+        return jsonify({"status": "success"})
+    return jsonify({"error": "Delete table failed"}), 400
+
+
 @youtube_bp.route("/<filename>")
 def switch_history_file(filename):
     filename = filename.strip()
     if not filename or os.path.basename(filename) != filename:
         return jsonify({"error": "file must be a filename"}), 400
 
-    set_history_file(filename)
+    from core.history_db import set_active_table, create_table
+    table = set_active_table(filename)
+    create_table(table)
     return redirect(url_for("youtube.index").rstrip("/"))
 
 
