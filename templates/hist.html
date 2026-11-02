@@ -289,6 +289,22 @@
     gap: 10px;
     margin-top: 20px;
 }
+
+/* Sortable column headers */
+.hist-table th[data-column] {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.hist-table th[data-column]:hover {
+    color: #ccc;
+    background: #1a1a1a;
+}
+.sort-arrow {
+    font-size: 0.7rem;
+    margin-left: 4px;
+    opacity: 0.8;
+}
 </style>
 
 <body>
@@ -351,7 +367,7 @@
                     <th data-column="song_name" data-original="Song Name" onclick="setSort('song_name')">Song Name</th>
                     <th style="width: 170px;" data-column="song_id" data-original="Video ID" onclick="setSort('song_id')">Video ID</th>
                     <th style="width: 90px;" data-column="listens" data-original="Listens" onclick="setSort('listens')">Listens</th>
-                    <th style="width: 220px;">Date & Time (Picker)</th>
+                    <th style="width: 220px;" data-column="datetime" data-original="Date & Time (Picker)" onclick="setSort('datetime')">Date & Time (Picker)</th>
                     <th style="width: 150px; text-align: right;">Actions</th>
                 </tr>
             </thead>
@@ -535,8 +551,10 @@ function renderTable() {
 }
 
 // Initial sort and header update
-renderTable();
-updateHeaderIndicators();
+document.addEventListener('DOMContentLoaded', function() {
+    renderTable();
+    updateHeaderIndicators();
+});
 async function saveRow(id) {
     const tr = document.getElementById("row-" + id);
     if (!tr) return;
