@@ -347,10 +347,10 @@
         <table class="hist-table" id="historyTable">
             <thead>
                 <tr>
-                    <th style="width: 50px;">#</th>
-                    <th>Song Name</th>
-                    <th style="width: 170px;">Video ID</th>
-                    <th style="width: 90px;">Listens</th>
+                    <th style="width: 50px;" data-column="id" data-original="#" onclick="setSort('id')">#</th>
+                    <th data-column="song_name" data-original="Song Name" onclick="setSort('song_name')">Song Name</th>
+                    <th style="width: 170px;" data-column="song_id" data-original="Video ID" onclick="setSort('song_id')">Video ID</th>
+                    <th style="width: 90px;" data-column="listens" data-original="Listens" onclick="setSort('listens')">Listens</th>
                     <th style="width: 220px;">Date & Time (Picker)</th>
                     <th style="width: 150px; text-align: right;">Actions</th>
                 </tr>
@@ -472,7 +472,71 @@ function filterTable() {
     });
     document.getElementById("recordCount").textContent = `${visible} records found`;
 }
+let sortColumn = 'id';
+let sortAsc = true;
 
+function setSort(column) {
+    if (sortColumn === column) {
+        sortAsc = !sortAsc;
+    } else {
+        sortColumn = column;
+        sortAsc = true;
+    }
+    renderTable();
+    updateHeaderIndicators();
+}
+
+function updateHeaderIndicators() {
+    document.querySelectorAll('th[data-column]').forEach(th => {
+        const original = th.dataset.original;
+        if (th.dataset.column === sortColumn) {
+            th.innerHTML = original + (sortAsc ? ' ▲' : ' ▼');
+        } else {
+            th.innerHTML = original;
+        }
+    });
+}
+
+function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    const rows = Array.from(tbody.querySelectorAll('tr[data-search]'));
+    rows.sort((a, b) => {
+        let aVal, bVal;
+        switch (sortColumn) {
+            case 'id':
+                aVal = parseInt(a.id.split('-')[1]);
+                bVal = parseInt(b.id.split('-')[1]);
+                break;
+            case 'song_name':
+                aVal = a.querySelector('.song-name-input').value.trim().toLowerCase();
+                bVal = b.querySelector('.song-name-input').value.trim().toLowerCase();
+                break;
+            case 'song_id':
+                aVal = a.querySelector('.song-id-input').value.trim().toLowerCase();
+                bVal = b.querySelector('.song-id-input').value.trim().toLowerCase();
+                break;
+            case 'listens':
+                aVal = parseInt(a.querySelector('.listens-input').value, 10);
+                bVal = parseInt(b.querySelector('.listens-input').value, 10);
+                break;
+            case 'datetime':
+                aVal = new Date(a.querySelector('.datetime-input').value);
+                bVal = new Date(b.querySelector('.datetime-input').value);
+                break;
+            default:
+                aVal = '';
+                bVal = '';
+        }
+        if (aVal < bVal) return sortAsc ? -1 : 1;
+        if (aVal > bVal) return sortAsc ? 1 : -1;
+        return 0;
+    });
+    rows.forEach(r => tbody.appendChild(r));
+}
+
+// Initial sort and header update
+renderTable();
+updateHeaderIndicators();
 async function saveRow(id) {
     const tr = document.getElementById("row-" + id);
     if (!tr) return;
