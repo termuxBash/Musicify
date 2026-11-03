@@ -170,7 +170,7 @@ def write_env() -> None:
     gemini_key = required_prompt("Gemini API key", secret=True)
     playlist_dir = prompt("Playlist directory", str(USER_HOME / "Music" / "playlists"))
     root_dir = prompt("Music root directory", str(USER_HOME / "Music"))
-    history_file = prompt("History filename", "history.txt")
+    history_table = prompt("History table", "history")
 
     values = {
         "APP_HOST": "0.0.0.0",
@@ -179,7 +179,8 @@ def write_env() -> None:
         "STREAM_URL": f"http://{local_ip}:8000{STREAM_MOUNT}",
         "STREAM_FALLBACK_URLS": f"http://{local_ip}:8000{STREAM_MOUNT},http://127.0.0.1:8000{STREAM_MOUNT}",
         "PLAYLIST_DIR": playlist_dir,
-        "HISTORY_FILE": history_file,
+        "HISTORY_TABLE": history_table,
+        "DB_FILENAME": "history.sqlite3",
         "ROOT_DIR": root_dir,
         "TIME_OFFSET": "0",
         "LYRICS_ENABLED": "false",

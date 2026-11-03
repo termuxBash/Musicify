@@ -171,6 +171,17 @@ class YTService:
             "greatest hits", "non stop", "non-stop"
         ]
 
+        first_item = items[0]
+        first_title = first_item["snippet"]["title"].lower()
+        if not any(word in first_title for word in bad_words):
+            best_item = first_item
+            return {
+                "title": best_item["snippet"]["title"],
+                "thumbnail": best_item["snippet"]["thumbnails"]["high"]["url"],
+                "videoId": best_item["id"]["videoId"],
+                "channel": best_item["snippet"]["channelTitle"]
+            }
+
         best_score = -999
         best_item = None
 

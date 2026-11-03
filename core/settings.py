@@ -57,17 +57,18 @@ STREAM_URL = active_stream_url
 #Local file and playlist settings
 ROOT_DIR = os.getenv("ROOT_DIR", os.path.expanduser("~/Music"))
 PLAYLIST_DIR = os.getenv("PLAYLIST_DIR", os.path.expanduser("~/Music/playlists"))
-HISTORY_FILE = os.getenv("HISTORY_FILE", "history.txt")
+HISTORY_TABLE = os.getenv("HISTORY_TABLE", "history")
+DB_FILENAME = os.getenv("DB_FILENAME", "history.sqlite3")
 _history_file_lock = threading.Lock()
 
-def get_history_file():
+def get_history_table():
     with _history_file_lock:
-        return HISTORY_FILE
+        return HISTORY_TABLE
 
-def set_history_file(filename):
-    global HISTORY_FILE
+def set_history_table(table_name):
+    global HISTORY_TABLE
     with _history_file_lock:
-        HISTORY_FILE = filename
+        HISTORY_TABLE = table_name
 
 TIME_OFFSET = env_hex("TIME_OFFSET")
 DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)

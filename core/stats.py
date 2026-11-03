@@ -13,7 +13,7 @@ import logging
 from services.yt_service import YTService
 from core.bose_routes import check_power, ctrl
 from flask import current_app
-from core.settings import get_history_file, PLAYLIST_DIR, ROOT_DIR, TIME_OFFSET
+from core.settings import PLAYLIST_DIR, ROOT_DIR, TIME_OFFSET
 from dotenv import load_dotenv
 import random
 load_dotenv()

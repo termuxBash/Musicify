@@ -9,11 +9,18 @@ import threading
 import time
 from datetime import datetime
 import logging
-from core.settings import PLAYLIST_DIR, TIME_OFFSET, get_history_file, set_history_file
+from core.settings import (
+    DB_FILENAME,
+    PLAYLIST_DIR,
+    TIME_OFFSET,
+    get_history_table,
+    set_history_table,
+)
 
 logger = logging.getLogger(__name__)
 
-DB_FILENAME = "history.sqlite3"
+_YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_YOUTUBE_ID_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])")
 _active_table_lock = threading.Lock()
 _active_table_name = None
 
@@ -52,6 +59,15 @@ def _safe_table(name):
     return clean
 
 
+def normalize_video_id(value):
+    """Return a strict YouTube video ID, removing surrounding response punctuation."""
+    text = str(value or "").strip().strip("\"'`")
+    if _YOUTUBE_ID_RE.fullmatch(text):
+        return text
+    match = _YOUTUBE_ID_TOKEN_RE.search(text)
+    return match.group(1) if match else ""
+
+
 def get_db_path():
     """Return the absolute path to history.sqlite3 in PLAYLIST_DIR."""
     os.makedirs(PLAYLIST_DIR, exist_ok=True)
@@ -64,7 +80,7 @@ def get_active_table():
     with _active_table_lock:
         if _active_table_name is None:
             # Initialize from settings/environment
-            _active_table_name = sanitize_table_name(get_history_file())
+            _active_table_name = sanitize_table_name(get_history_table())
         return _active_table_name
 
 
@@ -74,7 +90,7 @@ def set_active_table(name):
     clean = sanitize_table_name(name)
     with _active_table_lock:
         _active_table_name = clean
-    set_history_file(clean)
+    set_history_table(clean)
     create_table(clean)
     return clean
 
@@ -116,18 +132,25 @@ def iso_datetime_to_hex(dt_str):
 
 
 def create_table(table_name):
-    """Create a history table if it doesn't already exist."""
+    """Create a history table if it doesn't already exist.
+
+    ``song_id`` carries a UNIQUE constraint so that the same YouTube video
+    can never produce two rows in the same table regardless of how the song
+    name was spelled at record time.
+    """
     clean = _safe_table(table_name)
     with get_connection() as conn:
         conn.execute(f"""
             CREATE TABLE IF NOT EXISTS "{clean}" (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 song_name TEXT NOT NULL,
-                song_id TEXT NOT NULL,
+                song_id   TEXT NOT NULL UNIQUE,
                 number_of_listens INTEGER NOT NULL DEFAULT 1,
                 timestamp TEXT NOT NULL
             );
         """)
+        # Fast lookup by song_id (covering unique constraint already indexed,
+        # but the composite index below speeds up name-based searches).
         conn.execute(f"""
             CREATE INDEX IF NOT EXISTS "idx_{clean}_song" ON "{clean}" (song_name, song_id);
         """)
@@ -146,6 +169,114 @@ def get_all_tables():
         create_table("history")
         tables.insert(0, "history")
     return tables
+
+
+def _migrate_unique_song_id(table):
+    """Retrofit a UNIQUE constraint on song_id for pre-existing tables.
+
+    For tables created before the uniqueness requirement was introduced this
+    function:
+      1. Merges duplicate song_id rows (summing listens, keeping the latest
+         timestamp and the song_name from the row with the most listens).
+      2. Recreates the table with the UNIQUE constraint via the
+         CREATE TABLE … / INSERT … / DROP / ALTER rename pattern so that
+         SQLite's limited ALTER TABLE support is not an issue.
+
+    The operation is idempotent — it checks for the UNIQUE index first and
+    skips all work if it is already present.
+    """
+    clean = _safe_table(table)
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check whether any unique index contains only song_id.
+        has_unique_song_id = False
+        cursor.execute(f'PRAGMA index_list("{clean}");')
+        for index in cursor.fetchall():
+            if not index["unique"]:
+                continue
+            cursor.execute(f'PRAGMA index_info("{index["name"]}");')
+            columns = [row["name"] for row in cursor.fetchall()]
+            if columns == ["song_id"]:
+                has_unique_song_id = True
+                break
+
+        cursor.execute(f'SELECT song_id FROM "{clean}";')
+        stored_ids = [row["song_id"] for row in cursor.fetchall()]
+        normalized_ids = [normalize_video_id(song_id) for song_id in stored_ids]
+        invalid_ids = sum(not song_id for song_id in normalized_ids)
+        ids_changed = any(
+            normalized and normalized != stored
+            for stored, normalized in zip(stored_ids, normalized_ids)
+        )
+        has_normalized_duplicates = len(set(normalized_ids)) != len(normalized_ids)
+        if has_unique_song_id and not invalid_ids and not ids_changed and not has_normalized_duplicates:
+            return
+
+        logger.info(f"Migrating table '{clean}': enforcing UNIQUE(song_id)...")
+
+        # Step 1 – collect deduplicated rows: group by song_id, merge listens
+        cursor.execute(f"""
+            SELECT
+                MIN(id) AS id,
+                song_name,
+                song_id,
+                SUM(number_of_listens) AS number_of_listens,
+                MAX(timestamp) AS timestamp
+            FROM "{clean}"
+            GROUP BY song_id;
+        """)
+        merged_rows = cursor.fetchall()
+        normalized_rows = {}
+        for row in merged_rows:
+            song_id = normalize_video_id(row["song_id"])
+            if not song_id:
+                logger.warning("Skipping invalid YouTube ID %r in table %s", row["song_id"], clean)
+                continue
+            if song_id in normalized_rows:
+                previous = normalized_rows[song_id]
+                normalized_rows[song_id] = (
+                    previous[0],
+                    previous[1] + row["number_of_listens"],
+                    max(previous[2], row["timestamp"]),
+                )
+            else:
+                normalized_rows[song_id] = (
+                    row["song_name"],
+                    row["number_of_listens"],
+                    row["timestamp"],
+                )
+
+        # Step 2 – create a temp table with the UNIQUE constraint
+        tmp = f"_tmp_migrate_{clean}"
+        conn.execute(f'DROP TABLE IF EXISTS "{tmp}";')
+        conn.execute(f"""
+            CREATE TABLE "{tmp}" (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                song_name TEXT NOT NULL,
+                song_id   TEXT NOT NULL UNIQUE,
+                number_of_listens INTEGER NOT NULL DEFAULT 1,
+                timestamp TEXT NOT NULL
+            );
+        """)
+
+        # Step 3 – insert merged rows
+        for song_id, (song_name, listens, timestamp) in normalized_rows.items():
+            conn.execute(
+                f'INSERT INTO "{tmp}" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
+                (song_name, song_id, listens, timestamp)
+            )
+
+        # Step 4 – swap: drop old table, rename temp to original name
+        conn.execute(f'DROP TABLE "{clean}";')
+        conn.execute(f'ALTER TABLE "{tmp}" RENAME TO "{clean}";')
+
+        # Step 5 – recreate the composite search index
+        conn.execute(f"""
+            CREATE INDEX IF NOT EXISTS "idx_{clean}_song" ON "{clean}" (song_name, song_id);
+        """)
+        conn.commit()
+        logger.info(f"Migration of '{clean}' complete — {len(normalized_rows)} unique songs retained.")
 
 
 def init_db():
@@ -177,7 +308,7 @@ def init_db():
                                 listens = int(parts[2].strip()) if len(parts) >= 3 and parts[2].strip().isdigit() else 1
                                 ts = parts[3].strip() if len(parts) >= 4 else format(max(0, int(time.time()) - TIME_OFFSET), "x")
                                 cursor.execute(
-                                    'INSERT INTO "history" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
+                                    'INSERT OR IGNORE INTO "history" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
                                     (song_name, song_id, listens, ts)
                                 )
                     conn.commit()
@@ -185,14 +316,18 @@ def init_db():
     except Exception as e:
         logger.error(f"Error initializing or migrating history database: {e}")
 
-
 def record_played_song(song, table_name=None):
-    """Record or increment the play count of a song in the specified (or active) history table."""
+    """Record or increment the play count of a song in the specified (or active) history table.
+
+    Matches exclusively on ``song_id`` so that the same YouTube video is
+    always merged into one row, regardless of how Gemini or any other source
+    spelled the song name.
+    """
     if not song.get("record_history"):
         return
 
     title = (song.get("title") or "").strip()
-    video_id = (song.get("videoId") or "").strip()
+    video_id = normalize_video_id(song.get("videoId"))
     if not title or not video_id:
         return
 
@@ -202,19 +337,23 @@ def record_played_song(song, table_name=None):
 
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(f'SELECT id, number_of_listens FROM "{table}" WHERE song_name = ? AND song_id = ? LIMIT 1;', (title, video_id))
+        # Look up solely by video ID — name variations are irrelevant
+        cursor.execute(
+            f'SELECT id, number_of_listens FROM "{table}" WHERE song_id = ? LIMIT 1;',
+            (video_id,)
+        )
         row = cursor.fetchone()
 
         if row:
-            row_id = row["id"]
-            new_count = row["number_of_listens"] + 1
             cursor.execute(
                 f'UPDATE "{table}" SET number_of_listens = ?, timestamp = ? WHERE id = ?;',
-                (new_count, elapsed_timestamp, row_id)
+                (row["number_of_listens"] + 1, elapsed_timestamp, row["id"])
             )
         else:
+            # INSERT OR IGNORE is safe here: if a concurrent insert sneaked in,
+            # we simply skip — the next play will find and update the row.
             cursor.execute(
-                f'INSERT INTO "{table}" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, 1, ?);',
+                f'INSERT OR IGNORE INTO "{table}" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, 1, ?);',
                 (title, video_id, elapsed_timestamp)
             )
         conn.commit()
@@ -260,7 +399,14 @@ def get_history_rows(table_name=None):
 
 
 def add_entry(table_name, song_name, song_id, number_of_listens=1, timestamp=None, datetime_str=None):
-    """Add a new row into the specified table."""
+    """Add a new row into the specified table, or accumulate listens if song_id already exists.
+
+    Because ``song_id`` is UNIQUE, attempting to insert a duplicate would
+    raise a constraint error.  Instead we merge: the existing listen count is
+    incremented by ``number_of_listens`` and the timestamp is updated to the
+    newer value.  The existing song_name is preserved so manual edits are not
+    overwritten.
+    """
     table = _safe_table(table_name)
     create_table(table)
 
@@ -271,14 +417,35 @@ def add_entry(table_name, song_name, song_id, number_of_listens=1, timestamp=Non
     else:
         ts = format(max(0, int(time.time()) - TIME_OFFSET), "x")
 
+    sid = normalize_video_id(song_id)
+    sname = song_name.strip()
+    listens = int(number_of_listens)
+    if not sid:
+        raise ValueError("song_id must be a valid 11-character YouTube video ID")
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f'INSERT INTO "{table}" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
-            (song_name.strip(), song_id.strip(), int(number_of_listens), ts)
+            f'SELECT id, number_of_listens FROM "{table}" WHERE song_id = ? LIMIT 1;',
+            (sid,)
         )
-        conn.commit()
-        return cursor.lastrowid
+        existing = cursor.fetchone()
+
+        if existing:
+            # Accumulate listens rather than inserting a duplicate
+            cursor.execute(
+                f'UPDATE "{table}" SET number_of_listens = ?, timestamp = ? WHERE id = ?;',
+                (existing["number_of_listens"] + listens, ts, existing["id"])
+            )
+            conn.commit()
+            return existing["id"]
+        else:
+            cursor.execute(
+                f'INSERT INTO "{table}" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
+                (sname, sid, listens, ts)
+            )
+            conn.commit()
+            return cursor.lastrowid
 
 
 def update_entry(table_name, row_id, song_name, song_id, number_of_listens, timestamp=None, datetime_str=None):
@@ -296,7 +463,7 @@ def update_entry(table_name, row_id, song_name, song_id, number_of_listens, time
         cursor = conn.cursor()
         cursor.execute(
             f'UPDATE "{table}" SET song_name = ?, song_id = ?, number_of_listens = ?, timestamp = ? WHERE id = ?;',
-            (song_name.strip(), song_id.strip(), int(number_of_listens), ts, int(row_id))
+            (song_name.strip(), normalize_video_id(song_id), int(number_of_listens), ts, int(row_id))
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -325,4 +492,3 @@ def delete_table(table_name):
     if get_active_table() == clean:
         set_active_table("history")
     return True
-

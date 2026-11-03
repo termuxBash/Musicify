@@ -13,6 +13,9 @@ Usage:
 
     # Migrate a specific file into a custom table:
     python3 migrate.py --table rock /path/to/my_songs.txt
+
+    # Merge duplicate video IDs in all existing tables:
+    python3 migrate.py --unique-song-id
 """
 
 import argparse
@@ -28,10 +31,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.settings import PLAYLIST_DIR, TIME_OFFSET
 from core.history_db import (
+    _migrate_unique_song_id as _enforce_unique_song_id,
     create_table,
     get_all_tables,
     get_connection,
     get_db_path,
+    normalize_video_id,
     sanitize_table_name,
 )
 
@@ -59,7 +64,7 @@ def parse_playlist_line(line):
     if not song_name:
         return None
 
-    song_id = parts[1] if len(parts) >= 2 else ""
+    song_id = normalize_video_id(parts[1] if len(parts) >= 2 else "")
     
     # Parse listens
     listens = 1
@@ -107,28 +112,27 @@ def migrate_file(file_path, target_table=None):
 
             song_name = record["song_name"]
             song_id = record["song_id"]
+            if not song_id:
+                skipped += 1
+                continue
             listens = record["number_of_listens"]
             ts = record["timestamp"]
 
-            # Check if this exact song already exists in the table
+            # Merge by video ID so title spelling differences cannot create duplicates.
             cursor.execute(
-                f'SELECT id, number_of_listens FROM "{table_name}" WHERE song_name = ? AND song_id = ? LIMIT 1;',
-                (song_name, song_id)
+                f'SELECT id, number_of_listens FROM "{table_name}" WHERE song_id = ? LIMIT 1;',
+                (song_id,)
             )
             existing = cursor.fetchone()
 
             if existing:
                 row_id = existing["id"]
                 current_listens = existing["number_of_listens"]
-                # Update if incoming record has higher listens or updates timestamp
-                if listens > current_listens:
-                    cursor.execute(
-                        f'UPDATE "{table_name}" SET number_of_listens = ?, timestamp = ? WHERE id = ?;',
-                        (listens, ts, row_id)
-                    )
-                    updated += 1
-                else:
-                    skipped += 1
+                cursor.execute(
+                    f'UPDATE "{table_name}" SET number_of_listens = ?, timestamp = ? WHERE id = ?;',
+                    (current_listens + listens, ts, row_id)
+                )
+                updated += 1
             else:
                 cursor.execute(
                     f'INSERT INTO "{table_name}" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
@@ -143,6 +147,19 @@ def migrate_file(file_path, target_table=None):
         f"{inserted} inserted, {updated} updated, {skipped} unchanged (total: {len(lines)})"
     )
     return inserted, updated
+
+
+def _migrate_unique_song_id(table):
+    """Merge duplicate video IDs and enforce UNIQUE(song_id) for one table."""
+    _enforce_unique_song_id(table)
+
+
+def migrate_unique_song_ids():
+    """Merge duplicate video IDs and enforce UNIQUE(song_id) on every table."""
+    tables = get_all_tables()
+    for table_name in tables:
+        _migrate_unique_song_id(table_name)
+    return tables
 
 
 def main():
@@ -163,12 +180,24 @@ def main():
         default=PLAYLIST_DIR,
         help=f"Playlist directory to scan when no files are passed (default: {PLAYLIST_DIR}).",
     )
+    parser.add_argument(
+        "--unique-song-id",
+        action="store_true",
+        help="Merge duplicate video IDs and enforce UNIQUE(song_id) on all existing tables.",
+    )
 
     args = parser.parse_args()
     db_path = get_db_path()
 
     print(f"🎵 Musicify SQLite History Migration Tool")
     print(f"📦 Target Database: {db_path}")
+
+    if args.unique_song_id:
+        tables = migrate_unique_song_ids()
+        print(f"✅ UNIQUE(song_id) migration completed for {len(tables)} table(s).")
+        if not args.files:
+            print(f"📋 Current tables in database: {', '.join(tables)}")
+            return
 
     if args.files:
         if args.table and len(args.files) > 1:

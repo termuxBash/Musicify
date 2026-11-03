@@ -6,14 +6,13 @@ import os
 import re
 from flask import Blueprint, jsonify, redirect, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
+from core.history_db import normalize_video_id
 from core.settings import (
     MUSIC_ATLAS_KEY,
     LASTFM_KEY,
     GEMINI_API_KEY,
     GEMINI_MODEL,
-    get_history_file,
     PLAYLIST_DIR,
-    set_history_file,
     SONG_NAME_CLEANUP,
 )
 import logging
@@ -391,11 +390,11 @@ YouTubeVideoId must be a valid YouTube video ID."""
         response_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
         recommendations = []
         for line in response_text.splitlines():
-            song_name, separator, song_id = line.strip().partition(">")
-            if separator and song_name.strip() and song_id.strip() and ">" not in song_id:
+            song_name, song_id = _parse_gemini_recommendation(line)
+            if song_name and song_id:
                 recommendations.append({
-                    "song_name": song_name.strip(),
-                    "song_id": song_id.strip(),
+                    "song_name": song_name,
+                    "song_id": song_id,
                 })
 
     except (requests.RequestException, KeyError, IndexError, TypeError) as error:
@@ -426,6 +425,31 @@ YouTubeVideoId must be a valid YouTube video ID."""
         })
 
     return validated
+
+
+def _parse_gemini_recommendation(line):
+    """Parse a Gemini recommendation with either delimiter-separated or spaced IDs."""
+    text = line.strip()
+    if not text:
+        return "", ""
+
+    if ">" in text:
+        song_name, separator, song_id = text.partition(">")
+        if not separator or ">" in song_id:
+            return "", ""
+        song_name = song_name.strip()
+        song_id = song_id.strip()
+    else:
+        match = re.search(r"(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])", text)
+        if not match:
+            return "", ""
+        song_name = text[:match.start()].rstrip(" -:")
+        song_id = match.group(1)
+
+    song_id = normalize_video_id(song_id)
+    if not song_name or not song_id:
+        return "", ""
+    return song_name, song_id
 
 
 def _queue_ai_recommendations(app, recommendations):
@@ -560,6 +584,9 @@ def hist_update_record():
 
     if not data.get("table") or not row_id or not song_name or not song_id:
         return jsonify({"error": "Missing required fields"}), 400
+    song_id = normalize_video_id(song_id)
+    if not song_id:
+        return jsonify({"error": "Song ID must be an 11-character YouTube video ID"}), 400
 
     try:
         table = _validate_table_name(data.get("table"))
@@ -610,6 +637,9 @@ def hist_add_record():
 
     if not data.get("table") or not song_name or not song_id:
         return jsonify({"error": "Table, song name, and song ID required"}), 400
+    song_id = normalize_video_id(song_id)
+    if not song_id:
+        return jsonify({"error": "Song ID must be an 11-character YouTube video ID"}), 400
 
     try:
         table = _validate_table_name(data.get("table"))
