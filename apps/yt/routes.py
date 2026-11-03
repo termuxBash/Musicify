@@ -24,6 +24,22 @@ import requests # type: ignore
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Allowlist pattern: only alphanumeric + underscores, must not be empty
+_TABLE_NAME_RE = re.compile(r'^[A-Za-z0-9_]+$')
+
+
+def _validate_table_name(name):
+    """Return sanitised table name or raise ValueError if invalid.
+
+    Called at route boundaries so malformed names are rejected with a
+    400 response before they can reach any SQL-executing code.
+    """
+    from core.history_db import sanitize_table_name
+    clean = sanitize_table_name(str(name).strip()) if name else ""
+    if not clean or not _TABLE_NAME_RE.fullmatch(clean):
+        raise ValueError(f"Invalid table name: {name!r}")
+    return clean
+
 # Blueprint setup
 youtube_bp = Blueprint('youtube', __name__, template_folder='templates')
 
@@ -505,11 +521,17 @@ def index():
 @youtube_bp.route('/hist')
 @youtube_bp.route('/hist/')
 def history_manager():
-    from core.history_db import get_all_tables, get_active_table, get_history_rows, sanitize_table_name, create_table
+    from core.history_db import get_all_tables, get_active_table, get_history_rows, create_table
     tables = get_all_tables()
     active_table = get_active_table()
     requested_table = request.args.get("table", "").strip()
-    current_table = sanitize_table_name(requested_table) if requested_table else active_table
+    if requested_table:
+        try:
+            current_table = _validate_table_name(requested_table)
+        except ValueError:
+            return jsonify({"error": "Invalid table name"}), 400
+    else:
+        current_table = active_table
 
     if current_table not in tables:
         create_table(current_table)
@@ -530,15 +552,19 @@ def history_manager():
 def hist_update_record():
     from core.history_db import update_entry
     data = request.get_json(silent=True) or {}
-    table = data.get("table", "")
     row_id = data.get("id")
     song_name = data.get("song_name", "").strip()
     song_id = data.get("song_id", "").strip()
     number_of_listens = data.get("number_of_listens", 1)
     datetime_str = data.get("datetime_str")
 
-    if not table or not row_id or not song_name or not song_id:
+    if not data.get("table") or not row_id or not song_name or not song_id:
         return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        table = _validate_table_name(data.get("table"))
+    except ValueError:
+        return jsonify({"error": "Invalid table name"}), 400
 
     success = update_entry(
         table_name=table,
@@ -557,11 +583,15 @@ def hist_update_record():
 def hist_delete_record():
     from core.history_db import delete_entry
     data = request.get_json(silent=True) or {}
-    table = data.get("table", "")
     row_id = data.get("id")
 
-    if not table or not row_id:
+    if not data.get("table") or not row_id:
         return jsonify({"error": "Table and row ID required"}), 400
+
+    try:
+        table = _validate_table_name(data.get("table"))
+    except ValueError:
+        return jsonify({"error": "Invalid table name"}), 400
 
     success = delete_entry(table, row_id)
     if success:
@@ -573,14 +603,18 @@ def hist_delete_record():
 def hist_add_record():
     from core.history_db import add_entry
     data = request.get_json(silent=True) or {}
-    table = data.get("table", "")
     song_name = data.get("song_name", "").strip()
     song_id = data.get("song_id", "").strip()
     number_of_listens = data.get("number_of_listens", 1)
     datetime_str = data.get("datetime_str")
 
-    if not table or not song_name or not song_id:
+    if not data.get("table") or not song_name or not song_id:
         return jsonify({"error": "Table, song name, and song ID required"}), 400
+
+    try:
+        table = _validate_table_name(data.get("table"))
+    except ValueError:
+        return jsonify({"error": "Invalid table name"}), 400
 
     new_id = add_entry(
         table_name=table,
@@ -596,9 +630,13 @@ def hist_add_record():
 def hist_set_active():
     from core.history_db import set_active_table
     data = request.get_json(silent=True) or {}
-    table_name = data.get("table_name", "").strip()
-    if not table_name:
+    if not data.get("table_name", "").strip():
         return jsonify({"error": "Table name required"}), 400
+
+    try:
+        table_name = _validate_table_name(data.get("table_name"))
+    except ValueError:
+        return jsonify({"error": "Invalid table name"}), 400
 
     active = set_active_table(table_name)
     return jsonify({"status": "success", "active_table": active})
@@ -608,9 +646,13 @@ def hist_set_active():
 def hist_create_table():
     from core.history_db import create_table
     data = request.get_json(silent=True) or {}
-    table_name = data.get("table_name", "").strip()
-    if not table_name:
+    if not data.get("table_name", "").strip():
         return jsonify({"error": "Table name required"}), 400
+
+    try:
+        table_name = _validate_table_name(data.get("table_name"))
+    except ValueError:
+        return jsonify({"error": "Invalid table name — use only letters, digits and underscores"}), 400
 
     clean = create_table(table_name)
     return jsonify({"status": "success", "table": clean})
@@ -620,9 +662,14 @@ def hist_create_table():
 def hist_delete_table():
     from core.history_db import delete_table
     data = request.get_json(silent=True) or {}
-    table_name = data.get("table_name", "").strip()
-    if not table_name or table_name == "history":
+    raw = data.get("table_name", "").strip()
+    if not raw or raw == "history":
         return jsonify({"error": "Cannot delete default history table"}), 400
+
+    try:
+        table_name = _validate_table_name(raw)
+    except ValueError:
+        return jsonify({"error": "Invalid table name"}), 400
 
     success = delete_table(table_name)
     if success:
@@ -636,8 +683,13 @@ def switch_history_file(filename):
     if not filename or os.path.basename(filename) != filename:
         return jsonify({"error": "file must be a filename"}), 400
 
+    try:
+        validated = _validate_table_name(filename)
+    except ValueError:
+        return jsonify({"error": "Invalid filename — use only letters, digits and underscores"}), 400
+
     from core.history_db import set_active_table, create_table
-    table = set_active_table(filename)
+    table = set_active_table(validated)
     create_table(table)
     return redirect(url_for("youtube.index").rstrip("/"))
 

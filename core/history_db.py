@@ -19,12 +19,37 @@ _active_table_name = None
 
 
 def sanitize_table_name(name):
-    """Sanitize any input string into a safe SQLite table identifier."""
+    """Sanitize any input string into a safe SQLite table identifier.
+
+    Only allows alphanumeric characters and underscores.  Strips path
+    components and file extensions so callers can pass raw filenames.
+    """
     if not name:
         return "history"
     base = os.path.splitext(os.path.basename(str(name).strip()))[0]
     clean = re.sub(r'[^a-zA-Z0-9_]', '_', base).strip('_')
     return clean if clean else "history"
+
+
+# Pre-compiled pattern used by _safe_table for the final hard check
+_SAFE_TABLE_RE = re.compile(r'^[A-Za-z0-9_]+$')
+
+
+def _safe_table(name):
+    """Return a sanitised table name that is guaranteed injection-free.
+
+    This is the single choke-point used by every SQL-executing function.
+    It sanitises the raw name **and** then performs a strict allowlist
+    re-check on the result so that, even if sanitize_table_name were
+    somehow bypassed, no dangerous characters could reach the SQL string.
+
+    Raises ValueError if the sanitised name fails the allowlist check
+    (this should never happen in practice but is an extra safety net).
+    """
+    clean = sanitize_table_name(name)
+    if not _SAFE_TABLE_RE.fullmatch(clean):
+        raise ValueError(f"Rejected unsafe table name after sanitisation: {clean!r}")
+    return clean
 
 
 def get_db_path():
@@ -92,7 +117,7 @@ def iso_datetime_to_hex(dt_str):
 
 def create_table(table_name):
     """Create a history table if it doesn't already exist."""
-    clean = sanitize_table_name(table_name)
+    clean = _safe_table(table_name)
     with get_connection() as conn:
         conn.execute(f"""
             CREATE TABLE IF NOT EXISTS "{clean}" (
@@ -171,7 +196,7 @@ def record_played_song(song, table_name=None):
     if not title or not video_id:
         return
 
-    table = sanitize_table_name(table_name or get_active_table())
+    table = _safe_table(table_name or get_active_table())
     create_table(table)
     elapsed_timestamp = format(max(0, int(time.time()) - TIME_OFFSET), "x")
 
@@ -198,7 +223,7 @@ def record_played_song(song, table_name=None):
 def get_history_text(table_name=None):
     """Return all history entries as formatted text matching legacy history.txt for recommendation engines."""
     init_db()
-    table = sanitize_table_name(table_name or get_active_table())
+    table = _safe_table(table_name or get_active_table())
     create_table(table)
 
     with get_connection() as conn:
@@ -213,7 +238,7 @@ def get_history_text(table_name=None):
 def get_history_rows(table_name=None):
     """Return all rows from the specified table formatted with datetime strings for web display."""
     init_db()
-    table = sanitize_table_name(table_name or get_active_table())
+    table = _safe_table(table_name or get_active_table())
     create_table(table)
 
     with get_connection() as conn:
@@ -236,7 +261,7 @@ def get_history_rows(table_name=None):
 
 def add_entry(table_name, song_name, song_id, number_of_listens=1, timestamp=None, datetime_str=None):
     """Add a new row into the specified table."""
-    table = sanitize_table_name(table_name)
+    table = _safe_table(table_name)
     create_table(table)
 
     if datetime_str:
@@ -258,7 +283,7 @@ def add_entry(table_name, song_name, song_id, number_of_listens=1, timestamp=Non
 
 def update_entry(table_name, row_id, song_name, song_id, number_of_listens, timestamp=None, datetime_str=None):
     """Update an existing row by ID."""
-    table = sanitize_table_name(table_name)
+    table = _safe_table(table_name)
 
     if datetime_str:
         ts = iso_datetime_to_hex(datetime_str)
@@ -279,7 +304,7 @@ def update_entry(table_name, row_id, song_name, song_id, number_of_listens, time
 
 def delete_entry(table_name, row_id):
     """Delete a row by ID from the specified table."""
-    table = sanitize_table_name(table_name)
+    table = _safe_table(table_name)
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(f'DELETE FROM "{table}" WHERE id = ?;', (int(row_id),))
@@ -289,7 +314,7 @@ def delete_entry(table_name, row_id):
 
 def delete_table(table_name):
     """Delete an entire table (cannot delete default 'history')."""
-    clean = sanitize_table_name(table_name)
+    clean = _safe_table(table_name)
     if clean == "history":
         return False
 
@@ -300,3 +325,4 @@ def delete_table(table_name):
     if get_active_table() == clean:
         set_active_table("history")
     return True
+
