@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, redirect, request, render_template, url_fo
 from services.yt_service import YTService
 from core.history_db import normalize_video_id
 from core.settings import (
+    DB_FILENAME,
     MUSIC_ATLAS_KEY,
     LASTFM_KEY,
     GEMINI_API_KEY,
@@ -564,6 +565,7 @@ def history_manager():
     rows = get_history_rows(current_table)
     return render_template(
         'hist.html',
+        database_filename=DB_FILENAME,
         tables=tables,
         current_table=current_table,
         active_table=active_table,
