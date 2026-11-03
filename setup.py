@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a Musicify .env file and configure a local Icecast2 service."""
+"""Create a Musicify .env file, configure Icecast2, and optionally install system dependencies and a systemd service."""
 
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ import urllib.request
 from pathlib import Path
 from xml.etree import ElementTree
 
-
 PROJECT_DIR = Path(__file__).resolve().parent
 ENV_FILE = PROJECT_DIR / ".env"
 EXAMPLE_ENV_FILE = PROJECT_DIR / "example.env"
 ICECAST_CONFIG = Path("/etc/icecast2/icecast.xml")
 STREAM_MOUNT = "/mpv.ogg"
+
 USER_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
 if os.environ.get("SUDO_USER"):
     USER_HOME = Path(pwd.getpwnam(os.environ["SUDO_USER"]).pw_dir)
@@ -64,11 +64,12 @@ def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProces
     return subprocess.run(command, check=check, text=True)
 
 
-def install_icecast() -> None:
+def install_system_dependencies() -> None:
     if os.geteuid() != 0:
         raise RuntimeError("Run setup with sudo: sudo python3 setup.py")
 
     if shutil.which("apt-get"):
+        print("Updating package lists and installing system packages (icecast2, ffmpeg)...")
         run(["apt-get", "update"])
         run(["apt-get", "install", "-y", "icecast2", "ffmpeg"])
     elif not shutil.which("icecast2"):
@@ -79,7 +80,7 @@ def install_icecast() -> None:
     else:
         print("Skipped Python requirements installation.")
 
-    if confirm("Install Deno for yt-dlp?"):
+    if confirm("Install Deno (required by yt-dlp for signature extraction)?"):
         install_deno()
     else:
         print("Skipped Deno installation.")
@@ -102,13 +103,12 @@ def install_python_dependencies() -> None:
     )
     if externally_managed.exists():
         pip_command.append("--break-system-packages")
-    run([
-        *pip_command,
-    ])
+    run(pip_command)
 
 
 def install_deno() -> None:
     if shutil.which("deno"):
+        print("Deno is already installed.")
         return
 
     if shutil.which("apt-get"):
@@ -116,6 +116,7 @@ def install_deno() -> None:
         if result.returncode == 0 and shutil.which("deno"):
             return
 
+    print("Installing Deno via official script...")
     try:
         with urllib.request.urlopen("https://deno.land/install.sh", timeout=30) as response:
             installer = response.read()
@@ -123,10 +124,7 @@ def install_deno() -> None:
         environment["DENO_INSTALL"] = "/usr/local"
         subprocess.run(["sh"], input=installer, check=True, env=environment)
     except (OSError, subprocess.CalledProcessError) as error:
-        raise RuntimeError("Could not install Deno. Install it from https://deno.com/manual/getting_started/installation") from error
-
-    if not shutil.which("deno"):
-        raise RuntimeError("Deno installation completed but the deno command is not available.")
+        raise RuntimeError("Could not install Deno. Install it manually from https://deno.com") from error
 
 
 def configure_icecast() -> None:
@@ -135,42 +133,42 @@ def configure_icecast() -> None:
 
     tree = ElementTree.parse(ICECAST_CONFIG)
     root = tree.getroot()
-    mount = next((node for node in root.findall("mount")
-                  if node.findtext("mount-name") == STREAM_MOUNT), None)
+    mount = next((node for node in root.findall("mount") if node.findtext("mount-name") == STREAM_MOUNT), None)
+
     if mount is None:
         mount = ElementTree.SubElement(root, "mount")
         ElementTree.SubElement(mount, "mount-name").text = STREAM_MOUNT
 
-    fallback = mount.find("fallback-mount")
-    if fallback is None:
-        fallback = ElementTree.SubElement(mount, "fallback-mount")
-    fallback.text = "/silent.mp3"
-
-    override = mount.find("fallback-override")
-    if override is None:
-        override = ElementTree.SubElement(mount, "fallback-override")
-    override.text = "1"
+    if mount.find("fallback-mount") is None:
+        ElementTree.SubElement(mount, "fallback-mount").text = "/silent.mp3"
+    if mount.find("fallback-override") is None:
+        ElementTree.SubElement(mount, "fallback-override").text = "1"
 
     backup = ICECAST_CONFIG.with_suffix(".xml.musicify-backup")
-    shutil.copy2(ICECAST_CONFIG, backup)
+    if not backup.exists():
+        shutil.copy2(ICECAST_CONFIG, backup)
+
     tree.write(ICECAST_CONFIG, encoding="utf-8", xml_declaration=True)
+
     silent_file = Path("/usr/share/icecast2/web/silent.mp3")
-    run([
-        "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-        "-t", "1", "-q:a", "9", str(silent_file),
-    ])
+    if not silent_file.exists():
+        run([
+            "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+            "-t", "1", "-q:a", "9", str(silent_file),
+        ])
     run(["systemctl", "enable", "--now", "icecast2"])
 
 
 def write_env() -> None:
     local_ip = detect_ip()
     print(f"Detected local network IP: {local_ip}")
-    bose_ip = prompt("Bose device IP", "192.168.29.234")
+
+    bose_ip = prompt("Bose device IP", "192.168.29.123")
     youtube_key = required_prompt("YouTube API key", secret=True)
     gemini_key = required_prompt("Gemini API key", secret=True)
+    gemini_model = prompt("Gemini model", "gemini-2.0-flash")
     playlist_dir = prompt("Playlist directory", str(USER_HOME / "Music" / "playlists"))
     root_dir = prompt("Music root directory", str(USER_HOME / "Music"))
-    history_table = prompt("History table", "history")
 
     values = {
         "APP_HOST": "0.0.0.0",
@@ -179,7 +177,7 @@ def write_env() -> None:
         "STREAM_URL": f"http://{local_ip}:8000{STREAM_MOUNT}",
         "STREAM_FALLBACK_URLS": f"http://{local_ip}:8000{STREAM_MOUNT},http://127.0.0.1:8000{STREAM_MOUNT}",
         "PLAYLIST_DIR": playlist_dir,
-        "HISTORY_TABLE": history_table,
+        "HISTORY_TABLE": "history",
         "DB_FILENAME": "history.sqlite3",
         "ROOT_DIR": root_dir,
         "TIME_OFFSET": "0",
@@ -192,48 +190,84 @@ def write_env() -> None:
         "MUSIC_ATLAS_KEY": "",
         "LASTFM_KEY": "",
         "GEMINI_API_KEY": gemini_key,
-        "GEMINI_MODEL": "gemini-2.0-flash",
+        "GEMINI_MODEL": gemini_model,
     }
 
     rendered = ["# Generated by setup.py"]
     rendered_keys = set()
-    for line in EXAMPLE_ENV_FILE.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            rendered.append(line)
-            continue
-        key = stripped.split("=", 1)[0].strip()
-        if key in values:
-            rendered.append(f"{key}={values[key]}")
-            rendered_keys.add(key)
-        else:
-            rendered.append(line)
+
+    if EXAMPLE_ENV_FILE.exists():
+        for line in EXAMPLE_ENV_FILE.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                rendered.append(line)
+                continue
+            key = stripped.split("=", 1)[0].strip()
+            if key in values:
+                rendered.append(f"{key}={values[key]}")
+                rendered_keys.add(key)
+            else:
+                rendered.append(line)
 
     rendered.extend(
         f"{key}={value}"
         for key, value in values.items()
         if key not in rendered_keys
     )
+
     ENV_FILE.write_text("\n".join(rendered) + "\n", encoding="utf-8")
     Path(playlist_dir).expanduser().mkdir(parents=True, exist_ok=True)
     Path(root_dir).expanduser().mkdir(parents=True, exist_ok=True)
+
     if os.environ.get("SUDO_USER"):
         user = pwd.getpwnam(os.environ["SUDO_USER"])
         for path in (ENV_FILE, Path(playlist_dir).expanduser(), Path(root_dir).expanduser()):
             os.chown(path, user.pw_uid, user.pw_gid)
 
 
+def create_systemd_service() -> None:
+    if not confirm("Would you like to install a systemd service for Musicify to run on boot?", default=False):
+        return
+
+    sudo_user = os.environ.get("SUDO_USER")
+    if not sudo_user:
+        print("Skipping systemd service creation (SUDO_USER not detected).")
+        return
+
+    service_content = f"""[Unit]
+Description=Musicify Streaming & Control Server
+After=network.target icecast2.service
+
+[Service]
+Type=simple
+User={sudo_user}
+WorkingDirectory={PROJECT_DIR}
+ExecStart={sys.executable} {PROJECT_DIR}/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"""
+    service_path = Path("/etc/systemd/system/musicify.service")
+    service_path.write_text(service_content, encoding="utf-8")
+    run(["systemctl", "daemon-reload"])
+    run(["systemctl", "enable", "musicify.service"])
+    print(f"Installed and enabled systemd service: {service_path}")
+
+
 def main() -> int:
     try:
-        install_icecast()
+        install_system_dependencies()
         configure_icecast()
         write_env()
+        create_systemd_service()
     except (OSError, RuntimeError, ElementTree.ParseError, subprocess.CalledProcessError) as error:
         print(f"Setup failed: {error}", file=sys.stderr)
         return 1
-    print(f"Created {ENV_FILE}")
-    print("Install Python dependencies with: python3 -m pip install -r requirements.txt")
-    print("Start Musicify with: python3 app.py")
+
+    print(f"\nCreated configuration file: {ENV_FILE}")
+    print(f"Start Musicify with: {sys.executable} app.py")
     return 0
 
 

@@ -51,7 +51,7 @@ Set these in your `.env` file to override runtime defaults:
 - `STREAM_FALLBACK_URLS` for comma-separated fallback stream URLs.
 - `ROOT_DIR` for the root music directory. Defaults to `~/Music`.
 - `PLAYLIST_DIR` for the playlist text-files directory. Defaults to `~/Music/playlists`.
-- `HISTORY_TABLE` for the active history table. Defaults to `history`; YouTube can switch it at `/youtube/<filename>`.
+- `HISTORY_TABLE` for the active history table. Defaults to `history`; online player can switch it at `/youtube/<filename>`.
 - `DB_FILENAME` for the SQLite database filename. Defaults to `history.sqlite3`.
 - `TIME_OFFSET` for the hexadecimal Unix timestamp baseline used in playback history.
 - `LYRICS_ENABLED` to control lyrics on startup (`true` / `false`).
