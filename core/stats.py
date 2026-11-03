@@ -14,6 +14,7 @@ from services.yt_service import YTService
 from core.bose_routes import check_power, ctrl
 from flask import current_app
 from core.settings import PLAYLIST_DIR, ROOT_DIR, TIME_OFFSET
+from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 from dotenv import load_dotenv
 import random
 load_dotenv()
@@ -281,7 +282,22 @@ def playlist(name):
             # FORMAT 1: Explicit YouTube ID (e.g., Title>XEjLoHdbVeE)
             # -------------------------------------------------------------
             if source:
-                video_url = f"https://www.youtube.com/watch?v={source}"
+                if is_blacklisted_rick_roll(source, title):
+                    logger.warning(f"Playlist track has blacklisted ID {source} for '{title}'")
+                    record_rick_roll_timestamp()
+                    result = YTService.auto_pick_song(title)
+                    if (
+                        result
+                        and result.get("videoId")
+                        and not is_blacklisted_rick_roll(result.get("videoId"), result.get("title"))
+                    ):
+                        source = result["videoId"]
+                        title = result["title"]
+                        video_url = f"https://www.youtube.com/watch?v={source}"
+                    else:
+                        continue
+                else:
+                    video_url = f"https://www.youtube.com/watch?v={source}"
                 
                 # Resolve the direct audio streaming URL using yt_service pipeline
                 try:

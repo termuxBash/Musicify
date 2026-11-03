@@ -24,6 +24,80 @@ _YOUTUBE_ID_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{11})(?![A-Z
 _active_table_lock = threading.Lock()
 _active_table_name = None
 
+RICK_ROLL_VIDEO_ID = "dQw4w9WgXcQ"
+RICK_ROLL_ALLOWED_PHRASE = "never gonna give you up"
+
+
+def is_blacklisted_rick_roll(video_id_or_song, song_name=None):
+    """Return True if video_id is 'dQw4w9WgXcQ' and not accompanied by 'Never Gonna Give You Up'.
+
+    Blacklists video id 'dQw4w9WgXcQ' if it is NOT accompanied by a song name
+    that contains 'Never Gonna Give You Up' (case-insensitive).
+    Accepts either (video_id, song_name) or a song dictionary.
+    """
+    if isinstance(video_id_or_song, dict):
+        raw_id = (
+            video_id_or_song.get("videoId")
+            or video_id_or_song.get("song_id")
+            or video_id_or_song.get("source_url")
+            or video_id_or_song.get("url")
+            or video_id_or_song.get("source")
+            or video_id_or_song.get("id")
+            or ""
+        )
+        if song_name is None:
+            song_name = (
+                video_id_or_song.get("title")
+                or video_id_or_song.get("song_name")
+                or ""
+            )
+    else:
+        raw_id = str(video_id_or_song or "")
+
+    vid = normalize_video_id(raw_id)
+    if vid == RICK_ROLL_VIDEO_ID:
+        name = str(song_name or "").lower()
+        if RICK_ROLL_ALLOWED_PHRASE not in name:
+            return True
+    return False
+
+
+def record_rick_roll_timestamp(timestamp=None):
+    """Add the timestamp in table 'extra_data' in column 'rick_roll_timestamp'.
+
+    Creates extra_data table if not exists, and adds a timestamp row
+    each time a blacklisted Rick Roll is detected or tries to play.
+    """
+    if timestamp is None:
+        timestamp = str(int(time.time()))
+    else:
+        timestamp = str(timestamp)
+
+    with get_connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS extra_data (
+                rick_roll_timestamp TEXT NOT NULL
+            );
+        """)
+        conn.execute(
+            "INSERT INTO extra_data (rick_roll_timestamp) VALUES (?);",
+            (timestamp,)
+        )
+        conn.commit()
+
+
+def get_rick_roll_timestamps():
+    """Retrieve all recorded rick_roll_timestamp values from extra_data."""
+    init_db()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='extra_data';")
+        if not cursor.fetchone():
+            return []
+        cursor.execute("SELECT rick_roll_timestamp FROM extra_data;")
+        return [row["rick_roll_timestamp"] for row in cursor.fetchall()]
+
+
 
 def sanitize_table_name(name):
     """Sanitize any input string into a safe SQLite table identifier.
@@ -163,7 +237,7 @@ def get_all_tables():
     init_db()
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'extra_data' ORDER BY name;")
         tables = [row["name"] for row in cursor.fetchall()]
     if "history" not in tables:
         create_table("history")
@@ -286,6 +360,15 @@ def init_db():
     if active != "history":
         create_table(active)
 
+    # Initialize extra_data table for tracking blacklisted attempts
+    with get_connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS extra_data (
+                rick_roll_timestamp TEXT NOT NULL
+            );
+        """)
+        conn.commit()
+
     # Check if migration from history.txt is needed
     try:
         with get_connection() as conn:
@@ -329,6 +412,14 @@ def record_played_song(song, table_name=None):
     title = (song.get("title") or "").strip()
     video_id = normalize_video_id(song.get("videoId"))
     if not title or not video_id:
+        return
+
+    if is_blacklisted_rick_roll(video_id, title):
+        logger.warning(
+            "Preventing blacklisted Rick Roll from being recorded to history: %s (%s)",
+            title,
+            video_id,
+        )
         return
 
     table = _safe_table(table_name or get_active_table())
@@ -378,6 +469,8 @@ def get_history_rows(table_name=None):
     """Return all rows from the specified table formatted with datetime strings for web display."""
     init_db()
     table = _safe_table(table_name or get_active_table())
+    if table == "extra_data":
+        return []
     create_table(table)
 
     with get_connection() as conn:
@@ -480,9 +573,9 @@ def delete_entry(table_name, row_id):
 
 
 def delete_table(table_name):
-    """Delete an entire table (cannot delete default 'history')."""
+    """Delete an entire table (cannot delete default 'history' or 'extra_data')."""
     clean = _safe_table(table_name)
-    if clean == "history":
+    if clean in ("history", "extra_data"):
         return False
 
     with get_connection() as conn:

@@ -6,7 +6,7 @@ import os
 import re
 from flask import Blueprint, jsonify, redirect, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
-from core.history_db import normalize_video_id
+from core.history_db import normalize_video_id, is_blacklisted_rick_roll, record_rick_roll_timestamp
 from core.settings import (
     DB_FILENAME,
     MUSIC_ATLAS_KEY,
@@ -459,11 +459,27 @@ def _queue_ai_recommendations(app, recommendations):
             record_history = not app.incogni_mode
 
             for recommendation in recommendations:
-                result = {
-                    "title": recommendation["song_name"],
-                    "videoId": recommendation["song_id"],
-                    "thumbnail": f"https://img.youtube.com/vi/{recommendation['song_id']}/hqdefault.jpg",
-                }
+                song_name = recommendation["song_name"]
+                song_id = recommendation["song_id"]
+
+                if is_blacklisted_rick_roll(song_id, song_name):
+                    logger.warning(f"AI recommendation has blacklisted ID {song_id} for '{song_name}'")
+                    record_rick_roll_timestamp()
+                    picked = YTService.auto_pick_song(song_name)
+                    if (
+                        picked
+                        and picked.get("videoId")
+                        and not is_blacklisted_rick_roll(picked.get("videoId"), picked.get("title"))
+                    ):
+                        result = picked
+                    else:
+                        continue
+                else:
+                    result = {
+                        "title": song_name,
+                        "videoId": song_id,
+                        "thumbnail": f"https://img.youtube.com/vi/{song_id}/hqdefault.jpg",
+                    }
 
                 try:
                     success = YTService.enqueue_youtube_result(

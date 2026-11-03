@@ -11,6 +11,7 @@ import logging
 import urllib.request
 import json
 from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL
+from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -230,14 +231,18 @@ class QueuePlayer:
             for track in recommended_tracks:
                 query = track["title"]
                 try:
-                    resolved = (
-                        {
+                    track_vid = track.get("videoId")
+                    if track_vid and is_blacklisted_rick_roll(track_vid, query):
+                        logger.warning(f"Autoplay detected blacklisted Rick Roll ID {track_vid} for '{query}'")
+                        record_rick_roll_timestamp()
+                        resolved = YTService.auto_pick_song(query)
+                    elif track_vid:
+                        resolved = {
                             "title": query,
-                            "videoId": track["videoId"],
+                            "videoId": track_vid,
                         }
-                        if track.get("videoId")
-                        else YTService.auto_pick_song(query)
-                    )
+                    else:
+                        resolved = YTService.auto_pick_song(query)
                     if resolved and resolved.get("videoId"):
                         if resolved["videoId"] == reference_song.get("videoId"):
                             logger.info(f"Skipping duplicate videoId match for query: {query}")
@@ -292,6 +297,35 @@ class QueuePlayer:
             if song is None:
                 time.sleep(1)
                 continue
+
+            # Detect blacklisted Rick Roll attempt each time it tries to play
+            if is_blacklisted_rick_roll(song):
+                logger.warning(
+                    f"Blacklisted video ID detected as track tries to play: {song.get('title')}. Recording timestamp in extra_data."
+                )
+                record_rick_roll_timestamp()
+                query = (song.get("title") or "").strip()
+                from services.yt_service import YTService
+                picked = YTService.auto_pick_song(query) if query else None
+                if (
+                    picked
+                    and picked.get("videoId")
+                    and not is_blacklisted_rick_roll(picked.get("videoId"), picked.get("title"))
+                ):
+                    watch_url = f"https://www.youtube.com/watch?v={picked['videoId']}"
+                    try:
+                        stream_info = YTService.resolve_stream_info(watch_url)
+                        picked["url"] = stream_info["url"]
+                        picked["source_url"] = watch_url
+                        picked["stream_headers"] = stream_info.get("http_headers", {})
+                        picked["record_history"] = song.get("record_history", True)
+                        song = picked
+                    except Exception as resolve_err:
+                        logger.error(f"Failed to resolve stream for auto-picked replacement track: {resolve_err}")
+                        continue
+                else:
+                    logger.warning(f"Could not auto-pick replacement for blacklisted song '{query}', skipping playback.")
+                    continue
 
             with self.lock:
                 self.current_song = song

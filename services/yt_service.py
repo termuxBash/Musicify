@@ -11,6 +11,7 @@ import requests
 from yt_dlp import YoutubeDL
 import logging
 from core.settings import YOUTUBE_API_KEY, BACKUP_YOUTUBE_API_KEY
+from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,8 @@ YOUTUBE_API_KEYS = [
 
 
 class YTService:
+    is_blacklisted_rick_roll = staticmethod(is_blacklisted_rick_roll)
+    record_rick_roll_timestamp = staticmethod(record_rick_roll_timestamp)
 
     def resolve_stream_info(youtube_url):
 
@@ -55,6 +58,22 @@ class YTService:
             thumbnail
             videoId
         """
+        title = (result.get("title") or "").strip()
+        video_id = result.get("videoId") or ""
+
+        if is_blacklisted_rick_roll(video_id, title):
+            logger.warning(
+                f"Blacklisted video ID {video_id} detected for '{title}'. Recording timestamp and searching via auto_pick_song."
+            )
+            record_rick_roll_timestamp()
+            picked = YTService.auto_pick_song(title)
+            if not picked or not picked.get("videoId"):
+                logger.error(f"Fallback search via auto_pick_song failed for blacklisted video '{title}'")
+                return False
+            if is_blacklisted_rick_roll(picked.get("videoId"), picked.get("title")):
+                logger.error(f"Fallback auto_pick_song returned blacklisted ID for '{title}'")
+                return False
+            result = picked
 
         video_url = (
             f"https://www.youtube.com/watch?v={result['videoId']}"
@@ -162,6 +181,15 @@ class YTService:
             return None
 
         items = res.get("items", [])
+        if not items:
+            return None
+
+        # Filter out blacklisted items (dQw4w9WgXcQ not accompanied by 'Never Gonna Give You Up')
+        items = [
+            item for item in items
+            if not is_blacklisted_rick_roll(item.get("id", {}).get("videoId"), query)
+            and not is_blacklisted_rick_roll(item.get("id", {}).get("videoId"), item.get("snippet", {}).get("title"))
+        ]
         if not items:
             return None
 
