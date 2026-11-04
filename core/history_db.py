@@ -125,12 +125,22 @@ def _safe_table(name):
     somehow bypassed, no dangerous characters could reach the SQL string.
 
     Raises ValueError if the sanitised name fails the allowlist check
-    (this should never happen in practice but is an extra safety net).
+    or if it is not an existing, server-known table.
     """
     clean = sanitize_table_name(name)
     if not _SAFE_TABLE_RE.fullmatch(clean):
         raise ValueError(f"Rejected unsafe table name after sanitisation: {clean!r}")
-    return clean
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        known_tables = {row["name"] for row in cursor.fetchall()}
+
+    # Keep bootstrap compatibility for first-run history table creation.
+    if clean == "history" or clean in known_tables:
+        return clean
+
+    raise ValueError(f"Rejected unknown table name: {clean!r}")
 
 
 def normalize_video_id(value):
