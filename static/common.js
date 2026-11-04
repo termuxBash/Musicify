@@ -48,10 +48,62 @@ function toggleMenu(){
     const main = document.getElementById("main");
     panel.classList.toggle("open");
     overlay.classList.toggle("show");
+    if (!panel.classList.contains("open")) {
+        closeSettingsMenu();
+    }
     if(window.innerWidth >= 768 && main){
         main.classList.toggle("shift");
     }
 }
+
+function toggleSettingsMenu(e){
+    if (e) e.stopPropagation();
+    const menu = document.getElementById("settingsPopupMenu");
+    if (menu) {
+        menu.classList.toggle("show");
+    }
+}
+
+function closeSettingsMenu(){
+    const menu = document.getElementById("settingsPopupMenu");
+    if (menu) {
+        menu.classList.remove("show");
+    }
+}
+
+async function shutdownServer(){
+    if (!confirm("Are you sure you want to shut down the Music Server?")) {
+        return;
+    }
+    closeSettingsMenu();
+    showPopup("Shutting down Music Server...");
+    try {
+        const res = await fetch("/shutdown", { method: "POST" });
+        if (res.ok) {
+            showPopup("Music Server has stopped.");
+        } else {
+            showPopup("Server stop requested.");
+        }
+    } catch (e) {
+        showPopup("Music Server has stopped.");
+    }
+}
+
+window.addEventListener("click", (e) => {
+    const menu = document.getElementById("settingsPopupMenu");
+    const btn = document.getElementById("settingsBtn");
+    if (menu && menu.classList.contains("show")) {
+        if (!menu.contains(e.target) && !btn?.contains(e.target)) {
+            closeSettingsMenu();
+        }
+    }
+});
+
+window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+        closeSettingsMenu();
+    }
+});
 
 async function toggleLyrics(){
     await fetch("/toggle_lyrics", {

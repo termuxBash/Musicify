@@ -160,6 +160,192 @@ nav {
     transition: color 0.3s;
 }
 
+.side-panel-footer {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+}
+
+.settings-popup-container {
+    position: relative;
+    width: 100%;
+}
+
+.side-panel-switch-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.settings-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    color: #e0e0e0;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.settings-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: var(--spotify-green);
+    color: var(--spotify-green);
+}
+
+.settings-icon-btn svg {
+    transition: transform 0.3s ease;
+}
+
+.settings-icon-btn:hover svg {
+    transform: rotate(30deg);
+}
+
+.settings-icon-btn:active {
+    transform: scale(0.95);
+}
+
+.side-panel-switch-row .switch-player-link {
+    flex: 1;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.88rem;
+}
+
+.side-panel-switch-row .switch-player-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--spotify-green);
+    color: #1ed760;
+}
+
+.settings-popup-menu {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+    right: 0;
+    background: #18181b;
+    border: 1px solid #333338;
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75);
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 2200;
+    animation: popupFadeIn 0.18s ease-out;
+}
+
+@keyframes popupFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.settings-popup-menu.show {
+    display: flex;
+}
+
+.settings-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #eee;
+}
+
+.settings-popup-close {
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 1.25rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+    transition: color 0.2s ease;
+}
+
+.settings-popup-close:hover {
+    color: #fff;
+}
+
+.settings-popup-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.settings-popup-label {
+    font-size: 0.88rem;
+    color: #ccc;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.settings-popup-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 2px 0;
+}
+
+.settings-popup-action-btn {
+    display: block;
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: #ddd;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.settings-popup-action-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--spotify-green);
+    color: #fff;
+}
+
+.settings-popup-action-btn.settings-shutdown-btn {
+    background: rgba(220, 53, 69, 0.15);
+    border-color: rgba(220, 53, 69, 0.35);
+    color: #ff6b6b;
+}
+
+.settings-popup-action-btn.settings-shutdown-btn:hover {
+    background: rgba(220, 53, 69, 0.3);
+    border-color: #dc3545;
+    color: #fff;
+}
+
 /* ==========================================================================
    4. MAIN CONTENT AREA
    ========================================================================== */

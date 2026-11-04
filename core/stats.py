@@ -4,6 +4,7 @@ It has endpoints for retrieving CPU usage, current volume, queue status, now pla
 It also includes routes for managing playlists and removing songs from the queue."""
 from time import sleep, time
 import threading
+import signal
 
 from flask import Blueprint, jsonify, request ,current_app
 import psutil
@@ -103,6 +104,24 @@ def toggle_incogni():
         "status": "success",
         "incogni_mode": current_app.incogni_mode,
     })
+
+
+@stats_bp.route("/shutdown", methods=["POST"])
+def shutdown():
+    player = getattr(current_app, "player", None)
+    pid = os.getpid()
+
+    def stop_server():
+        sleep(0.5)
+        try:
+            if player:
+                player.stop()
+        except Exception as e:
+            logger.error(f"Error stopping player during shutdown: {e}")
+        os.kill(pid, signal.SIGTERM)
+
+    threading.Thread(target=stop_server, daemon=True).start()
+    return jsonify({"status": "success", "message": "Server is shutting down..."})
 
 @stats_bp.route("/playlists")
 def playlists():
