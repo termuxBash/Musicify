@@ -87,15 +87,22 @@
 
 /* Base DOM Nodes cached for folder recovery lookup toggling */
 const backupOriginalGridContent = document.getElementById("fileGridContainer").innerHTML;
+let searchRequestId = 0;
+let searchDebounceTimer = null;
 
 async function performSearch() {
+    clearTimeout(searchDebounceTimer);
     const QueryStr = document.getElementById("searchInput").value.trim();
     if(!QueryStr) return;
+
+    const thisRequestId = ++searchRequestId;
 
     try {
         const response = await fetch(`/local/search?q=${encodeURIComponent(QueryStr)}`);
         const items = await response.json();
         
+        if (thisRequestId !== searchRequestId) return;
+
         const gridContainer = document.getElementById("fileGridContainer");
         gridContainer.innerHTML = ""; // Clear active viewport elements
 
@@ -136,6 +143,8 @@ async function performSearch() {
 }
 
 function clearSearchState() {
+    clearTimeout(searchDebounceTimer);
+    searchRequestId++;
     document.getElementById("searchInput").value = "";
     document.getElementById("fileGridContainer").innerHTML = backupOriginalGridContent;
     document.getElementById("explorerPath").textContent = "Explorer: /{{ current_path }}";
@@ -143,10 +152,28 @@ function clearSearchState() {
     document.getElementById("playFolderBtn").style.display = "inline-block";
 }
 
+// Automatically start searching as soon as more than 3 characters are typed
+document.getElementById("searchInput").addEventListener("input", function() {
+    const query = this.value.trim();
+    clearTimeout(searchDebounceTimer);
+
+    if (query.length === 0) {
+        clearSearchState();
+        return;
+    }
+
+    if (query.length >= 3) {
+        searchDebounceTimer = setTimeout(() => {
+            performSearch();
+        }, 250);
+    }
+});
+
 // Support hitting 'Enter' key directly inside inputs to run operations
 document.getElementById("searchInput").addEventListener("keypress", function(event) {
     if (event.key === "Enter") {
         event.preventDefault();
+        clearTimeout(searchDebounceTimer);
         performSearch();
     }
 });
