@@ -69,7 +69,7 @@ def acquire():
 
 # ---------- QUEUE ----------
 
-def get_random_local_track_payload():
+def get_random_local_track_payload(subpath=""):
     """Helper function to find a random audio file and format its payload."""
     audio_exts = (
         '.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.opus', '.webm', '.wma',
@@ -77,8 +77,19 @@ def get_random_local_track_payload():
         '.tta', '.mp4', '.avi', '.mov', '.flv', '.mkv', '.mpeg', '.mpg', '.3gp', '.wmv'
     )
     
+    try:
+        target_dir = _safe_path(ROOT_DIR, subpath or "")
+    except (TypeError, ValueError):
+        return None
+
+    if not os.path.exists(target_dir):
+        return None
+
+    if not os.path.isdir(target_dir):
+        target_dir = os.path.dirname(target_dir)
+
     all_files = []
-    for root, _, filenames in os.walk(ROOT_DIR):
+    for root, _, filenames in os.walk(target_dir):
         for f in filenames:
             if f.lower().endswith(audio_exts):
                 abs_path = _safe_path(root, f)
@@ -100,12 +111,24 @@ def get_random_local_track_payload():
     }
 
 @local_bp.route("/enqueue_random", methods=["POST"])
+@local_bp.route("/enque_random", methods=["POST"])
 def enqueue_random():
-    """Route targeted by the UI button to queue one random track."""
+    """Route targeted by the UI button to queue one random track from current dir."""
     if current_app.playback.owner is None:
         current_app.playback.acquire("local")
         
-    payload = get_random_local_track_payload()
+    data = request.get_json(silent=True) or {}
+    subpath = data.get("path")
+    if subpath is None:
+        subpath = request.args.get("path")
+    if subpath is None and request.referrer:
+        from urllib.parse import urlparse, unquote
+        parsed = urlparse(request.referrer)
+        prefix = "/local/browse/"
+        if prefix in parsed.path:
+            subpath = unquote(parsed.path.split(prefix, 1)[1])
+
+    payload = get_random_local_track_payload(subpath or "")
     if not payload:
         return jsonify({"error": "No local music files found"}), 404
         

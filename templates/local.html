@@ -80,6 +80,7 @@
 <script>
     window.API_PREFIX = "{{ api_prefix }}";
     window.CURRENT_OWNER = "local";
+    window.CURRENT_PATH = {{ current_path|tojson }};
 </script>
 <script src="{{ url_for('static', filename='common.js') }}"></script>
 
@@ -178,7 +179,7 @@ document.getElementById("searchInput").addEventListener("keypress", function(eve
     }
 });
 
-async function queueRandomSong(btn) {
+async function queueRandomSong(btn, folderPath = window.CURRENT_PATH) {
     const originalText = btn.innerHTML;
     btn.innerHTML = "Queueing... 🎲";
     btn.disabled = true;
@@ -186,7 +187,8 @@ async function queueRandomSong(btn) {
     try {
         let res = await fetch("/local/enqueue_random", {
             method: "POST",
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: folderPath || "" })
         });
 
         if (res.status === 403) {
@@ -203,7 +205,8 @@ async function queueRandomSong(btn) {
                 if (acquire.ok) {
                     res = await fetch("/local/enqueue_random", {
                         method: "POST",
-                        headers: { "Content-Type": "application/json" }
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ path: folderPath || "" })
                     });
                 }
             }
@@ -212,8 +215,17 @@ async function queueRandomSong(btn) {
         if (res.ok) {
             const data = await res.json();
             console.log("Successfully queued random track:", data.song.title);
+            if (typeof showPopup === "function") {
+                showPopup(`🎲 Queued: ${data.song.title}`);
+            }
         } else {
-            alert("Failed to queue random song.");
+            const errData = await res.json().catch(() => ({}));
+            const msg = errData.error || "Failed to queue random song.";
+            if (typeof showPopup === "function") {
+                showPopup(msg);
+            } else {
+                alert(msg);
+            }
         }
     } catch (e) {
         console.error("Error queueing random track:", e);
