@@ -97,6 +97,18 @@
     background: #991b1b;
 }
 
+.hist-btn-edit {
+    background: #1e293b;
+    border-color: #3b82f6;
+    color: #93c5fa;
+}
+
+.hist-btn-edit:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: white;
+}
+
 .active-pill {
     background: rgba(29, 185, 84, 0.2);
     color: var(--spotify-green);
@@ -264,6 +276,9 @@
     padding: 24px;
     width: 90%;
     max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-sizing: border-box;
     box-shadow: 0 8px 30px rgba(0,0,0,0.5);
 }
 
@@ -304,6 +319,95 @@
     font-size: 0.7rem;
     margin-left: 4px;
     opacity: 0.8;
+}
+
+/* Thinner # column */
+.col-id {
+    width: 32px !important;
+    min-width: 28px;
+    max-width: 36px;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    text-align: center;
+}
+
+/* Mobile Portrait Mode */
+@media screen and (max-width: 768px), screen and (orientation: portrait) and (max-width: 900px) {
+    .hist-page-container {
+        padding: 70px 8px 120px;
+    }
+
+    .hist-header-card {
+        padding: 14px;
+        margin-bottom: 14px;
+    }
+
+    .hist-title-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .table-controls {
+        width: 100%;
+        gap: 8px;
+    }
+
+    .search-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .hist-search-input {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    /* Mobile portrait: hide #, Date & Time, and Video ID */
+    .col-id,
+    .col-datetime,
+    .col-video-id {
+        display: none !important;
+    }
+
+    .hist-table th,
+    .hist-table td {
+        padding: 10px 6px;
+    }
+
+    .col-song-name {
+        width: auto;
+    }
+
+    .col-listens {
+        width: 60px !important;
+        min-width: 50px;
+        text-align: center;
+    }
+
+    .col-listens .input-sm {
+        width: 48px;
+        padding: 5px 2px;
+        font-size: 0.85rem;
+    }
+
+    .col-actions {
+        width: 112px !important;
+        min-width: 105px;
+        text-align: right;
+    }
+
+    .row-actions {
+        gap: 4px;
+        justify-content: flex-end;
+    }
+
+    .btn-icon {
+        padding: 6px 7px;
+        font-size: 0.82rem;
+    }
 }
 </style>
 
@@ -363,12 +467,12 @@
         <table class="hist-table" id="historyTable">
             <thead>
                 <tr>
-                    <th style="width: 50px;" data-column="id" data-original="#" onclick="setSort('id')">#</th>
-                    <th data-column="song_name" data-original="Song Name" onclick="setSort('song_name')">Song Name</th>
-                    <th style="width: 170px;" data-column="song_id" data-original="Video ID" onclick="setSort('song_id')">Video ID</th>
-                    <th style="width: 90px;" data-column="listens" data-original="Listens" onclick="setSort('listens')">Listens</th>
-                    <th style="width: 220px;" data-column="datetime" data-original="Date & Time (Picker)" onclick="setSort('datetime')">Date & Time (Picker)</th>
-                    <th style="width: 150px; text-align: right;">Actions</th>
+                    <th class="col-id" data-column="id" data-original="#" onclick="setSort('id')">#</th>
+                    <th class="col-song-name" data-column="song_name" data-original="Song Name" onclick="setSort('song_name')">Song Name</th>
+                    <th class="col-listens" style="width: 90px;" data-column="listens" data-original="Listens" onclick="setSort('listens')">Listens</th>
+                    <th class="col-datetime" style="width: 220px;" data-column="datetime" data-original="Date & Time (Picker)" onclick="setSort('datetime')">Date & Time (Picker)</th>
+                    <th class="col-video-id" style="width: 170px;" data-column="song_id" data-original="Video ID" onclick="setSort('song_id')">Video ID</th>
+                    <th class="col-actions" style="width: 135px; text-align: right;">Actions</th>
                 </tr>
             </thead>
             <tbody id="tableBody">
@@ -379,31 +483,31 @@
                 {% else %}
                 {% for r in rows %}
                 <tr id="row-{{ r.id }}" data-search="{{ r.song_name|lower }} {{ r.song_id|lower }}">
-                    <td style="color:#666;font-family:monospace;">{{ r.id }}</td>
-                    <td>
-                        <input type="text" class="hist-input song-name-input" value="{{ r.song_name }}">
+                    <td class="col-id" style="color:#666;font-family:monospace;">{{ r.id }}</td>
+                    <td class="col-song-name">
+                        <input type="text" class="hist-input song-name-input" value="{{ r.song_name }}" onchange="saveRow({{ r.id }})">
                     </td>
-                    <td>
+                    <td class="col-listens">
+                        <input type="number" min="0" class="hist-input input-sm listens-input" value="{{ r.number_of_listens }}" onchange="saveRow({{ r.id }})">
+                    </td>
+                    <td class="col-datetime">
+                        <input type="datetime-local" class="hist-datetime-picker datetime-input" value="{{ r.datetime_str }}" onchange="saveRow({{ r.id }})">
+                    </td>
+                    <td class="col-video-id">
                         <div class="cell-song-id">
-                            <input type="text" class="hist-input song-id-input" value="{{ r.song_id }}">
+                            <input type="text" class="hist-input song-id-input" value="{{ r.song_id }}" onchange="saveRow({{ r.id }})">
                             <a href="https://www.youtube.com/watch?v={{ r.song_id }}" target="_blank" class="yt-link-btn" title="Open YouTube Video">↗</a>
                         </div>
                     </td>
-                    <td>
-                        <input type="number" min="0" class="hist-input input-sm listens-input" value="{{ r.number_of_listens }}">
-                    </td>
-                    <td>
-                        <input type="datetime-local" class="hist-datetime-picker datetime-input" value="{{ r.datetime_str }}">
-                    </td>
-                    <td style="text-align: right;">
+                    <td class="col-actions" style="text-align: right;">
                         <div class="row-actions" style="justify-content: flex-end;">
-                            <button class="hist-btn hist-btn-primary btn-icon" onclick="saveRow({{ r.id }})" title="Save changes">
-                                💾
-                            </button>
-                            <button class="hist-btn btn-icon" onclick="queueSong('{{ r.song_name|replace('\'', '\\\'') }}', '{{ r.song_id }}')" title="Queue track now">
+                            <button class="hist-btn btn-icon btn-queue" onclick="queueRowSong({{ r.id }})" title="Queue track now">
                                 🎵
                             </button>
-                            <button class="hist-btn hist-btn-danger btn-icon" onclick="deleteRow({{ r.id }})" title="Delete row">
+                            <button class="hist-btn hist-btn-edit btn-icon btn-edit" onclick="openEditRecordModal({{ r.id }})" title="Edit record">
+                                ✏️
+                            </button>
+                            <button class="hist-btn hist-btn-danger btn-icon btn-delete" onclick="deleteRow({{ r.id }})" title="Delete row">
                                 ✕
                             </button>
                         </div>
@@ -440,6 +544,42 @@
             <div class="modal-buttons">
                 <button type="button" class="hist-btn" onclick="closeAddRecordModal()">Cancel</button>
                 <button type="submit" class="hist-btn hist-btn-primary">Add Record</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Edit Record -->
+<div class="modal-overlay" id="editRecordModal" onclick="if(event.target === this) closeEditRecordModal()">
+    <div class="modal-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0; color: var(--spotify-green);" id="editModalTitle">✏️ Edit History Record</h3>
+            <button type="button" onclick="closeEditRecordModal()" style="background: none; border: none; color: #888; font-size: 1.2rem; cursor: pointer; padding: 0 4px;" title="Close">✕</button>
+        </div>
+        <form id="editRecordForm" onsubmit="submitEditRecord(event)">
+            <input type="hidden" id="editRecordId">
+            <div class="form-group">
+                <label for="editSongName">Song Name</label>
+                <input type="text" id="editSongName" class="hist-input" required placeholder="Artist - Title">
+            </div>
+            <div class="form-group">
+                <label for="editSongId">YouTube Video ID</label>
+                <div class="cell-song-id">
+                    <input type="text" id="editSongId" class="hist-input" required placeholder="e.g. dQw4w9WgXcQ" oninput="updateEditYtPreview(this.value)">
+                    <a id="editYtLink" href="#" target="_blank" class="yt-link-btn" title="Open YouTube Video" style="display: none;">↗</a>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="editListens">Number of Listens</label>
+                <input type="number" id="editListens" class="hist-input" min="0" required>
+            </div>
+            <div class="form-group">
+                <label for="editDateTime">Date and Time</label>
+                <input type="datetime-local" id="editDateTime" class="hist-datetime-picker" style="width: 100%; box-sizing: border-box;" required>
+            </div>
+            <div class="modal-buttons">
+                <button type="button" class="hist-btn" onclick="closeEditRecordModal()">Cancel</button>
+                <button type="submit" class="hist-btn hist-btn-primary">💾 Save Changes</button>
             </div>
         </form>
     </div>
@@ -555,6 +695,101 @@ document.addEventListener('DOMContentLoaded', function() {
     renderTable();
     updateHeaderIndicators();
 });
+function queueRowSong(id) {
+    const tr = document.getElementById("row-" + id);
+    if (!tr) return;
+    const songName = tr.querySelector(".song-name-input").value.trim();
+    const songId = tr.querySelector(".song-id-input").value.trim();
+    queueSong(songName, songId);
+}
+
+function openEditRecordModal(id) {
+    const tr = document.getElementById("row-" + id);
+    if (!tr) return;
+
+    const songName = tr.querySelector(".song-name-input").value;
+    const songId = tr.querySelector(".song-id-input").value;
+    const listens = tr.querySelector(".listens-input").value;
+    const dtStr = tr.querySelector(".datetime-input").value;
+
+    document.getElementById("editRecordId").value = id;
+    document.getElementById("editModalTitle").textContent = "✏️ Edit Record #" + id;
+    document.getElementById("editSongName").value = songName;
+    document.getElementById("editSongId").value = songId;
+    document.getElementById("editListens").value = listens;
+    document.getElementById("editDateTime").value = dtStr;
+
+    updateEditYtPreview(songId);
+    document.getElementById("editRecordModal").classList.add("open");
+}
+
+function updateEditYtPreview(vid) {
+    const ytLink = document.getElementById("editYtLink");
+    if (vid && vid.trim()) {
+        ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(vid.trim());
+        ytLink.style.display = "inline";
+    } else {
+        ytLink.style.display = "none";
+    }
+}
+
+function closeEditRecordModal() {
+    document.getElementById("editRecordModal").classList.remove("open");
+}
+
+async function submitEditRecord(e) {
+    e.preventDefault();
+    const id = document.getElementById("editRecordId").value;
+    const songName = document.getElementById("editSongName").value.trim();
+    const songId = document.getElementById("editSongId").value.trim();
+    const listens = parseInt(document.getElementById("editListens").value, 10);
+    const dtStr = document.getElementById("editDateTime").value;
+
+    if (!songName || !songId) {
+        showPopup("Song name and ID are required.");
+        return;
+    }
+
+    try {
+        const res = await fetch(window.API_PREFIX + "/hist/api/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                table: CURRENT_TABLE,
+                id: parseInt(id, 10),
+                song_name: songName,
+                song_id: songId,
+                number_of_listens: isNaN(listens) ? 1 : listens,
+                datetime_str: dtStr
+            })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            const tr = document.getElementById("row-" + id);
+            if (tr) {
+                const nameInput = tr.querySelector(".song-name-input");
+                if (nameInput) nameInput.value = songName;
+                const idInput = tr.querySelector(".song-id-input");
+                if (idInput) idInput.value = songId;
+                const listensInput = tr.querySelector(".listens-input");
+                if (listensInput) listensInput.value = isNaN(listens) ? 1 : listens;
+                const dtInput = tr.querySelector(".datetime-input");
+                if (dtInput) dtInput.value = dtStr;
+                const ytLink = tr.querySelector(".yt-link-btn");
+                if (ytLink) ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(songId);
+                tr.setAttribute("data-search", `${songName.toLowerCase()} ${songId.toLowerCase()}`);
+            }
+            closeEditRecordModal();
+            showPopup("Record #" + id + " saved successfully!");
+        } else {
+            showPopup(data.error || "Failed to update record.");
+        }
+    } catch (err) {
+        showPopup("Network error updating record.");
+    }
+}
+
 async function saveRow(id) {
     const tr = document.getElementById("row-" + id);
     if (!tr) return;
@@ -586,6 +821,8 @@ async function saveRow(id) {
         const data = await res.json();
         if (res.ok) {
             tr.setAttribute("data-search", `${songName.toLowerCase()} ${songId.toLowerCase()}`);
+            const ytLink = tr.querySelector(".yt-link-btn");
+            if (ytLink) ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(songId);
             showPopup("Record #" + id + " saved successfully!");
         } else {
             showPopup(data.error || "Failed to update record.");
@@ -767,6 +1004,14 @@ async function submitNewTable(e) {
         showPopup("Error creating table.");
     }
 }
+
+document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") {
+        closeEditRecordModal();
+        closeAddRecordModal();
+        closeNewTableModal();
+    }
+});
 </script>
 <script src="{{ url_for('static', filename='common.js') }}"></script>
 </body>
