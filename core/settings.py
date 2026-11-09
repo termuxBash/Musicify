@@ -20,11 +20,18 @@ def env_list(name, default):
         return default
     return [item.strip() for item in value.split(",") if item.strip()]
 
-def env_hex(name, default=0):
+def env_int(name, default=0):
     value = os.getenv(name)
     if value is None:
         return default
-    return int(value.strip(), 16)
+    v = value.split("#")[0].strip()
+    try:
+        return int(v)
+    except ValueError:
+        return default
+
+def env_hex(name, default=0):
+    return env_int(name, default)
 
 #Server settings
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
@@ -70,7 +77,7 @@ def set_history_table(table_name):
     with _history_file_lock:
         HISTORY_TABLE = table_name
 
-TIME_OFFSET = env_hex("TIME_OFFSET")
+TIME_OFFSET = env_int("TIME_OFFSET", 0)
 DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)
 DEFAULT_AUTOPLAY_ENABLED = env_bool("AUTOPLAY_ENABLED", False)
 DEFAULT_INCOGNI_MODE = env_bool("INCOGNI_MODE", False)

@@ -16,6 +16,12 @@ Usage:
 
     # Merge duplicate video IDs in all existing tables:
     python3 migrate.py --unique-song-id
+
+    # Update existing tables and change records to INTEGER timestamp:
+    python3 migrate.py --integer-timestamp
+
+    # Update a specific table to INTEGER timestamp:
+    python3 migrate.py --integer-timestamp --table history
 """
 
 import argparse
@@ -31,7 +37,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.settings import PLAYLIST_DIR, TIME_OFFSET
 from core.history_db import (
-    _migrate_unique_song_id as _enforce_unique_song_id,
     create_table,
     get_all_tables,
     get_connection,
@@ -41,9 +46,36 @@ from core.history_db import (
 )
 
 
+def default_timestamp():
+    """Generate default integer timestamp offset relative to TIME_OFFSET."""
+    return max(0, int(time.time()) - TIME_OFFSET)
+
+
 def default_hex_timestamp():
-    """Generate default hex timestamp relative to TIME_OFFSET."""
-    return format(max(0, int(time.time()) - TIME_OFFSET), "x")
+    """Generate default hex timestamp relative to TIME_OFFSET (legacy)."""
+    return format(default_timestamp(), "x")
+
+
+def parse_legacy_timestamp(raw_ts):
+    """Convert a timestamp (legacy hex string, full Unix timestamp, or int) into an integer offset from TIME_OFFSET."""
+    if raw_ts is None or raw_ts == "":
+        return default_timestamp()
+    if isinstance(raw_ts, int):
+        val = raw_ts
+    else:
+        s = str(raw_ts).strip()
+        if not s:
+            return default_timestamp()
+        try:
+            val = int(s, 16)
+        except ValueError:
+            try:
+                val = int(s)
+            except ValueError:
+                return default_timestamp()
+    if val >= 1_000_000_000:
+        return max(0, val - TIME_OFFSET)
+    return max(0, val)
 
 
 def parse_playlist_line(line):
@@ -71,8 +103,9 @@ def parse_playlist_line(line):
     if len(parts) >= 3 and parts[2].isdigit():
         listens = max(1, int(parts[2]))
 
-    # Parse timestamp
-    timestamp = parts[3] if len(parts) >= 4 and parts[3] else default_hex_timestamp()
+    # Parse timestamp as integer offset
+    raw_ts = parts[3].strip() if len(parts) >= 4 and parts[3] else None
+    timestamp = parse_legacy_timestamp(raw_ts) if raw_ts else default_timestamp()
 
     return {
         "song_name": song_name,
@@ -151,7 +184,92 @@ def migrate_file(file_path, target_table=None):
 
 def _migrate_unique_song_id(table):
     """Merge duplicate video IDs and enforce UNIQUE(song_id) for one table."""
-    _enforce_unique_song_id(table)
+    clean = sanitize_table_name(table)
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check whether any unique index contains only song_id.
+        has_unique_song_id = False
+        cursor.execute(f'PRAGMA index_list("{clean}");')
+        for index in cursor.fetchall():
+            if not index["unique"]:
+                continue
+            cursor.execute(f'PRAGMA index_info("{index["name"]}");')
+            columns = [row["name"] for row in cursor.fetchall()]
+            if columns == ["song_id"]:
+                has_unique_song_id = True
+                break
+
+        cursor.execute(f'SELECT song_id FROM "{clean}";')
+        stored_ids = [row["song_id"] for row in cursor.fetchall()]
+        normalized_ids = [normalize_video_id(song_id) for song_id in stored_ids]
+        invalid_ids = sum(not song_id for song_id in normalized_ids)
+        ids_changed = any(
+            normalized and normalized != stored
+            for stored, normalized in zip(stored_ids, normalized_ids)
+        )
+        has_normalized_duplicates = len(set(normalized_ids)) != len(normalized_ids)
+        if has_unique_song_id and not invalid_ids and not ids_changed and not has_normalized_duplicates:
+            return
+
+        print(f"🔧 Migrating table '{clean}': enforcing UNIQUE(song_id)...")
+
+        cursor.execute(f"""
+            SELECT
+                MIN(id) AS id,
+                song_name,
+                song_id,
+                SUM(number_of_listens) AS number_of_listens,
+                MAX(timestamp) AS timestamp
+            FROM "{clean}"
+            GROUP BY song_id;
+        """)
+        merged_rows = cursor.fetchall()
+        normalized_rows = {}
+        for row in merged_rows:
+            song_id = normalize_video_id(row["song_id"])
+            if not song_id:
+                continue
+            int_ts = parse_legacy_timestamp(row["timestamp"])
+            listens = int(row["number_of_listens"])
+            if song_id in normalized_rows:
+                previous = normalized_rows[song_id]
+                normalized_rows[song_id] = (
+                    previous[0],
+                    previous[1] + listens,
+                    max(previous[2], int_ts),
+                )
+            else:
+                normalized_rows[song_id] = (
+                    row["song_name"],
+                    listens,
+                    int_ts,
+                )
+
+        tmp = f"_tmp_migrate_{clean}"
+        conn.execute(f'DROP TABLE IF EXISTS "{tmp}";')
+        conn.execute(f"""
+            CREATE TABLE "{tmp}" (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                song_name TEXT NOT NULL,
+                song_id   TEXT NOT NULL UNIQUE,
+                number_of_listens INTEGER NOT NULL DEFAULT 1,
+                timestamp INTEGER NOT NULL
+            );
+        """)
+
+        for song_id, (song_name, listens, timestamp) in normalized_rows.items():
+            conn.execute(
+                f'INSERT INTO "{tmp}" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
+                (song_name, song_id, listens, timestamp)
+            )
+
+        conn.execute(f'DROP TABLE "{clean}";')
+        conn.execute(f'ALTER TABLE "{tmp}" RENAME TO "{clean}";')
+        conn.execute(f"""
+            CREATE INDEX IF NOT EXISTS "idx_{clean}_song" ON "{clean}" (song_name, song_id);
+        """)
+        conn.commit()
 
 
 def migrate_unique_song_ids():
@@ -160,6 +278,91 @@ def migrate_unique_song_ids():
     for table_name in tables:
         _migrate_unique_song_id(table_name)
     return tables
+
+
+def migrate_table_to_integer(table_name):
+    """Migrate a specific table to use INTEGER timestamp column and convert all records to integer offsets."""
+    clean = sanitize_table_name(table_name)
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(f'PRAGMA table_info("{clean}");')
+        columns = {row["name"]: row for row in cursor.fetchall()}
+        if "timestamp" not in columns:
+            return False, 0
+
+        ts_col = columns["timestamp"]
+        is_integer_type = ts_col["type"].upper() == "INTEGER"
+
+        cursor.execute(f'SELECT COUNT(*) as cnt FROM "{clean}" WHERE typeof(timestamp) != "integer";')
+        non_int_count = cursor.fetchone()["cnt"]
+
+        if is_integer_type and non_int_count == 0:
+            return False, 0
+
+        cursor.execute(f'SELECT id, song_name, song_id, number_of_listens, timestamp FROM "{clean}" ORDER BY id ASC;')
+        rows = cursor.fetchall()
+
+        merged_rows = {}
+        for row in rows:
+            sid = normalize_video_id(row["song_id"])
+            if not sid:
+                continue
+            int_ts = parse_legacy_timestamp(row["timestamp"])
+            listens = int(row["number_of_listens"])
+            if sid in merged_rows:
+                prev = merged_rows[sid]
+                merged_rows[sid] = (
+                    prev[0],
+                    row["song_name"] if listens > prev[3] else prev[1],
+                    sid,
+                    prev[3] + listens,
+                    max(prev[4], int_ts),
+                )
+            else:
+                merged_rows[sid] = (
+                    row["id"],
+                    row["song_name"],
+                    sid,
+                    listens,
+                    int_ts,
+                )
+
+        to_insert = list(merged_rows.values())
+
+        tmp = f"_tmp_migrate_int_{clean}"
+        conn.execute(f'DROP TABLE IF EXISTS "{tmp}";')
+        conn.execute(f"""
+            CREATE TABLE "{tmp}" (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                song_name TEXT NOT NULL,
+                song_id   TEXT NOT NULL UNIQUE,
+                number_of_listens INTEGER NOT NULL DEFAULT 1,
+                timestamp INTEGER NOT NULL
+            );
+        """)
+
+        conn.executemany(
+            f'INSERT INTO "{tmp}" (id, song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?, ?);',
+            to_insert
+        )
+
+        conn.execute(f'DROP TABLE "{clean}";')
+        conn.execute(f'ALTER TABLE "{tmp}" RENAME TO "{clean}";')
+        conn.execute(f"""
+            CREATE INDEX IF NOT EXISTS "idx_{clean}_song" ON "{clean}" (song_name, song_id);
+        """)
+        conn.commit()
+        return True, len(to_insert)
+
+
+def migrate_all_tables_to_integer():
+    """Migrate all existing tables in history.sqlite3 to INTEGER timestamp."""
+    tables = get_all_tables()
+    results = {}
+    for table_name in tables:
+        migrated, count = migrate_table_to_integer(table_name)
+        results[table_name] = (migrated, count)
+    return results
 
 
 def main():
@@ -173,7 +376,7 @@ def main():
     )
     parser.add_argument(
         "-t", "--table",
-        help="Target table name (only valid when migrating a single file).",
+        help="Target table name (valid with --integer-timestamp or when migrating a single file).",
     )
     parser.add_argument(
         "-d", "--dir",
@@ -185,6 +388,12 @@ def main():
         action="store_true",
         help="Merge duplicate video IDs and enforce UNIQUE(song_id) on all existing tables.",
     )
+    parser.add_argument(
+        "--integer-timestamp", "--to-integer", "--migrate-timestamps",
+        action="store_true",
+        dest="integer_timestamp",
+        help="Update existing table(s) to use INTEGER timestamp column and change all records to store it as INTEGER.",
+    )
 
     args = parser.parse_args()
     db_path = get_db_path()
@@ -195,8 +404,29 @@ def main():
     if args.unique_song_id:
         tables = migrate_unique_song_ids()
         print(f"✅ UNIQUE(song_id) migration completed for {len(tables)} table(s).")
-        if not args.files:
+        if not args.files and not args.integer_timestamp:
             print(f"📋 Current tables in database: {', '.join(tables)}")
+            return
+
+    if args.integer_timestamp:
+        if args.table:
+            target_table = sanitize_table_name(args.table)
+            migrated, count = migrate_table_to_integer(target_table)
+            if migrated:
+                print(f"✅ Table '{target_table}' updated to INTEGER timestamp ({count} records converted).")
+            else:
+                print(f"ℹ️  Table '{target_table}' is already using INTEGER timestamp.")
+        else:
+            results = migrate_all_tables_to_integer()
+            migrated_count = sum(1 for m, _ in results.values() if m)
+            total_records = sum(c for _, c in results.values())
+            print(f"✅ INTEGER timestamp migration completed: {migrated_count}/{len(results)} table(s) updated ({total_records} total records converted).")
+            for tbl, (migrated, count) in results.items():
+                status = f"updated ({count} records)" if migrated else "already up to date"
+                print(f"   - {tbl}: {status}")
+
+        if not args.files:
+            print(f"📋 Current tables in database: {', '.join(get_all_tables())}")
             return
 
     if args.files:

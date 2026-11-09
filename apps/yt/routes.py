@@ -323,10 +323,14 @@ def get_gemini_recommendations(user_prompt=""):
         song_name, play_count = parts[0].strip(), parts[2].strip()
         timestamp = 0
         if len(parts) >= 4:
+            ts_str = parts[3].strip()
             try:
-                timestamp = int(parts[3].strip(), 16)
+                timestamp = int(ts_str)
             except ValueError:
-                pass
+                try:
+                    timestamp = int(ts_str, 16)
+                except ValueError:
+                    pass
 
         cleaned_name = cleanup_pattern.sub(" ", song_name)
         cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip(" -")

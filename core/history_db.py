@@ -116,7 +116,7 @@ def sanitize_table_name(name):
 _SAFE_TABLE_RE = re.compile(r'^[A-Za-z0-9_]+$')
 
 
-def _safe_table(name):
+def _safe_table(name, allow_create=False):
     """Return a sanitised table name that is guaranteed injection-free.
 
     This is the single choke-point used by every SQL-executing function.
@@ -131,13 +131,15 @@ def _safe_table(name):
     if not _SAFE_TABLE_RE.fullmatch(clean):
         raise ValueError(f"Rejected unsafe table name after sanitisation: {clean!r}")
 
+    if allow_create or clean == "history":
+        return clean
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         known_tables = {row["name"] for row in cursor.fetchall()}
 
-    # Keep bootstrap compatibility for first-run history table creation.
-    if clean == "history" or clean in known_tables:
+    if clean in known_tables:
         return clean
 
     raise ValueError(f"Rejected unknown table name: {clean!r}")
@@ -188,31 +190,35 @@ def get_connection():
     return conn
 
 
-def hex_to_iso_datetime(hex_str):
-    """Convert stored hex timestamp (elapsed or full) to an ISO datetime string for HTML inputs."""
+def timestamp_to_iso_datetime(offset):
+    """Convert stored integer timestamp offset to an ISO datetime string for HTML inputs."""
     try:
-        if not hex_str:
+        if offset is None or offset == "":
             return datetime.now().strftime("%Y-%m-%dT%H:%M")
-        val = int(str(hex_str).strip(), 16)
-        if val < 1000000000:
-            unix_ts = val + TIME_OFFSET
-        else:
-            unix_ts = val
+        unix_ts = int(offset) + TIME_OFFSET
         return datetime.fromtimestamp(unix_ts).strftime("%Y-%m-%dT%H:%M")
     except Exception:
         return datetime.now().strftime("%Y-%m-%dT%H:%M")
 
 
-def iso_datetime_to_hex(dt_str):
-    """Convert an ISO datetime string (from HTML datetime-local) to the stored hex string."""
+def hex_to_iso_datetime(offset):
+    """Backwards-compatible alias for timestamp_to_iso_datetime."""
+    return timestamp_to_iso_datetime(offset)
+
+
+def iso_datetime_to_timestamp(dt_str):
+    """Convert an ISO datetime string (from HTML datetime-local) to stored integer offset from TIME_OFFSET."""
     try:
         dt = datetime.fromisoformat(str(dt_str).strip())
         unix_ts = int(dt.timestamp())
-        elapsed = max(0, unix_ts - TIME_OFFSET)
-        return format(elapsed, "x")
+        return max(0, unix_ts - TIME_OFFSET)
     except Exception:
-        elapsed = max(0, int(time.time()) - TIME_OFFSET)
-        return format(elapsed, "x")
+        return max(0, int(time.time()) - TIME_OFFSET)
+
+
+def iso_datetime_to_hex(dt_str):
+    """Backwards-compatible alias for iso_datetime_to_timestamp."""
+    return iso_datetime_to_timestamp(dt_str)
 
 
 def create_table(table_name):
@@ -222,7 +228,7 @@ def create_table(table_name):
     can never produce two rows in the same table regardless of how the song
     name was spelled at record time.
     """
-    clean = _safe_table(table_name)
+    clean = _safe_table(table_name, allow_create=True)
     with get_connection() as conn:
         conn.execute(f"""
             CREATE TABLE IF NOT EXISTS "{clean}" (
@@ -230,7 +236,7 @@ def create_table(table_name):
                 song_name TEXT NOT NULL,
                 song_id   TEXT NOT NULL UNIQUE,
                 number_of_listens INTEGER NOT NULL DEFAULT 1,
-                timestamp TEXT NOT NULL
+                timestamp INTEGER NOT NULL
             );
         """)
         # Fast lookup by song_id (covering unique constraint already indexed,
@@ -255,116 +261,8 @@ def get_all_tables():
     return tables
 
 
-def _migrate_unique_song_id(table):
-    """Retrofit a UNIQUE constraint on song_id for pre-existing tables.
-
-    For tables created before the uniqueness requirement was introduced this
-    function:
-      1. Merges duplicate song_id rows (summing listens, keeping the latest
-         timestamp and the song_name from the row with the most listens).
-      2. Recreates the table with the UNIQUE constraint via the
-         CREATE TABLE … / INSERT … / DROP / ALTER rename pattern so that
-         SQLite's limited ALTER TABLE support is not an issue.
-
-    The operation is idempotent — it checks for the UNIQUE index first and
-    skips all work if it is already present.
-    """
-    clean = _safe_table(table)
-    with get_connection() as conn:
-        cursor = conn.cursor()
-
-        # Check whether any unique index contains only song_id.
-        has_unique_song_id = False
-        cursor.execute(f'PRAGMA index_list("{clean}");')
-        for index in cursor.fetchall():
-            if not index["unique"]:
-                continue
-            cursor.execute(f'PRAGMA index_info("{index["name"]}");')
-            columns = [row["name"] for row in cursor.fetchall()]
-            if columns == ["song_id"]:
-                has_unique_song_id = True
-                break
-
-        cursor.execute(f'SELECT song_id FROM "{clean}";')
-        stored_ids = [row["song_id"] for row in cursor.fetchall()]
-        normalized_ids = [normalize_video_id(song_id) for song_id in stored_ids]
-        invalid_ids = sum(not song_id for song_id in normalized_ids)
-        ids_changed = any(
-            normalized and normalized != stored
-            for stored, normalized in zip(stored_ids, normalized_ids)
-        )
-        has_normalized_duplicates = len(set(normalized_ids)) != len(normalized_ids)
-        if has_unique_song_id and not invalid_ids and not ids_changed and not has_normalized_duplicates:
-            return
-
-        logger.info(f"Migrating table '{clean}': enforcing UNIQUE(song_id)...")
-
-        # Step 1 – collect deduplicated rows: group by song_id, merge listens
-        cursor.execute(f"""
-            SELECT
-                MIN(id) AS id,
-                song_name,
-                song_id,
-                SUM(number_of_listens) AS number_of_listens,
-                MAX(timestamp) AS timestamp
-            FROM "{clean}"
-            GROUP BY song_id;
-        """)
-        merged_rows = cursor.fetchall()
-        normalized_rows = {}
-        for row in merged_rows:
-            song_id = normalize_video_id(row["song_id"])
-            if not song_id:
-                logger.warning("Skipping invalid YouTube ID %r in table %s", row["song_id"], clean)
-                continue
-            if song_id in normalized_rows:
-                previous = normalized_rows[song_id]
-                normalized_rows[song_id] = (
-                    previous[0],
-                    previous[1] + row["number_of_listens"],
-                    max(previous[2], row["timestamp"]),
-                )
-            else:
-                normalized_rows[song_id] = (
-                    row["song_name"],
-                    row["number_of_listens"],
-                    row["timestamp"],
-                )
-
-        # Step 2 – create a temp table with the UNIQUE constraint
-        tmp = f"_tmp_migrate_{clean}"
-        conn.execute(f'DROP TABLE IF EXISTS "{tmp}";')
-        conn.execute(f"""
-            CREATE TABLE "{tmp}" (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                song_name TEXT NOT NULL,
-                song_id   TEXT NOT NULL UNIQUE,
-                number_of_listens INTEGER NOT NULL DEFAULT 1,
-                timestamp TEXT NOT NULL
-            );
-        """)
-
-        # Step 3 – insert merged rows
-        for song_id, (song_name, listens, timestamp) in normalized_rows.items():
-            conn.execute(
-                f'INSERT INTO "{tmp}" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
-                (song_name, song_id, listens, timestamp)
-            )
-
-        # Step 4 – swap: drop old table, rename temp to original name
-        conn.execute(f'DROP TABLE "{clean}";')
-        conn.execute(f'ALTER TABLE "{tmp}" RENAME TO "{clean}";')
-
-        # Step 5 – recreate the composite search index
-        conn.execute(f"""
-            CREATE INDEX IF NOT EXISTS "idx_{clean}_song" ON "{clean}" (song_name, song_id);
-        """)
-        conn.commit()
-        logger.info(f"Migration of '{clean}' complete — {len(normalized_rows)} unique songs retained.")
-
-
 def init_db():
-    """Initialize default history table and migrate from history.txt if needed."""
+    """Initialize default history table."""
     create_table("history")
     active = get_active_table()
     if active != "history":
@@ -379,35 +277,6 @@ def init_db():
         """)
         conn.commit()
 
-    # Check if migration from history.txt is needed
-    try:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) as cnt FROM "history";')
-            count = cursor.fetchone()["cnt"]
-            if count == 0:
-                txt_path = os.path.join(PLAYLIST_DIR, "history.txt")
-                if os.path.exists(txt_path):
-                    logger.info("Migrating existing history.txt into history.sqlite3...")
-                    with open(txt_path, "r", encoding="utf-8") as f:
-                        for line in f:
-                            line = line.strip()
-                            if not line:
-                                continue
-                            parts = line.split(">")
-                            if len(parts) >= 2:
-                                song_name = parts[0].strip()
-                                song_id = parts[1].strip()
-                                listens = int(parts[2].strip()) if len(parts) >= 3 and parts[2].strip().isdigit() else 1
-                                ts = parts[3].strip() if len(parts) >= 4 else format(max(0, int(time.time()) - TIME_OFFSET), "x")
-                                cursor.execute(
-                                    'INSERT OR IGNORE INTO "history" (song_name, song_id, number_of_listens, timestamp) VALUES (?, ?, ?, ?);',
-                                    (song_name, song_id, listens, ts)
-                                )
-                    conn.commit()
-                    logger.info("Migration of history.txt into SQLite completed.")
-    except Exception as e:
-        logger.error(f"Error initializing or migrating history database: {e}")
 
 def record_played_song(song, table_name=None):
     """Record or increment the play count of a song in the specified (or active) history table.
@@ -434,7 +303,7 @@ def record_played_song(song, table_name=None):
 
     table = _safe_table(table_name or get_active_table())
     create_table(table)
-    elapsed_timestamp = format(max(0, int(time.time()) - TIME_OFFSET), "x")
+    elapsed_timestamp = max(0, int(time.time()) - TIME_OFFSET)
 
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -496,7 +365,7 @@ def get_history_rows(table_name=None):
             "song_id": r["song_id"],
             "number_of_listens": r["number_of_listens"],
             "timestamp": r["timestamp"],
-            "datetime_str": hex_to_iso_datetime(r["timestamp"])
+            "datetime_str": timestamp_to_iso_datetime(r["timestamp"])
         })
     return result
 
@@ -514,11 +383,11 @@ def add_entry(table_name, song_name, song_id, number_of_listens=1, timestamp=Non
     create_table(table)
 
     if datetime_str:
-        ts = iso_datetime_to_hex(datetime_str)
-    elif timestamp:
-        ts = str(timestamp).strip()
+        ts = iso_datetime_to_timestamp(datetime_str)
+    elif timestamp is not None and str(timestamp).strip() != "":
+        ts = int(timestamp)
     else:
-        ts = format(max(0, int(time.time()) - TIME_OFFSET), "x")
+        ts = max(0, int(time.time()) - TIME_OFFSET)
 
     sid = normalize_video_id(song_id)
     sname = song_name.strip()
@@ -556,11 +425,11 @@ def update_entry(table_name, row_id, song_name, song_id, number_of_listens, time
     table = _safe_table(table_name)
 
     if datetime_str:
-        ts = iso_datetime_to_hex(datetime_str)
-    elif timestamp:
-        ts = str(timestamp).strip()
+        ts = iso_datetime_to_timestamp(datetime_str)
+    elif timestamp is not None and str(timestamp).strip() != "":
+        ts = int(timestamp)
     else:
-        ts = format(max(0, int(time.time()) - TIME_OFFSET), "x")
+        ts = max(0, int(time.time()) - TIME_OFFSET)
 
     with get_connection() as conn:
         cursor = conn.cursor()
