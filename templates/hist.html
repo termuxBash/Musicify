@@ -331,6 +331,39 @@
     text-align: center;
 }
 
+/* Song Name auto-scroll container */
+.col-song-name {
+    max-width: 320px;
+    min-width: 140px;
+}
+
+.song-container {
+    max-width: 320px;
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+    font-size: 0.9rem;
+    color: #fff;
+    cursor: grab;
+    padding: 4px 2px;
+    box-sizing: border-box;
+}
+
+.song-container::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/Edge */
+}
+
+.song-container:active {
+    cursor: grabbing;
+}
+
+.song-name-text {
+    display: inline-block;
+    white-space: nowrap;
+}
+
 /* Mobile Portrait Mode */
 @media screen and (max-width: 768px), screen and (orientation: portrait) and (max-width: 900px) {
     .hist-page-container {
@@ -378,7 +411,13 @@
     }
 
     .col-song-name {
-        width: auto;
+        max-width: calc(100vw - 190px);
+        min-width: 110px;
+    }
+
+    .song-container {
+        max-width: calc(100vw - 190px);
+        font-size: 0.88rem;
     }
 
     .col-listens {
@@ -485,7 +524,10 @@
                 <tr id="row-{{ r.id }}" data-search="{{ r.song_name|lower }} {{ r.song_id|lower }}">
                     <td class="col-id" style="color:#666;font-family:monospace;">{{ r.id }}</td>
                     <td class="col-song-name">
-                        <input type="text" class="hist-input song-name-input" value="{{ r.song_name }}" onchange="saveRow({{ r.id }})">
+                        <div class="song-container" data-song="{{ r.song_name }}" title="{{ r.song_name }}" ondblclick="openEditRecordModal({{ r.id }})">
+                            <span class="song-name-text">{{ r.song_name }}</span>
+                        </div>
+                        <input type="hidden" class="song-name-input" value="{{ r.song_name }}">
                     </td>
                     <td class="col-listens">
                         <input type="number" min="0" class="hist-input input-sm listens-input" value="{{ r.number_of_listens }}" onchange="saveRow({{ r.id }})">
@@ -627,6 +669,7 @@ function filterTable() {
         }
     });
     document.getElementById("recordCount").textContent = `${visible} records found`;
+    requestAnimationFrame(autoScrollSongContainers);
 }
 let sortColumn = 'id';
 let sortAsc = true;
@@ -688,12 +731,76 @@ function renderTable() {
         return 0;
     });
     rows.forEach(r => tbody.appendChild(r));
+    requestAnimationFrame(autoScrollSongContainers);
 }
 
-// Initial sort and header update
+function autoScrollSongContainers() {
+    const containers = document.querySelectorAll('.song-container');
+    if (!containers.length) return;
+
+    containers.forEach(container => {
+        const fullText = (container.getAttribute('data-song') || container.textContent).trim();
+        
+        // Find where the artist name ends and song name begins (e.g., " - ")
+        let separatorIndex = fullText.indexOf(' - ');
+        let sepLen = 3;
+        if (separatorIndex === -1) {
+            separatorIndex = fullText.indexOf(' – ');
+            if (separatorIndex !== -1) sepLen = 3;
+        }
+        if (separatorIndex === -1) {
+            separatorIndex = fullText.indexOf(' — ');
+            if (separatorIndex !== -1) sepLen = 3;
+        }
+
+        if (separatorIndex !== -1) {
+            // Extract the artist prefix including the separator (e.g., "Imagine Dragons - ")
+            const artistPrefix = fullText.substring(0, separatorIndex + sepLen);
+
+            // Create a temporary hidden span to measure the exact pixel width of the prefix
+            const measurer = document.createElement('span');
+            measurer.style.visibility = 'hidden';
+            measurer.style.position = 'absolute';
+            measurer.style.whiteSpace = 'nowrap';
+            measurer.style.left = '-9999px';
+            measurer.style.top = '-9999px';
+
+            // Match the container's font styling so the measurement is 100% accurate
+            const computed = window.getComputedStyle(container);
+            measurer.style.font = computed.font;
+            measurer.style.fontSize = computed.fontSize;
+            measurer.style.fontFamily = computed.fontFamily;
+            measurer.style.fontWeight = computed.fontWeight;
+            measurer.style.letterSpacing = computed.letterSpacing;
+
+            measurer.textContent = artistPrefix;
+            document.body.appendChild(measurer);
+
+            // Get the exact pixel width of the artist name
+            const pixelWidth = Math.ceil(measurer.getBoundingClientRect().width);
+            document.body.removeChild(measurer);
+
+            // Automatically scroll the view horizontally by that exact width
+            container.scrollLeft = pixelWidth;
+        } else {
+            container.scrollLeft = 0;
+        }
+    });
+}
+
+// Initial sort, auto-scroll, and header update
 document.addEventListener('DOMContentLoaded', function() {
     renderTable();
     updateHeaderIndicators();
+    setTimeout(autoScrollSongContainers, 50);
+});
+
+window.addEventListener('load', function() {
+    autoScrollSongContainers();
+});
+
+window.addEventListener('resize', function() {
+    requestAnimationFrame(autoScrollSongContainers);
 });
 function queueRowSong(id) {
     const tr = document.getElementById("row-" + id);
@@ -770,6 +877,13 @@ async function submitEditRecord(e) {
             if (tr) {
                 const nameInput = tr.querySelector(".song-name-input");
                 if (nameInput) nameInput.value = songName;
+                const nameText = tr.querySelector(".song-name-text");
+                if (nameText) nameText.textContent = songName;
+                const container = tr.querySelector(".song-container");
+                if (container) {
+                    container.setAttribute("data-song", songName);
+                    container.title = songName;
+                }
                 const idInput = tr.querySelector(".song-id-input");
                 if (idInput) idInput.value = songId;
                 const listensInput = tr.querySelector(".listens-input");
@@ -779,6 +893,7 @@ async function submitEditRecord(e) {
                 const ytLink = tr.querySelector(".yt-link-btn");
                 if (ytLink) ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(songId);
                 tr.setAttribute("data-search", `${songName.toLowerCase()} ${songId.toLowerCase()}`);
+                autoScrollSongContainers();
             }
             closeEditRecordModal();
             showPopup("Record #" + id + " saved successfully!");
@@ -823,6 +938,14 @@ async function saveRow(id) {
             tr.setAttribute("data-search", `${songName.toLowerCase()} ${songId.toLowerCase()}`);
             const ytLink = tr.querySelector(".yt-link-btn");
             if (ytLink) ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(songId);
+            const nameText = tr.querySelector(".song-name-text");
+            if (nameText) nameText.textContent = songName;
+            const container = tr.querySelector(".song-container");
+            if (container) {
+                container.setAttribute("data-song", songName);
+                container.title = songName;
+            }
+            autoScrollSongContainers();
             showPopup("Record #" + id + " saved successfully!");
         } else {
             showPopup(data.error || "Failed to update record.");
