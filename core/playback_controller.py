@@ -80,6 +80,14 @@ class PlaybackController:
         with self._lock:
             #Allow any bp to remove from the queue, but not shift ownership
             return self.player.remove_from_queue(index)
+
+    def move_to_front(self, index):
+        with self._lock:
+            return self.player.move_to_front(index)
+
+    def move_in_queue(self, source_index, target_index):
+        with self._lock:
+            return self.player.move_to_index(source_index, target_index)
     
     def stop(self):
         with self._lock:

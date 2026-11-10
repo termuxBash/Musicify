@@ -279,7 +279,164 @@ async function clearQueue() {
 }
 
 async function removeFromQueue(i) {
-    await fetch("/remove_from_queue/" + i, { method: "POST" }); 
+    try {
+        const response = await fetch("/remove_from_queue/" + i, { method: "POST" });
+        if (!response.ok) {
+            showPopup("Failed to remove song from queue.");
+            return;
+        }
+        await updateStats();
+    } catch (error) {
+        console.error("Failed to remove song from queue:", error);
+        showPopup("Failed to remove song from queue.");
+    }
+}
+
+async function playNextInQueue(i) {
+    try {
+        const response = await fetch("/play_next/" + i, { method: "POST" });
+        if (!response.ok) {
+            showPopup("Failed to move song to the front of the queue.");
+            return;
+        }
+        await updateStats();
+    } catch (error) {
+        console.error("Failed to move song to the front of the queue:", error);
+        showPopup("Failed to move song to the front of the queue.");
+    }
+}
+
+let queueItemBeingDragged = null;
+let queueReorderInProgress = false;
+
+async function reorderQueue(sourceIndex, targetIndex) {
+    queueReorderInProgress = true;
+    try {
+        const response = await fetch(`/reorder_queue/${sourceIndex}/${targetIndex}`, { method: "POST" });
+        if (!response.ok) {
+            showPopup("Failed to reorder queue.");
+        }
+    } catch (error) {
+        console.error("Failed to reorder queue:", error);
+        showPopup("Failed to reorder queue.");
+    } finally {
+        queueReorderInProgress = false;
+        await updateStats();
+    }
+}
+
+function startQueueSwipe(event) {
+    if (event.target.closest(".queue-item-delete, .queue-item-drag-handle")) return;
+    this.dataset.swipeStartX = event.clientX;
+    this.dataset.swipeStartY = event.clientY;
+    this.dataset.swipePointerId = event.pointerId;
+    this.setPointerCapture(event.pointerId);
+}
+
+function moveQueueSwipe(event) {
+    if (this.dataset.swipePointerId !== String(event.pointerId)) return;
+    const deltaX = event.clientX - Number(this.dataset.swipeStartX);
+    const deltaY = event.clientY - Number(this.dataset.swipeStartY);
+    if (Math.abs(deltaX) < 8 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+
+    event.preventDefault();
+    this.style.transform = `translateX(${deltaX}px)`;
+    this.classList.toggle("swipe-play-next", deltaX > 0);
+    this.classList.toggle("swipe-delete", deltaX < 0);
+}
+
+function endQueueSwipe(event) {
+    if (this.dataset.swipePointerId !== String(event.pointerId)) return;
+    const deltaX = event.clientX - Number(this.dataset.swipeStartX);
+    const wasSwiped = event.type === "pointerup" && Math.abs(deltaX) >= 80;
+    const index = Number(this.dataset.queueIndex);
+
+    this.style.transform = "";
+    this.classList.remove("swipe-play-next", "swipe-delete");
+    delete this.dataset.swipePointerId;
+    delete this.dataset.swipeStartX;
+    delete this.dataset.swipeStartY;
+
+    if (!wasSwiped) return;
+    if (deltaX > 0) {
+        playNextInQueue(index);
+    } else {
+        removeFromQueue(index);
+    }
+}
+
+function startQueueReorder(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.button !== 0 || queueItemBeingDragged) return;
+
+    const handle = event.currentTarget;
+    const item = handle.closest(".queue-item");
+    const list = item?.parentElement;
+    if (!item || !list) return;
+
+    queueItemBeingDragged = item;
+    item.dataset.dragSourceIndex = item.dataset.queueIndex;
+    item.dataset.dragStartY = event.clientY;
+    handle.setPointerCapture(event.pointerId);
+    handle.addEventListener("pointermove", moveQueueReorder);
+    handle.addEventListener("pointerup", endQueueReorder, { once: true });
+    handle.addEventListener("pointercancel", cancelQueueReorder, { once: true });
+}
+
+function moveQueueReorder(event) {
+    if (!queueItemBeingDragged) return;
+    const item = queueItemBeingDragged;
+    const handle = event.currentTarget;
+    const deltaY = event.clientY - Number(item.dataset.dragStartY);
+    if (!item.classList.contains("dragging") && Math.abs(deltaY) < 6) return;
+
+    item.classList.add("dragging");
+    const siblings = Array.from(item.parentElement.children).filter(row => row !== item);
+    const target = siblings.find(row => {
+        const bounds = row.getBoundingClientRect();
+        return event.clientY < bounds.top + bounds.height / 2;
+    });
+    item.parentElement.insertBefore(item, target || null);
+}
+
+function finishQueueReorder(handle, cancelled = false) {
+    handle.removeEventListener("pointermove", moveQueueReorder);
+    if (!queueItemBeingDragged) return;
+
+    const item = queueItemBeingDragged;
+    const sourceIndex = Number(item.dataset.dragSourceIndex);
+    const targetIndex = Array.from(item.parentElement.children).indexOf(item);
+    item.classList.remove("dragging");
+    delete item.dataset.dragSourceIndex;
+    delete item.dataset.dragStartY;
+    queueItemBeingDragged = null;
+
+    if (cancelled) {
+        updateStats();
+    } else if (sourceIndex !== targetIndex) {
+        reorderQueue(sourceIndex, targetIndex);
+    }
+}
+
+function endQueueReorder(event) {
+    finishQueueReorder(event.currentTarget);
+}
+
+function cancelQueueReorder(event) {
+    finishQueueReorder(event.currentTarget, true);
+}
+
+function keyboardReorderQueue(event) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const item = event.currentTarget.closest(".queue-item");
+    if (!item) return;
+
+    const sourceIndex = Array.from(item.parentElement.children).indexOf(item);
+    const targetIndex = sourceIndex + (event.key === "ArrowUp" ? -1 : 1);
+    if (targetIndex < 0 || targetIndex >= item.parentElement.children.length) return;
+    reorderQueue(sourceIndex, targetIndex);
 }
 
 // --- UNIVERSAL PLAYLIST MODAL MANAGEMENT ---
@@ -565,17 +722,46 @@ async function updateStats() {
         }
 
         const qList = document.getElementById("queueList");
-        if (qList) {
+        if (qList && !queueItemBeingDragged && !queueReorderInProgress) {
             if (!data.queue || data.queue.length === 0) {
-                qList.innerHTML = "No songs queued";
+                qList.textContent = "No songs queued";
             } else {
-                qList.innerHTML = data.queue.map((s, i) => `
-                    <div class="queue-item">
-                        <img src="${s.thumbnail || ''}" alt="thumb">
-                        <p>${s.title}</p>
-                        <span onclick="removeFromQueue(${i})">✕</span>
-                    </div>
-                `).join("");
+                qList.replaceChildren(...data.queue.map((song, index) => {
+                    const item = document.createElement("div");
+                    item.className = "queue-item";
+                    item.dataset.queueIndex = index;
+                    item.addEventListener("pointerdown", startQueueSwipe);
+                    item.addEventListener("pointermove", moveQueueSwipe);
+                    item.addEventListener("pointerup", endQueueSwipe);
+                    item.addEventListener("pointercancel", endQueueSwipe);
+
+                    const dragHandle = document.createElement("button");
+                    dragHandle.type = "button";
+                    dragHandle.className = "queue-item-drag-handle";
+                    dragHandle.textContent = "=";
+                    dragHandle.title = "Drag to reorder; use arrow keys to move";
+                    dragHandle.setAttribute("aria-label", `Reorder ${song.title || "song"}`);
+                    dragHandle.addEventListener("pointerdown", startQueueReorder);
+                    dragHandle.addEventListener("keydown", keyboardReorderQueue);
+
+                    const thumbnail = document.createElement("img");
+                    thumbnail.src = song.thumbnail || "";
+                    thumbnail.alt = "Thumbnail";
+
+                    const title = document.createElement("p");
+                    title.textContent = song.title || "Unknown track";
+
+                    const removeButton = document.createElement("button");
+                    removeButton.type = "button";
+                    removeButton.className = "queue-item-delete";
+                    removeButton.setAttribute("aria-label", `Remove ${song.title || "song"} from queue`);
+                    removeButton.textContent = "✕";
+                    removeButton.addEventListener("pointerdown", event => event.stopPropagation());
+                    removeButton.addEventListener("click", () => removeFromQueue(index));
+
+                    item.append(dragHandle, thumbnail, title, removeButton);
+                    return item;
+                }));
             }
         }
         

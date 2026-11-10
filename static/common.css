@@ -121,6 +121,13 @@ nav {
     margin-top: 20px; 
 }
 
+.queue-help {
+    margin: 8px 0 0;
+    color: #aaa;
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
 .queue-item {
     display: flex; 
     align-items: center; 
@@ -129,6 +136,53 @@ nav {
     padding: 10px; 
     border-radius: 8px; 
     margin-bottom: 10px;
+    touch-action: pan-y;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.queue-item.swipe-play-next {
+    background: #2563eb;
+}
+
+.queue-item.swipe-delete {
+    background: #dc2626;
+}
+
+.queue-item p {
+    flex: 1;
+    min-width: 0;
+}
+
+.queue-item.dragging {
+    opacity: 0.55;
+    background: #333;
+}
+
+.queue-item-drag-handle {
+    flex: 0 0 auto;
+    padding: 4px 2px;
+    border: 0;
+    background: transparent;
+    color: #aaa;
+    cursor: grab;
+    font: bold 20px/1 monospace;
+    letter-spacing: -3px;
+    touch-action: none;
+}
+
+.queue-item-drag-handle:active {
+    cursor: grabbing;
+}
+
+.queue-item-delete {
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--danger-red);
+    cursor: pointer;
+    font-size: 30px;
+    line-height: 1;
 }
 
 .queue-item img { 
@@ -139,13 +193,6 @@ nav {
 .queue-item p { 
     font-size: 0.75rem; 
     white-space: normal;
-}
-
-.queue-item span {
-    margin-left: auto; 
-    cursor: pointer; 
-    color: var(--danger-red); 
-    font-size: 30px;
 }
 
 .switch-player-link {
