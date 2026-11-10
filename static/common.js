@@ -42,6 +42,98 @@ function showPopup(message) {
     setTimeout(() => window.addEventListener('click', removePopup), 10);
 }
 
+function queueButtonSvg() {
+    return `
+        <svg class="qi-play" width="14" height="14" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
+        <svg class="qi-spin" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#1db954" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="40 20"/></svg>
+        <svg class="qi-check" width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="4,13 9,18 20,7" stroke="#1db954" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    `;
+}
+
+document.querySelectorAll(".queue-icon-btn").forEach(button => {
+    if (!button.querySelector(".qi-play")) {
+        button.innerHTML = queueButtonSvg();
+    }
+});
+
+async function enqueueSong(song, btn, options) {
+    const request = () => fetch(options.enqueueUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(options.payload(song))
+    });
+
+    const markQueued = () => {
+        btn.classList.remove("qi-loading");
+        btn.classList.add("qi-done");
+        setTimeout(() => {
+            btn.classList.remove("qi-done");
+            btn.disabled = false;
+        }, 5000);
+    };
+
+    btn.classList.add("qi-loading");
+    btn.disabled = true;
+
+    try {
+        let response = await request();
+
+        if (response.ok) {
+            markQueued();
+            return;
+        }
+
+        if (response.status === 403) {
+            const data = await response.json();
+            if (options.takeoverOwners.includes(data.owner)) {
+                btn.classList.remove("qi-loading");
+                btn.disabled = false;
+                const takeOver = confirm(
+                    `${data.owner} player is currently controlling playback.\n\n` +
+                    "Taking ownership will clear its queue and stop playback.\n\n" +
+                    "Continue?"
+                );
+                if (!takeOver) return;
+
+                btn.classList.add("qi-loading");
+                btn.disabled = true;
+
+                const acquire = await fetch(options.acquireUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ force: true })
+                });
+                if (!acquire.ok) {
+                    showPopup("Failed to acquire ownership.");
+                    return;
+                }
+
+                response = await request();
+                if (!response.ok) {
+                    showPopup("Failed to queue song after takeover.");
+                    return;
+                }
+
+                markQueued();
+                return;
+            }
+
+            showPopup(`Playback is controlled by '${data.owner}'.`);
+            return;
+        }
+
+        showPopup("Failed to queue song.");
+    } catch (error) {
+        console.error("Failed to add song to queue:", error);
+        showPopup("Failed to queue song.");
+    } finally {
+        if (btn.classList.contains("qi-loading")) {
+            btn.classList.remove("qi-loading");
+            btn.disabled = false;
+        }
+    }
+}
+
 function toggleMenu(){
     const panel = document.getElementById("sidePanel");
     const overlay = document.getElementById("overlay");

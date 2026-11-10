@@ -488,6 +488,60 @@ nav {
     background: var(--spotify-green); 
 }
 
+/* ---- Queue icon button (play → spinner → checkmark) ---- */
+.queue-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 7px 10px;
+    background: #333;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.2s;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: white;
+}
+
+.queue-icon-btn:hover {
+    background: #444;
+}
+
+.queue-icon-btn .qi-play   { display: inline-block; }
+.queue-icon-btn .qi-spin   { display: none; }
+.queue-icon-btn .qi-check  { display: none; }
+
+/* Loading state */
+.queue-icon-btn.qi-loading {
+    background: #1a1a1a;
+    cursor: wait;
+    pointer-events: none;
+}
+.queue-icon-btn.qi-loading .qi-play  { display: none; }
+.queue-icon-btn.qi-loading .qi-spin  { display: inline-block; }
+.queue-icon-btn.qi-loading .qi-check { display: none; }
+
+/* Done/queued state */
+.queue-icon-btn.qi-done {
+    background: rgba(29, 185, 84, 0.15);
+    pointer-events: none;
+}
+.queue-icon-btn.qi-done .qi-play  { display: none; }
+.queue-icon-btn.qi-done .qi-spin  { display: none; }
+.queue-icon-btn.qi-done .qi-check { display: inline-block; }
+
+@keyframes qi-rotate {
+    to { transform: rotate(360deg); }
+}
+
+.qi-spin {
+    animation: qi-rotate 0.75s linear infinite;
+    transform-origin: center;
+}
+
 .auto-pick-btn {
     background: linear-gradient(135deg, #ffd166, #ff8c42);
     color: #111;

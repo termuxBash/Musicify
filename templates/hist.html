@@ -357,6 +357,56 @@
     max-width: 70px;
 }
 
+/* Thumbnail play-overlay wrapper */
+.thumb-wrap {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    border-radius: 4px;
+    overflow: hidden;
+    line-height: 0;
+}
+
+.thumb-wrap .thumb-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    border-radius: 4px;
+}
+
+.thumb-wrap:hover .thumb-overlay,
+.thumb-wrap:focus .thumb-overlay {
+    opacity: 1;
+}
+
+.thumb-overlay svg {
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+}
+
+/* Spinner replaces play icon while queuing */
+@keyframes thumb-spin {
+    to { transform: rotate(360deg); }
+}
+
+.thumb-wrap.queuing .thumb-overlay {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.thumb-wrap.queuing .play-icon { display: none; }
+.thumb-wrap.queuing .spin-icon { display: block !important; }
+
+.spin-icon {
+    display: none;
+    animation: thumb-spin 0.8s linear infinite;
+    transform-origin: center;
+}
+
 /* Song Name auto-scroll container */
 .col-song-name {
     max-width: 320px;
@@ -563,7 +613,19 @@
                 <tr id="row-{{ r.id }}" data-search="{{ r.song_name|lower }} {{ r.song_id|lower }}">
                     <td class="col-id" style="color:#666;font-family:monospace;">{{ r.id }}</td>
                     <td class="col-thumb">
-                        <img class="song-thumb" src="https://i.ytimg.com/vi/{{ r.song_id }}/default.jpg" alt="" loading="lazy">
+                        <div class="thumb-wrap" onclick="queueRowSong({{ r.id }}, this)" title="Queue song">
+                            <img class="song-thumb" src="https://i.ytimg.com/vi/{{ r.song_id }}/default.jpg" alt="" loading="lazy">
+                            <div class="thumb-overlay">
+                                <!-- Play icon -->
+                                <svg class="play-icon" width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                                    <polygon points="6,3 20,12 6,21"/>
+                                </svg>
+                                <!-- Green spinner -->
+                                <svg class="spin-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="12" cy="12" r="9" stroke="#1db954" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="40 20"/>
+                                </svg>
+                            </div>
+                        </div>
                     </td>
                     <td class="col-song-name">
                         <div class="song-container" data-song="{{ r.song_name }}" title="{{ r.song_name }}" ondblclick="openEditRecordModal({{ r.id }})">
@@ -585,9 +647,6 @@
                     </td>
                     <td class="col-actions" style="text-align: right;">
                         <div class="row-actions" style="justify-content: flex-end;">
-                            <button class="hist-btn btn-icon btn-queue" onclick="queueRowSong({{ r.id }})" title="Queue track now">
-                                🎵
-                            </button>
                             <button class="hist-btn hist-btn-edit btn-icon btn-edit" onclick="openEditRecordModal({{ r.id }})" title="Edit record">
                                 ✏️
                             </button>
@@ -844,12 +903,14 @@ window.addEventListener('load', function() {
 window.addEventListener('resize', function() {
     requestAnimationFrame(autoScrollSongContainers);
 });
-function queueRowSong(id) {
+function queueRowSong(id, thumbWrap) {
     const tr = document.getElementById("row-" + id);
     if (!tr) return;
     const songName = tr.querySelector(".song-name-input").value.trim();
     const songId = tr.querySelector(".song-id-input").value.trim();
-    queueSong(songName, songId);
+    // Use the passed thumb-wrap, or find it in the row as fallback
+    const wrap = thumbWrap || tr.querySelector(".thumb-wrap");
+    queueSong(songName, songId, wrap);
 }
 
 function openEditRecordModal(id) {
@@ -1030,7 +1091,9 @@ async function deleteRow(id) {
     }
 }
 
-async function queueSong(title, videoId) {
+async function queueSong(title, videoId, thumbWrap) {
+    // Show spinner on the thumbnail while queuing
+    if (thumbWrap) thumbWrap.classList.add("queuing");
     try {
         const songObj = {
             title: title,
@@ -1049,6 +1112,9 @@ async function queueSong(title, videoId) {
         }
     } catch (e) {
         showPopup("Queue error.");
+    } finally {
+        // Always remove spinner once done
+        if (thumbWrap) thumbWrap.classList.remove("queuing");
     }
 }
 

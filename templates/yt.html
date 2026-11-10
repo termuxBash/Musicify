@@ -56,7 +56,9 @@ document.getElementById("searchForm").onsubmit = async (e)=>{
             <img src="${s.thumbnail}">
             <p>${s.title}</p>
             <div class="card-actions">
-                <button class="add-btn" onclick='addToQueue(${JSON.stringify(s)}, this)'>+QUEUE</button>
+                <button class="queue-icon-btn" onclick='addToQueue(${JSON.stringify(s)}, this)' title="Queue song">
+                    ${queueButtonSvg()}
+                </button>
                 <button class="playlist-btn" type="button" onclick='openPlaylistMenu(${JSON.stringify(s)}, this)' title="Add to playlist">🎶️</button>
             </div>
         </div>
@@ -136,7 +138,11 @@ async function autoPickSong(btn){
             <div class="song-card">
                 <img src="${data.song.thumbnail}">
                 <p>${data.song.title}</p>
-                <button class="add-btn queued" disabled>QUEUED</button>
+                <div class="card-actions">
+                    <button class="queue-icon-btn qi-done" disabled title="Queued">
+                        ${queueButtonSvg()}
+                    </button>
+                </div>
             </div>
         `;
     } finally {
@@ -149,75 +155,16 @@ document.getElementById("autoPickBtn").onclick = async (e)=>{
     await autoPickSong(e.target);
 }
 
-/* ADD TO QUEUE */
-async function addToQueue(song, btn){
-    btn.classList.add("queued");
-    setTimeout(() => {
-        btn.classList.remove("queued");
-    }, 1500);
-
+function addToQueue(song, btn) {
     const enqueueRoute = window.incogniMode
         ? "/enqueue_incognito"
         : "/enqueue";
-
-    let res = await fetch(API_PREFIX + enqueueRoute, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(song)
+    return enqueueSong(song, btn, {
+        enqueueUrl: API_PREFIX + enqueueRoute,
+        acquireUrl: API_PREFIX + "/acquire",
+        payload: track => track,
+        takeoverOwners: ["local", "playlist"]
     });
-
-    if (res.ok) {
-        return;
-    }
-
-    if (res.status === 403) {
-        const data = await res.json();
-        if (data.owner === "local" || data.owner === "playlist") {
-            const takeOver = confirm(
-                data.owner + " player is currently controlling playback.\n\n" +
-                "Taking ownership will clear its queue and stop playback.\n\n" +
-                "Continue?"
-            );
-
-            if (!takeOver) {
-                return;
-            }
-
-            const acquire = await fetch(
-                API_PREFIX + "/acquire",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        force: true
-                    })
-                }
-            );
-
-            if (!acquire.ok) {
-                showPopup("Failed to acquire ownership.");
-                return;
-            }
-
-            res = await fetch(API_PREFIX + enqueueRoute, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(song)
-            });
-
-            if (!res.ok) {
-                showPopup("Failed to queue song after takeover.");
-            }
-            return;
-        }
-        showPopup(`Playback is controlled by '${data.owner}'.`);
-    }
 }
 
 const playlistState = {

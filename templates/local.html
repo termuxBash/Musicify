@@ -56,9 +56,9 @@
 
             {% if not item.is_dir %}
             <div class="card-actions">
-                <button class="btn"
-                        onclick='addToQueue({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'>
-                    + Add to Queue
+                <button class="queue-icon-btn"
+                        onclick='addToQueue({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'
+                        title="Queue song">
                 </button>
                 <button class="playlist-btn"
                         type="button"
@@ -125,7 +125,9 @@ async function performSearch() {
                     </div>
                     ${!item.is_dir ? `
                     <div class="card-actions">
-                        <button class="btn" onclick="addToQueue({url: '${escapingPath}', title: '${escapingTitle}'}, this)">+ Add to Queue</button>
+                        <button class="queue-icon-btn" onclick="addToQueue({url: '${escapingPath}', title: '${escapingTitle}'}, this)" title="Queue song">
+                            ${queueButtonSvg()}
+                        </button>
                         <button class="playlist-btn" type="button" onclick="openPlaylistMenu({url: '${escapingPath}', title: '${escapingTitle}'}, this)" title="Add to playlist">🎶️</button>
                     </div>
                     ` : ''}
@@ -235,44 +237,13 @@ async function queueRandomSong(btn, folderPath = window.CURRENT_PATH) {
     }
 }
 
-/* API EXECUTION AND QUEUE HANDLING */
-async function addToQueue(song, btn){
-    btn.classList.add("queued");
-    setTimeout(() => { btn.classList.remove("queued"); }, 1500);
-
-    let res = await fetch("/local/enqueue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({rel_path: song.url, title: song.title})
+function addToQueue(song, btn) {
+    return enqueueSong(song, btn, {
+        enqueueUrl: "/local/enqueue",
+        acquireUrl: "/local/acquire",
+        payload: track => ({ rel_path: track.url, title: track.title }),
+        takeoverOwners: ["youtube", "playlist"]
     });
-
-    if (res.ok) return;
-
-    if (res.status === 403) {
-        const data = await res.json();
-        if (data.owner === "youtube" || data.owner === "playlist") {
-            const takeOver = confirm(`${data.owner} player is currently controlling playback.\n\nTaking ownership will clear its queue and stop playback.\n\nContinue?`);
-            if (!takeOver) return;
-
-            const acquire = await fetch("/local/acquire", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ force: true })
-            });
-
-            if (!acquire.ok) { alert("Failed to acquire ownership."); return; }
-
-            res = await fetch("/local/enqueue", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({rel_path: song.url, title: song.title})
-            });
-
-            if (!res.ok) alert("Failed to queue song after takeover.");
-            return;
-        }
-        alert(`Playback is controlled by '${data.owner}'.`);
-    }
 }
 
 function playCurrentFolder(p){
