@@ -115,8 +115,9 @@ class QueuePlayer:
     def _get_icecast_listeners(self):
         """Fetches the active listener count from Icecast's JSON endpoint."""
         try:
-            # Assumes standard Icecast installation on localhost port 8000
-            url = "http://127.0.0.1:8000/status-json.xsl"
+            # Gets the stream status from the stream url link. Cuts off mpv.ogg and replaces with status-json.xsl
+            cut = STREAM_URL.split("/")[-1]
+            url = STREAM_URL.split(cut)[0] + "status-json.xsl"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=2) as response:
                 data = json.loads(response.read().decode())
@@ -130,7 +131,7 @@ class QueuePlayer:
                         sources = [sources]
                         
                     for source in sources:
-                        if "/mpv.ogg" in source.get("listenurl", ""):
+                        if ("/" + cut) in source.get("listenurl", ""):
                             return int(source.get("listeners", 0))
         except Exception as e:
             logger.error(f"Error pulling Icecast statistics: {e}")

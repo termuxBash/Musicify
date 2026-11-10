@@ -8,6 +8,7 @@ import os
 import signal
 import sys
 
+
 ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
 
 class FFmpegService:

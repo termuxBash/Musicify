@@ -30,9 +30,6 @@ def env_int(name, default=0):
     except ValueError:
         return default
 
-def env_hex(name, default=0):
-    return env_int(name, default)
-
 #Server settings
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "5000"))
@@ -106,8 +103,6 @@ SONG_NAME_CLEANUP = [
     "video",
 ]
 SONG_NAME_CLEANUP.extend(env_list("SONG_NAME_CLEANUP", []))
-
-
 
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")

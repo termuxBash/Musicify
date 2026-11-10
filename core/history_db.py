@@ -86,19 +86,6 @@ def record_rick_roll_timestamp(timestamp=None):
         conn.commit()
 
 
-def get_rick_roll_timestamps():
-    """Retrieve all recorded rick_roll_timestamp values from extra_data."""
-    init_db()
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='extra_data';")
-        if not cursor.fetchone():
-            return []
-        cursor.execute("SELECT rick_roll_timestamp FROM extra_data;")
-        return [row["rick_roll_timestamp"] for row in cursor.fetchall()]
-
-
-
 def sanitize_table_name(name):
     """Sanitize any input string into a safe SQLite table identifier.
 
@@ -201,11 +188,6 @@ def timestamp_to_iso_datetime(offset):
         return datetime.now().strftime("%Y-%m-%dT%H:%M")
 
 
-def hex_to_iso_datetime(offset):
-    """Backwards-compatible alias for timestamp_to_iso_datetime."""
-    return timestamp_to_iso_datetime(offset)
-
-
 def iso_datetime_to_timestamp(dt_str):
     """Convert an ISO datetime string (from HTML datetime-local) to stored integer offset from TIME_OFFSET."""
     try:
@@ -214,11 +196,6 @@ def iso_datetime_to_timestamp(dt_str):
         return max(0, unix_ts - TIME_OFFSET)
     except Exception:
         return max(0, int(time.time()) - TIME_OFFSET)
-
-
-def iso_datetime_to_hex(dt_str):
-    """Backwards-compatible alias for iso_datetime_to_timestamp."""
-    return iso_datetime_to_timestamp(dt_str)
 
 
 def create_table(table_name):

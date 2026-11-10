@@ -44,72 +44,10 @@ def _validate_table_name(name):
 youtube_bp = Blueprint('youtube', __name__, template_folder='templates')
 
 
-def _safe_path(base_dir, relative_path):
-    base_path = os.path.realpath(base_dir)
-    candidate_path = os.path.realpath(os.path.join(base_path, relative_path))
-
-    try:
-        is_within_base = os.path.commonpath([base_path, candidate_path]) == base_path
-    except ValueError:
-        is_within_base = False
-
-    if not is_within_base:
-        raise ValueError("path escapes its base directory")
-
-    return candidate_path
-
-
 # ---------------- DISPLAY ----------------
-
-def show_lyric(text):
-    try:
-        import subprocess
-        subprocess.Popen(["python3", "display.py", text])
-    except Exception as e:
-        print("DISPLAY ERROR:", e)
 
 
 # ---------------- LYRICS ----------------
-
-def fetch_synced_lyrics(title):
-    try:
-        r = requests.get(
-            "https://lrclib.net/api/search",
-            params={"q": title},
-            timeout=10,
-            verify=False
-        )
-
-        data = r.json()
-        if not data:
-            return []
-
-        synced = data[0].get("syncedLyrics")
-        if not synced:
-            return []
-
-        parsed = []
-
-        for line in synced.splitlines():
-            if not line.startswith("["):
-                continue
-            try:
-                ts = line.split("]")[0][1:]
-                lyric = line.split("]")[1]
-
-                mins, secs = ts.split(":")
-                total = int(mins) * 60 + float(secs)
-
-                parsed.append((total, lyric))
-            except:
-                pass
-
-        return parsed
-
-    except Exception as e:
-        logger.error("Lyrics fetch failed: " + str(e))
-        return []
-
 
 
 # ---------- PLAYBACK CONTROL ----------
@@ -163,31 +101,6 @@ def clean_track_name(track):
         t = t.replace(p, "")
 
     return " ".join(t.split()).strip()
-
-def parse_artist_track(text):
-    """Light heuristic parser for explicit formats."""
-    clean = text.lower()
-
-    junk_patterns = [
-        "(official music video)", "(official video)", "(official audio)",
-        "[official video]", "[lyrics]", "(lyrics)", "(official)",
-        "music video", "official video", "video"
-    ]
-
-    for p in junk_patterns:
-        clean = clean.replace(p, "")
-
-    original = text
-
-    if " - " in original:
-        a, t = original.split(" - ", 1)
-        return a.strip(), t.strip()
-
-    if " by " in clean:
-        idx = clean.find(" by ")
-        return original[:idx].strip(), original[idx + 4:].strip()
-
-    return None, None
 
 
 def get_lastfm_recommendations(query):
@@ -768,58 +681,6 @@ def search():
         })
 
     return jsonify(results)
-def get_musicatlas_recommendations(song_title, limit=5):
-    """
-    Fetches recommended track objects from the MusicAtlas API based on an input song.
-    """
-    if not MUSIC_ATLAS_KEY:
-        logger.error("MUSIC_ATLAS_KEY environment variable is not set.")
-        return []
-
-    # Using MusicAtlas endpoint for single-track or prompt similarity
-    url = "https://api.musicatlas.ai/v1/similar_tracks"
-
-    headers = {
-        "Authorization": f"Bearer {MUSIC_ATLAS_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "text": song_title,
-        "limit": limit
-    }
-
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
-
-        if response.status_code != 200:
-            logger.error(f"MusicAtlas API error: {response.status_code} - {response.text}")
-            return []
-
-        data = response.json()
-        recommendations = []
-
-        # Iterate through the returned recommendations map
-        for track in data.get("tracks", []):
-            title = track.get("title", "Unknown Track")
-            artists = track.get("artists", [])
-            artist_name = artists[0].get("name") if artists else "Unknown Artist"
-
-            # Extract YouTube videoId safely from platform mappings if present
-            platform_ids = track.get("platform_ids", {})
-            youtube_id = platform_ids.get("youtube")
-
-            recommendations.append({
-                "title": f"{artist_name} - {title}",
-                "videoId": youtube_id # Could be None if unavailable
-            })
-
-        return recommendations
-
-    except Exception as e:
-        logger.error(f"Failed to fetch MusicAtlas recommendations: {e}")
-        return []
-
 @youtube_bp.route("/auto_pick", methods=["POST"])
 def auto_pick():
     query = request.form.get("query")

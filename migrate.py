@@ -51,11 +51,6 @@ def default_timestamp():
     return max(0, int(time.time()) - TIME_OFFSET)
 
 
-def default_hex_timestamp():
-    """Generate default hex timestamp relative to TIME_OFFSET (legacy)."""
-    return format(default_timestamp(), "x")
-
-
 def parse_legacy_timestamp(raw_ts):
     """Convert a timestamp (legacy hex string, full Unix timestamp, or int) into an integer offset from TIME_OFFSET."""
     if raw_ts is None or raw_ts == "":

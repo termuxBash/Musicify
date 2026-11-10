@@ -128,13 +128,6 @@ class BoseSoundTouchWorker:
             "is_on": False,
         }
 
-    def get_now_playing(self):
-        """Retrieves playback metadata while preserving the legacy return shape."""
-        return self.get_status()["now_playing"]
-
-    def power_state(self):
-        """Returns ``on``, ``off``, or ``disconnected`` for the speaker."""
-        return self.get_status()["power_state"]
 
     def is_on(self):
         """Returns True only when the speaker is powered on."""

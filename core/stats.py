@@ -23,8 +23,6 @@ from core.bose_routes import get_status
 
 logger = logging.getLogger(__name__)
 stats_bp = Blueprint("stats", __name__)
-history_lock = threading.Lock()
-
 
 def _safe_path(base_dir, relative_path):
     base_path = os.path.realpath(base_dir)

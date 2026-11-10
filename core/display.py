@@ -16,42 +16,6 @@ def get_font_path():
         except IOError: continue
     return None
 
-def find_max_font_size(text_lines, font_path, max_width, max_height):
-    low_size = 5 # Lowered floor to handle massive sentences safely
-    high_size = 70
-    best_size = low_size
-    line_padding = 1
-
-    while low_size <= high_size:
-        mid_size = (low_size + high_size) // 2
-        font = ImageFont.truetype(font_path, size=mid_size)
-        total_height = 0
-        fits = True
-        
-        for line in text_lines:
-            bbox = font.getbbox(line)
-            if not bbox: continue
-            w = bbox[2] - bbox[0]
-            h = bbox[3] - bbox[1]
-            
-            if w > max_width:
-                fits = False
-                break
-            total_height += h + line_padding
-
-        if total_height > 0:
-            total_height -= line_padding
-        if total_height > max_height:
-            fits = False
-
-        if fits:
-            best_size = mid_size
-            low_size = mid_size + 1
-        else:
-            high_size = mid_size - 1
-
-    return best_size
-
 def send_maximized_text_to_bose(input_text):
     image = Image.new("L", (WIDTH, HEIGHT), 0)
     draw = ImageDraw.Draw(image)
