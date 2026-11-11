@@ -10,12 +10,22 @@ local_bp = Blueprint("local", __name__, template_folder="templates")
 
 
 def _safe_path(base_dir, relative_path):
-    base_path = os.path.realpath(base_dir)
-    candidate_path = os.path.realpath(os.path.join(base_path, relative_path))
+    if not isinstance(relative_path, str):
+        raise ValueError("path must be a string")
+
+    if os.path.isabs(relative_path):
+        raise ValueError("absolute paths are not allowed")
+
+    base_path = os.path.realpath(os.path.abspath(base_dir))
+    candidate_path = os.path.realpath(os.path.abspath(os.path.join(base_path, relative_path)))
 
     try:
         is_within_base = os.path.commonpath([base_path, candidate_path]) == base_path
     except ValueError:
+        is_within_base = False
+
+    base_prefix = base_path if base_path.endswith(os.sep) else base_path + os.sep
+    if not (candidate_path == base_path or candidate_path.startswith(base_prefix)):
         is_within_base = False
 
     if not is_within_base:
