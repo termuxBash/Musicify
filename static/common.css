@@ -1047,7 +1047,7 @@ nav {
     font-size: 1.05rem;
 }
 
-.now-playing-romanized-label {
+.now-playing-lyrics-source {
     display: inline-block;
     margin-left: 7px;
     color: var(--spotify-green);
@@ -1056,7 +1056,7 @@ nav {
     vertical-align: middle;
 }
 
-.now-playing-romanized-label[hidden] {
+.now-playing-lyrics-source[hidden] {
     display: none;
 }
 

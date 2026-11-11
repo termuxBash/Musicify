@@ -821,7 +821,7 @@ async function updateStats() {
         const lyricsEl = document.getElementById("live-lyrics");
         const modalThumbEl = document.getElementById("nowPlayingModalThumb");
         const modalTitleEl = document.getElementById("nowPlayingModalTitleText");
-        const modalRomanizedEl = document.getElementById("nowPlayingModalRomanized");
+        const modalLyricsSourceEl = document.getElementById("nowPlayingModalLyricsSource");
         const modalStatusEl = document.getElementById("nowPlayingModalStatus");
         const modalLyricsEl = document.getElementById("nowPlayingModalLyrics");
         const defaultSpeakerThumb = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E";
@@ -851,7 +851,11 @@ async function updateStats() {
                 modalThumbEl.classList.toggle("no-thumbnail", !data.now_playing.thumbnail);
             }
             if (modalTitleEl) modalTitleEl.textContent = title;
-            if (modalRomanizedEl) modalRomanizedEl.hidden = !data.lyrics_romanized;
+            if (modalLyricsSourceEl) {
+                const source = data.lyrics_source;
+                modalLyricsSourceEl.textContent = source ? `[${source}]` : "";
+                modalLyricsSourceEl.hidden = !source;
+            }
             if (modalStatusEl) modalStatusEl.textContent = playbackStatus;
             renderModalLyrics(
                 modalLyricsEl,
@@ -871,7 +875,10 @@ async function updateStats() {
                 modalThumbEl.classList.add("no-thumbnail");
             }
             if (modalTitleEl) modalTitleEl.textContent = "Ready to stream";
-            if (modalRomanizedEl) modalRomanizedEl.hidden = true;
+            if (modalLyricsSourceEl) {
+                modalLyricsSourceEl.textContent = "";
+                modalLyricsSourceEl.hidden = true;
+            }
             if (modalStatusEl) modalStatusEl.textContent = "IDLE";
             renderModalLyrics(modalLyricsEl, [], null, "");
         }

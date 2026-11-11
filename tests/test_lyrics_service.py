@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import ANY, patch
 
+import requests
+
 from services.lyrics_service import (
     LyricsService,
     align_lyrics,
@@ -106,10 +108,11 @@ class LyricsServiceTests(unittest.TestCase):
             service.current_lyrics,
             [(1.0, "Romanized one"), (4.0, "Romanized two")],
         )
+        self.assertEqual(service.lyrics_source, "Lyrica")
 
     @patch("services.lyrics_service.GEMINI_API_KEY", "test-key")
     @patch("services.lyrics_service.requests.post")
-    def test_romanize_lyrics_requests_latin_transliteration(self, post):
+    def test_romanize_lyrics_trusts_non_latin_gemini_output(self, post):
         class FakeResponse:
             def raise_for_status(self):
                 pass
@@ -117,7 +120,7 @@ class LyricsServiceTests(unittest.TestCase):
             def json(self):
                 return {
                     "candidates": [
-                        {"content": {"parts": [{"text": "Konnichiwa\nSekai"}]}}
+                        {"content": {"parts": [{"text": "Konnichiwa こんにちは\nSekai"}]}}
                     ]
                 }
 
@@ -125,7 +128,7 @@ class LyricsServiceTests(unittest.TestCase):
 
         result = romanize_lyrics("こんにちは\n世界")
 
-        self.assertEqual(result, "Konnichiwa\nSekai")
+        self.assertEqual(result, "Konnichiwa こんにちは\nSekai")
         self.assertIn("Do not translate them into English", post.call_args.kwargs["json"]["contents"][0]["parts"][0]["text"])
 
     @patch("services.lyrics_service.resolve_track", return_value=("Ado", "Ussewa"))
@@ -133,7 +136,7 @@ class LyricsServiceTests(unittest.TestCase):
     @patch("services.lyrics_service.GEMINI_API_KEY", "test-key")
     @patch("services.lyrics_service.requests.post")
     @patch("services.lyrics_service.requests.get")
-    def test_load_lyrics_uses_gemini_for_lrclib_non_latin_lyrics(
+    def test_load_lyrics_displays_gemini_output_even_with_non_latin_characters(
         self, get, post, resolve_track
     ):
         class FakeResponse:
@@ -158,7 +161,17 @@ class LyricsServiceTests(unittest.TestCase):
             FakeResponse({"lyrics": "正しさとは\n愚かさとは"}),
         ]
         post.return_value = FakeResponse(
-            {"candidates": [{"content": {"parts": [{"text": "Tadashisa to wa\nOrokasa to wa"}]}}]}
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"text": "Tadashisa to wa 正しさとは\nOrokasa to wa"}
+                            ]
+                        }
+                    }
+                ]
+            }
         )
         service = LyricsService()
 
@@ -170,16 +183,16 @@ class LyricsServiceTests(unittest.TestCase):
         )
         self.assertEqual(
             service.current_lyrics,
-            [(1.0, "Tadashisa to wa"), (4.0, "Orokasa to wa")],
+            [(1.0, "Tadashisa to wa 正しさとは"), (4.0, "Orokasa to wa")],
         )
-        self.assertTrue(service.is_romanized)
+        self.assertEqual(service.lyrics_source, "Gemini")
         resolve_track.assert_called_once_with("Ado - Ussewa", ANY)
 
     @patch("services.lyrics_service.resolve_track", return_value=("Ado", "Ussewa"))
     @patch("services.lyrics_service.LASTFM_KEY", "test-key")
     @patch("services.lyrics_service.GEMINI_API_KEY", None)
     @patch("services.lyrics_service.requests.get")
-    def test_load_lyrics_never_keeps_non_latin_lines_without_romanization(
+    def test_load_lyrics_falls_back_to_lyrica_when_gemini_is_unavailable(
         self, get, resolve_track
     ):
         class FakeResponse:
@@ -200,7 +213,109 @@ class LyricsServiceTests(unittest.TestCase):
 
         service._load_lyrics("Ado - Ussewa", 0)
 
+        self.assertEqual(service.current_lyrics, [(1.0, "正しさとは")])
+        self.assertEqual(service.lyrics_source, "Lyrica")
+        resolve_track.assert_called_once_with("Ado - Ussewa", ANY)
+
+    @patch("services.lyrics_service.resolve_track", return_value=("Ado", "Ussewa"))
+    @patch("services.lyrics_service.LASTFM_KEY", "test-key")
+    @patch("services.lyrics_service.GEMINI_API_KEY", "test-key")
+    @patch("services.lyrics_service.requests.post", side_effect=requests.Timeout)
+    @patch("services.lyrics_service.requests.get")
+    def test_load_lyrics_falls_back_to_lyrica_after_gemini_error(
+        self, get, post, resolve_track
+    ):
+        class FakeResponse:
+            def __init__(self, data):
+                self.data = data
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return self.data
+
+        get.side_effect = [
+            FakeResponse(
+                [
+                    {
+                        "plainLyrics": "正しさとは",
+                        "syncedLyrics": "[00:01.00] 正しさとは",
+                    }
+                ]
+            ),
+            FakeResponse({"lyrics": "Lyrica fallback line"}),
+        ]
+        service = LyricsService()
+
+        service._load_lyrics("Ado - Ussewa", 0)
+
+        self.assertEqual(service.current_lyrics, [(1.0, "Lyrica fallback line")])
+        self.assertEqual(service.lyrics_source, "Lyrica")
+        post.assert_called_once()
+        resolve_track.assert_called_once_with("Ado - Ussewa", ANY)
+
+    @patch("services.lyrics_service.resolve_track", return_value=("Ado", "Ussewa"))
+    @patch("services.lyrics_service.LASTFM_KEY", "test-key")
+    @patch("services.lyrics_service.GEMINI_API_KEY", None)
+    @patch("services.lyrics_service.requests.get")
+    def test_load_lyrics_falls_back_to_lrclib_when_lyrica_has_no_result(
+        self, get, resolve_track
+    ):
+        class FakeResponse:
+            def __init__(self, data):
+                self.data = data
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return self.data
+
+        get.side_effect = [
+            FakeResponse(
+                [
+                    {
+                        "plainLyrics": "正しさとは",
+                        "syncedLyrics": "[00:01.00] 正しさとは",
+                    }
+                ]
+            ),
+            FakeResponse({"status": "error", "lyrics": ""}),
+        ]
+        service = LyricsService()
+
+        service._load_lyrics("Ado - Ussewa", 0)
+
+        self.assertEqual(service.current_lyrics, [(1.0, "正しさとは")])
+        self.assertEqual(service.lyrics_source, "LRCLIB")
+        resolve_track.assert_called_once_with("Ado - Ussewa", ANY)
+
+    @patch("services.lyrics_service.resolve_track", return_value=("Ado", "Ussewa"))
+    @patch("services.lyrics_service.LASTFM_KEY", "test-key")
+    @patch("services.lyrics_service.GEMINI_API_KEY", None)
+    @patch("services.lyrics_service.requests.get")
+    def test_load_lyrics_is_empty_when_all_providers_fail(self, get, resolve_track):
+        class FakeResponse:
+            def __init__(self, data):
+                self.data = data
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return self.data
+
+        get.side_effect = [
+            FakeResponse([]),
+            FakeResponse({"status": "error", "lyrics": ""}),
+        ]
+        service = LyricsService()
+
+        service._load_lyrics("Ado - Ussewa", 0)
+
         self.assertEqual(service.current_lyrics, [])
+        self.assertIsNone(service.lyrics_source)
         resolve_track.assert_called_once_with("Ado - Ussewa", ANY)
 
 
