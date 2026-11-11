@@ -14,7 +14,7 @@ import logging
 from services.yt_service import YTService
 from core.bose_routes import check_power, ctrl
 from flask import current_app
-from core.settings import PLAYLIST_DIR, ROOT_DIR, TIME_OFFSET
+from core.settings import PLAYLIST_DIR, ROOT_DIR
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 from dotenv import load_dotenv
 import random

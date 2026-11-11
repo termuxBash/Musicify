@@ -109,7 +109,7 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 BACKUP_YOUTUBE_API_KEY = os.getenv("BACKUP_YOUTUBE_API_KEY", YOUTUBE_API_KEY)
 LASTFM_KEY = os.getenv("LASTFM_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 
 MUSIC_ATLAS_KEY = os.getenv("MUSIC_ATLAS_KEY", "PlaceholderKeyForMusicAtlas")

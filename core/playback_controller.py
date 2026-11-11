@@ -64,11 +64,9 @@ class PlaybackController:
             if self._owner != blueprint_name:
                 return False
             self.player.enqueue(song)
-
             return True
 
     def enqueue_many(self, blueprint_name, songs):
-
         with self._lock:
             if self._owner != blueprint_name:
                 return False
@@ -76,7 +74,6 @@ class PlaybackController:
             return True
 
     def remove_from_queue(self, index):
-
         with self._lock:
             #Allow any bp to remove from the queue, but not shift ownership
             return self.player.remove_from_queue(index)

@@ -643,7 +643,7 @@ def hist_delete_table():
 
 
 @youtube_bp.route("/<filename>")
-def switch_history_file(filename):
+def switch_history_table(filename):
     filename = filename.strip()
     if not filename or os.path.basename(filename) != filename:
         return jsonify({"error": "file must be a filename"}), 400

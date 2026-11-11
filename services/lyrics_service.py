@@ -80,7 +80,7 @@ class LyricsService:
         # Fire off to hardware screen if it changes
         if current_line and current_line != self.last_sent_lyric:
             self.last_sent_lyric = current_line
-            self.trigger_display(current_line)
+            #self.trigger_display(current_line)
 
         return current_line
 
