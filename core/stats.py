@@ -91,6 +91,21 @@ def toggle_lyrics():
     })
 
 
+@stats_bp.route("/lyrics_offset", methods=["POST"])
+def set_lyrics_offset():
+    data = request.get_json()
+    offset_ms = data.get("offset_ms") if isinstance(data, dict) else None
+    if type(offset_ms) is not int:
+        return jsonify({"status": "error", "message": "offset_ms must be an integer"}), 400
+
+    lyrics_svc = current_app.lyrics_service
+    lyrics_svc.set_offset(offset_ms)
+    return jsonify({
+        "status": "success",
+        "lyrics_offset_ms": offset_ms,
+    })
+
+
 @stats_bp.route("/toggle_autoplay", methods=["POST"])
 def toggle_autoplay():
     current_enabled = current_app.player.status().get("autoplay_enabled", False)

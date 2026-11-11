@@ -2,7 +2,9 @@ import unittest
 from unittest.mock import ANY, patch
 
 import requests
+from flask import Flask
 
+from core.stats import stats_bp
 from services.lyrics_service import (
     LyricsService,
     align_lyrics,
@@ -13,6 +15,27 @@ from services.lyrics_service import (
 
 
 class LyricsServiceTests(unittest.TestCase):
+    def test_lyrics_offset_route_updates_runtime_service_offset(self):
+        app = Flask(__name__)
+        app.register_blueprint(stats_bp)
+        app.lyrics_service = LyricsService(enabled=True, offset_ms=-3000)
+
+        response = app.test_client().post("/lyrics_offset", json={"offset_ms": 1250})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["lyrics_offset_ms"], 1250)
+        self.assertEqual(app.lyrics_service.offset_ms, 1250)
+
+    def test_lyrics_offset_route_rejects_non_integer_values(self):
+        app = Flask(__name__)
+        app.register_blueprint(stats_bp)
+        app.lyrics_service = LyricsService(enabled=True, offset_ms=-3000)
+
+        response = app.test_client().post("/lyrics_offset", json={"offset_ms": True})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(app.lyrics_service.offset_ms, -3000)
+
     def test_parse_synced_lyrics_reads_lrc_timestamps(self):
         parsed = parse_synced_lyrics(
             "[00:01.20] First line\n[00:03.5][00:04.25] Second line\n[00:05.00] "
@@ -41,7 +64,7 @@ class LyricsServiceTests(unittest.TestCase):
         self.assertTrue(is_non_english_script("こんにちは"))
 
     def test_lyrics_state_selects_the_active_lrclib_line(self):
-        service = LyricsService(enabled=True)
+        service = LyricsService(enabled=True, offset_ms=0)
         service.current_lyrics = [(1.0, "First line"), (4.0, "Second line")]
         service.song_start_time = 100
 
@@ -57,6 +80,27 @@ class LyricsServiceTests(unittest.TestCase):
                 {"time": 4.0, "text": "Second line"},
             ],
         )
+        self.assertEqual(state["lyrics_offset_ms"], 0)
+
+    def test_negative_lyrics_offset_delays_highlighting(self):
+        service = LyricsService(enabled=True, offset_ms=-3000)
+        service.current_lyrics = [(1.0, "First line"), (4.0, "Second line")]
+        service.song_start_time = 100
+
+        with patch("services.lyrics_service.time.time", return_value=105):
+            state = service.get_lyrics_state()
+
+        self.assertEqual(state["current_lyric_index"], 0)
+
+    def test_positive_lyrics_offset_advances_highlighting(self):
+        service = LyricsService(enabled=True, offset_ms=3000)
+        service.current_lyrics = [(1.0, "First line"), (4.0, "Second line")]
+        service.song_start_time = 100
+
+        with patch("services.lyrics_service.time.time", return_value=105):
+            state = service.get_lyrics_state()
+
+        self.assertEqual(state["current_lyric_index"], 1)
 
     @patch("services.lyrics_service.resolve_track", return_value=("Ado", "Ussewa"))
     @patch("services.lyrics_service.LASTFM_KEY", "test-key")

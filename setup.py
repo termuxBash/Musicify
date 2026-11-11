@@ -182,6 +182,7 @@ def write_env() -> None:
         "ROOT_DIR": root_dir,
         "TIME_OFFSET": "0",
         "LYRICS_ENABLED": "false",
+        "LYRICS_OFFSET_MS": "-3000",
         "AUTOPLAY_ENABLED": "false",
         "INCOGNI_MODE": "false",
         "SONG_NAME_CLEANUP": "live,acoustic,performance",

@@ -75,6 +75,7 @@ def set_history_table(table_name):
         HISTORY_TABLE = table_name
 
 TIME_OFFSET = env_int("TIME_OFFSET", 0)
+LYRICS_OFFSET_MS = env_int("LYRICS_OFFSET_MS", -3000)
 DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)
 DEFAULT_AUTOPLAY_ENABLED = env_bool("AUTOPLAY_ENABLED", False)
 DEFAULT_INCOGNI_MODE = env_bool("INCOGNI_MODE", False)

@@ -225,6 +225,31 @@ async function toggleLyrics(){
         method: "POST"
     });
 }
+
+async function setLyricsOffset(value) {
+    const input = document.getElementById("lyricsOffsetMs");
+    const offsetMs = Number(value);
+    if (!Number.isSafeInteger(offsetMs)) {
+        showPopup("Lyrics offset must be a whole number of milliseconds.");
+        return;
+    }
+
+    try {
+        const response = await fetch("/lyrics_offset", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offset_ms: offsetMs })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || "Failed to update lyrics offset.");
+        }
+        if (input) input.value = data.lyrics_offset_ms;
+    } catch (error) {
+        console.error("Failed to update lyrics offset:", error);
+        showPopup(error.message || "Failed to update lyrics offset.");
+    }
+}
 /* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */
 async function toggleAutoplay(){
     await fetch("/toggle_autoplay", {
@@ -944,6 +969,11 @@ async function updateStats() {
         
         const lyricsToggle = document.getElementById("lyricsToggle");
         if (lyricsToggle) lyricsToggle.checked = data.show_lyrics;
+
+        const lyricsOffsetInput = document.getElementById("lyricsOffsetMs");
+        if (lyricsOffsetInput && document.activeElement !== lyricsOffsetInput) {
+            lyricsOffsetInput.value = data.lyrics_offset_ms;
+        }
 
         const autoplayToggle = document.getElementById("autoplayToggle");
         if (autoplayToggle) autoplayToggle.checked = data.autoplay_enabled;

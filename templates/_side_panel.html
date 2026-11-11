@@ -53,6 +53,12 @@
                     </label>
                 </div>
 
+                <div class="settings-popup-offset">
+                    <label class="settings-popup-label" for="lyricsOffsetMs">Lyrics offset (ms)</label>
+                    <input id="lyricsOffsetMs" class="settings-popup-number" type="number" step="100" value="-3000" onchange="setLyricsOffset(this.value)">
+                    <p class="settings-popup-help">Negative delays lyrics that appear too fast; positive advances lyrics that appear too slow.</p>
+                </div>
+
                 <div class="settings-popup-divider"></div>
 
                 <!--<a href="/youtube/hist" class="settings-popup-action-btn">

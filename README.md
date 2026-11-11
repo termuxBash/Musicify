@@ -55,6 +55,7 @@ Set these in your `.env` file to override runtime defaults:
 - `DB_FILENAME` for the SQLite database filename. Defaults to `history.sqlite3`.
 - `TIME_OFFSET` for the hexadecimal Unix timestamp baseline used in playback history.
 - `LYRICS_ENABLED` to control lyrics on startup (`true` / `false`).
+- `LYRICS_OFFSET_MS` to adjust synced lyric timing in milliseconds. Defaults to `-3000`; negative values delay lyrics and positive values advance them. Settings-panel changes take effect immediately and last until the server restarts.
 - `AUTOPLAY_ENABLED` to control autoplay on startup (`true` / `false`).
 - `INCOGNI_MODE` to disable history recording by default (`true` / `false`).
 - `SONG_NAME_CLEANUP` for comma-separated title suffixes to remove.

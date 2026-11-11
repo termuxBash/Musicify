@@ -8,7 +8,13 @@ import unicodedata
 
 import requests
 
-from core.settings import DEFAULT_LYRICS_ENABLED, GEMINI_API_KEY, GEMINI_MODEL, LASTFM_KEY
+from core.settings import (
+    DEFAULT_LYRICS_ENABLED,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    LASTFM_KEY,
+    LYRICS_OFFSET_MS,
+)
 from services.lastfm_service import resolve_track
 
 logger = logging.getLogger(__name__)
@@ -134,10 +140,11 @@ LYRICS:
 
 
 class LyricsService:
-    def __init__(self, enabled=DEFAULT_LYRICS_ENABLED):
+    def __init__(self, enabled=DEFAULT_LYRICS_ENABLED, offset_ms=LYRICS_OFFSET_MS):
         self.current_lyrics = []
         self.song_start_time = None
         self.enabled = enabled
+        self.offset_ms = offset_ms
         self.last_sent_lyric = None
         self.lyrics_source = None
         self._lock = threading.Lock()
@@ -166,6 +173,10 @@ class LyricsService:
         with self._lock:
             if self.song_start_time is not None:
                 self.song_start_time += seconds
+
+    def set_offset(self, offset_ms):
+        with self._lock:
+            self.offset_ms = offset_ms
 
     def _load_lyrics(self, song_title, generation):
         clean_query = re.sub(r"\(.*?\)|\[.*?\]", "", song_title)
@@ -278,7 +289,12 @@ class LyricsService:
             lyrics = list(self.current_lyrics)
             start_time = self.song_start_time
             enabled = self.enabled
-            elapsed = time.time() - start_time if start_time is not None else None
+            offset_ms = self.offset_ms
+            elapsed = (
+                time.time() - start_time + offset_ms / 1000
+                if start_time is not None
+                else None
+            )
 
             current_index = None
             if enabled and elapsed is not None:
@@ -298,6 +314,7 @@ class LyricsService:
                 "current_lyric_index": current_index,
                 "current_lyric": current_lyric,
                 "lyrics_source": self.lyrics_source if enabled and lyrics else None,
+                "lyrics_offset_ms": offset_ms,
             }
 
     def get_current_line(self):
