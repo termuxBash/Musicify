@@ -2,13 +2,9 @@
     <div style="display:flex;justify-content:space-between;align-items:center;">
         <div class="queue-heading">
             <h3>Music Queue</h3>
-            <span class="queue-update-status" id="queueUpdateStatus" aria-live="polite">
-                <svg class="queue-update-spinner" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="42 16"></circle>
-                </svg>
-                <svg class="queue-update-check" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
+            <span class="status-indicator queue-update-status" id="queueUpdateStatus" aria-live="polite">
+                <img class="status-icon status-icon-spinner" src="{{ url_for('static', filename='spinner.svg') }}" alt="">
+                <img class="status-icon status-icon-check" src="{{ url_for('static', filename='checkmark.svg') }}" alt="">
             </span>
         </div>
         <button class="clear-queue-btn" onclick="clearQueue()">Clear Queue & Stop Music</button>

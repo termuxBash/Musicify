@@ -45,12 +45,40 @@ function showPopup(message) {
 function queueButtonSvg() {
     return `
         <svg class="qi-play" width="14" height="14" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
-        <svg class="qi-spin" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#1db954" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="40 20"/></svg>
-        <svg class="qi-check" width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="4,13 9,18 20,7" stroke="#1db954" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <img class="status-icon status-icon-spinner" src="/static/spinner.svg" alt="">
+        <img class="status-icon status-icon-check" src="/static/checkmark.svg" alt="">
     `;
 }
 
+const STATUS_CHECK_DURATION_MS = 5000;
+const statusIndicatorTimers = new WeakMap();
+
+function setStatusIndicator(element, state, onDone) {
+    if (!element) return;
+
+    clearTimeout(statusIndicatorTimers.get(element));
+    statusIndicatorTimers.delete(element);
+    element.classList.add("status-indicator");
+    element.classList.remove("status-loading", "status-done");
+
+    if (state === "loading") {
+        element.classList.add("status-loading");
+        element.setAttribute("aria-label", "Updating");
+    } else if (state === "done") {
+        element.classList.add("status-done");
+        element.setAttribute("aria-label", "Done");
+        const timer = setTimeout(() => {
+            setStatusIndicator(element, "idle");
+            if (onDone) onDone();
+        }, STATUS_CHECK_DURATION_MS);
+        statusIndicatorTimers.set(element, timer);
+    } else {
+        element.removeAttribute("aria-label");
+    }
+}
+
 document.querySelectorAll(".queue-icon-btn").forEach(button => {
+    button.classList.add("status-indicator");
     if (!button.querySelector(".qi-play")) {
         button.innerHTML = queueButtonSvg();
     }
@@ -63,16 +91,11 @@ async function enqueueSong(song, btn, options) {
         body: JSON.stringify(options.payload(song))
     });
 
-    const markQueued = () => {
-        btn.classList.remove("qi-loading");
-        btn.classList.add("qi-done");
-        setTimeout(() => {
-            btn.classList.remove("qi-done");
-            btn.disabled = false;
-        }, 5000);
-    };
+    const markQueued = () => setStatusIndicator(btn, "done", () => {
+        btn.disabled = false;
+    });
 
-    btn.classList.add("qi-loading");
+    setStatusIndicator(btn, "loading");
     btn.disabled = true;
 
     try {
@@ -86,7 +109,7 @@ async function enqueueSong(song, btn, options) {
         if (response.status === 403) {
             const data = await response.json();
             if (options.takeoverOwners.includes(data.owner)) {
-                btn.classList.remove("qi-loading");
+                setStatusIndicator(btn, "idle");
                 btn.disabled = false;
                 const takeOver = confirm(
                     `${data.owner} player is currently controlling playback.\n\n` +
@@ -95,7 +118,7 @@ async function enqueueSong(song, btn, options) {
                 );
                 if (!takeOver) return;
 
-                btn.classList.add("qi-loading");
+                setStatusIndicator(btn, "loading");
                 btn.disabled = true;
 
                 const acquire = await fetch(options.acquireUrl, {
@@ -127,8 +150,8 @@ async function enqueueSong(song, btn, options) {
         console.error("Failed to add song to queue:", error);
         showPopup("Failed to queue song.");
     } finally {
-        if (btn.classList.contains("qi-loading")) {
-            btn.classList.remove("qi-loading");
+        if (btn.classList.contains("status-loading")) {
+            setStatusIndicator(btn, "idle");
             btn.disabled = false;
         }
     }
@@ -280,33 +303,12 @@ async function clearQueue() {
 
 let queueItemBeingDragged = null;
 let queueMutationInProgress = false;
-let queueUpdateTimer = null;
 let activeQueueGesture = null;
-
-function setQueueUpdateStatus(state) {
-    const status = document.getElementById("queueUpdateStatus");
-    if (!status) return;
-
-    clearTimeout(queueUpdateTimer);
-    status.classList.remove("is-updating", "is-done");
-    if (state === "updating") {
-        status.classList.add("is-updating");
-        status.setAttribute("aria-label", "Updating queue");
-    } else if (state === "done") {
-        status.classList.add("is-done");
-        status.setAttribute("aria-label", "Queue updated");
-        queueUpdateTimer = setTimeout(() => {
-            status.classList.remove("is-done");
-            status.removeAttribute("aria-label");
-        }, 3000);
-    } else {
-        status.removeAttribute("aria-label");
-    }
-}
 
 async function runQueueMutation(request, errorMessage) {
     queueMutationInProgress = true;
-    setQueueUpdateStatus("updating");
+    const status = document.getElementById("queueUpdateStatus");
+    setStatusIndicator(status, "loading");
     let succeeded = false;
 
     try {
@@ -319,7 +321,7 @@ async function runQueueMutation(request, errorMessage) {
     } finally {
         queueMutationInProgress = false;
         await updateStats();
-        setQueueUpdateStatus(succeeded ? "done" : "idle");
+        setStatusIndicator(status, succeeded ? "done" : "idle");
     }
 }
 
@@ -467,12 +469,12 @@ function endQueueGesture(event) {
         if (gesture.isHorizontalSwipe && deltaX > threshold) {
             gesture.row.style.transform = `translateX(${window.innerWidth}px)`;
             queueMutationInProgress = true;
-            setQueueUpdateStatus("updating");
+            setStatusIndicator(document.getElementById("queueUpdateStatus"), "loading");
             setTimeout(() => playNextInQueue(Number(gesture.wrapper.dataset.queueIndex)), 250);
         } else if (gesture.isHorizontalSwipe && deltaX < -threshold) {
             gesture.row.style.transform = `translateX(-${window.innerWidth}px)`;
             queueMutationInProgress = true;
-            setQueueUpdateStatus("updating");
+            setStatusIndicator(document.getElementById("queueUpdateStatus"), "loading");
             setTimeout(() => removeFromQueue(Number(gesture.wrapper.dataset.queueIndex)), 250);
         } else {
             gesture.row.style.transform = "";
