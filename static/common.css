@@ -973,6 +973,7 @@ nav {
 }
 
 .now-playing-modal-card {
+    scrollbar-width: none;
     position: relative;
     width: min(100%, 680px);
     max-height: 86vh;
@@ -1047,13 +1048,36 @@ nav {
 }
 
 .now-playing-modal-lyrics {
+    max-height: 42vh;
     min-height: 54px;
-    padding: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 18px 16px;
     border: 1px solid #2f2f2f;
     border-radius: 10px;
     background: #1a1a1a;
-    color: #d1d5db;
-    line-height: 1.5;
+    color: #a1a1aa;
+    line-height: 1.7;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+}
+
+.now-playing-lyric-line {
+    min-height: 1.7em;
+    padding: 3px 4px;
+    font-size: clamp(1rem, 3vw, 1.2rem);
+    transition: color 0.18s ease, opacity 0.18s ease;
+}
+
+.now-playing-lyric-line.active {
+    color: #fff;
+    font-weight: 600;
+    text-shadow: 0 0 14px rgba(29, 185, 84, 0.38);
+}
+
+.now-playing-lyrics-empty {
+    padding: 4px;
+    color: #9ca3af;
 }
 
 @keyframes now-playing-ticker {

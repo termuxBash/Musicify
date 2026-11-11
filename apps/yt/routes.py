@@ -16,6 +16,7 @@ from core.settings import (
     PLAYLIST_DIR,
     SONG_NAME_CLEANUP,
 )
+from services.lastfm_service import resolve_track
 import logging
 import random
 import requests # type: ignore
@@ -51,43 +52,6 @@ youtube_bp = Blueprint('youtube', __name__, template_folder='templates')
 
 
 # ---------- PLAYBACK CONTROL ----------
-
-def resolve_track(query, api_key):
-    url = "https://ws.audioscrobbler.com/2.0/"
-
-    params = {
-        "method": "track.search",
-        "track": query,
-        "api_key": api_key,
-        "format": "json",
-        "limit": 5
-    }
-
-    resp = requests.get(url, params=params, timeout=10)
-    data = resp.json()
-
-    matches = (
-        data.get("results", {})
-            .get("trackmatches", {})
-            .get("track", [])
-    )
-
-    if not matches:
-        return None, None
-
-    if isinstance(matches, dict):
-        matches = [matches]
-
-    best = matches[0]
-
-    artist = best.get("artist", "")
-    track = best.get("name", "")
-
-    # 🔥 HARD SANITIZATION (important fix)
-    artist = artist.split(" - ")[0].strip()
-    track = track.split(" - ")[-1].strip()
-
-    return artist, track
 
 def clean_track_name(track):
     junk_patterns = [

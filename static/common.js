@@ -289,6 +289,51 @@ function closeNowPlaying() {
     document.getElementById("nowPlayingModal")?.classList.remove("open");
 }
 
+function renderModalLyrics(element, lyrics, currentIndex, trackTitle) {
+    if (!element) return;
+
+    const lines = Array.isArray(lyrics) ? lyrics : [];
+    const signature = `${trackTitle}\n${JSON.stringify(lines)}`;
+    if (element.dataset.lyricsSignature !== signature) {
+        const lyricNodes = lines.map(({ text }) => {
+            const line = document.createElement("div");
+            line.className = "now-playing-lyric-line";
+            line.textContent = text;
+            return line;
+        });
+
+        if (lyricNodes.length === 0) {
+            const emptyMessage = document.createElement("div");
+            emptyMessage.className = "now-playing-lyrics-empty";
+            emptyMessage.textContent = "No lyrics available";
+            lyricNodes.push(emptyMessage);
+        }
+
+        element.replaceChildren(...lyricNodes);
+        element.dataset.lyricsSignature = signature;
+        element.dataset.activeLyricIndex = "";
+    }
+
+    const activeIndex = Number.isInteger(currentIndex) ? currentIndex : null;
+    const activeIndexValue = activeIndex === null ? "" : String(activeIndex);
+    if (element.dataset.activeLyricIndex === activeIndexValue) return;
+
+    element.querySelectorAll(".now-playing-lyric-line").forEach((line, index) => {
+        const isActive = index === activeIndex;
+        line.classList.toggle("active", isActive);
+        if (isActive) {
+            line.setAttribute("aria-current", "true");
+        } else {
+            line.removeAttribute("aria-current");
+        }
+    });
+
+    element.dataset.activeLyricIndex = activeIndexValue;
+    if (activeIndex !== null && document.getElementById("nowPlayingModal")?.classList.contains("open")) {
+        element.children[activeIndex]?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+}
+
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeNowPlaying();
 });
@@ -806,7 +851,12 @@ async function updateStats() {
             }
             if (modalTitleEl) modalTitleEl.textContent = title;
             if (modalStatusEl) modalStatusEl.textContent = playbackStatus;
-            if (modalLyricsEl) modalLyricsEl.textContent = data.current_lyric || "No lyrics available";
+            renderModalLyrics(
+                modalLyricsEl,
+                data.lyrics,
+                data.current_lyric_index,
+                title
+            );
         } else {
             if (titleTextEl) titleTextEl.textContent = "Ready to stream";
             if (titleEl) titleEl.classList.remove("ticker");
@@ -820,7 +870,7 @@ async function updateStats() {
             }
             if (modalTitleEl) modalTitleEl.textContent = "Ready to stream";
             if (modalStatusEl) modalStatusEl.textContent = "IDLE";
-            if (modalLyricsEl) modalLyricsEl.textContent = "No lyrics available";
+            renderModalLyrics(modalLyricsEl, [], null, "");
         }
 
         const qList = document.getElementById("queueList");

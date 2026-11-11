@@ -59,7 +59,9 @@ def stats():
         lyrics_svc.reset(current_title)
     # If paused, shift back the clock baseline so lyrics don't keep running ahead
     if not is_playing and lyrics_svc.song_start_time is not None:
-        lyrics_svc.song_start_time += 2  # Match front-end poll loop interval
+        lyrics_svc.shift_timeline(2)  # Match front-end poll loop interval
+
+    lyrics_state = lyrics_svc.get_lyrics_state()
 
     return jsonify({
         "cpu": int(round(psutil.cpu_percent())),
@@ -72,14 +74,20 @@ def stats():
         "autoplay_enabled": player_status.get("autoplay_enabled", False),
         "incogni_mode": current_app.incogni_mode,
         "show_lyrics": lyrics_svc.enabled,
-        "current_lyric": lyrics_svc.get_current_line(),  # This returns the raw line string
+        **lyrics_state,
     })
 @stats_bp.route("/toggle_lyrics", methods=["POST"])
 def toggle_lyrics():
-    current_app.lyrics_service.enabled = not current_app.lyrics_service.enabled
+    lyrics_svc = current_app.lyrics_service
+    lyrics_svc.enabled = not lyrics_svc.enabled
+    if lyrics_svc.enabled:
+        current_song = current_app.player.status().get("current_song")
+        current_title = current_song.get("title") if current_song else None
+        current_app.last_known_title = current_title
+        lyrics_svc.reset(current_title)
     return jsonify({
         "status": "success",
-        "show_lyrics": current_app.lyrics_service.enabled
+        "show_lyrics": lyrics_svc.enabled
     })
 
 
