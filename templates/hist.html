@@ -1083,30 +1083,17 @@ async function deleteRow(id) {
 }
 
 async function queueSong(title, videoId, thumbWrap) {
-    if (thumbWrap) setStatusIndicator(thumbWrap, "loading");
-    let queued = false;
-    try {
-        const songObj = {
-            title: title,
-            videoId: videoId,
-            thumbnail: "https://img.youtube.com/vi/" + videoId + "/hqdefault.jpg"
-        };
-        const res = await fetch(window.API_PREFIX + "/enqueue", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(songObj)
-        });
-        if (res.ok) {
-            queued = true;
-            showPopup("Queued: " + title);
-        } else {
-            showPopup("Failed to queue song.");
-        }
-    } catch (e) {
-        showPopup("Queue error.");
-    } finally {
-        if (thumbWrap) setStatusIndicator(thumbWrap, queued ? "done" : "idle");
-    }
+    const song = {
+        title: title,
+        videoId: videoId,
+        thumbnail: "https://img.youtube.com/vi/" + videoId + "/hqdefault.jpg"
+    };
+    return enqueueSong(song, thumbWrap, {
+        enqueueUrl: window.API_PREFIX + "/enqueue",
+        acquireUrl: window.API_PREFIX + "/acquire",
+        payload: track => track,
+        takeoverOwners: ["local", "playlist"]
+    });
 }
 
 async function setActiveTable(tbl) {

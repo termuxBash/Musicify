@@ -4,4 +4,4 @@ psutil>=5.9.8
 python-dotenv>=1.2.4
 Requests>=2.34.2
 upnpclient>=2.0.3
-yt_dlp>=2026.8.19
+yt_dlp>=2026.10.26
