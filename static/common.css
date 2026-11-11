@@ -119,6 +119,12 @@ nav {
     flex: 1; 
     overflow-y: auto; 
     margin-top: 20px; 
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.queue-list::-webkit-scrollbar {
+    display: none;
 }
 
 .queue-help {
@@ -128,6 +134,88 @@ nav {
     line-height: 1.4;
 }
 
+.queue-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.queue-update-status {
+    display: none;
+    width: 18px;
+    height: 18px;
+    color: #22c55e;
+}
+
+.queue-update-status.is-updating,
+.queue-update-status.is-done {
+    display: inline-flex;
+}
+
+.queue-update-status svg {
+    width: 100%;
+    height: 100%;
+}
+
+.queue-update-spinner {
+    display: none;
+    animation: qi-rotate 0.75s linear infinite;
+}
+
+.queue-update-check {
+    display: none;
+}
+
+.queue-update-status.is-updating .queue-update-spinner {
+    display: block;
+}
+
+.queue-update-status.is-done .queue-update-check {
+    display: block;
+}
+
+.queue-item-wrapper {
+    position: relative;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.queue-swipe-bg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease;
+}
+
+.queue-swipe-bg img,
+.queue-swipe-bg svg {
+    width: 24px;
+    height: 24px;
+    filter: brightness(0) invert(1);
+}
+
+.queue-swipe-bg-play-next {
+    justify-content: flex-start;
+    background: #2196f3;
+}
+
+.queue-swipe-bg-delete {
+    justify-content: flex-end;
+    background: #f44336;
+}
+
+.queue-item-placeholder {
+    margin-bottom: 10px;
+    border: 2px dashed rgba(255, 255, 255, 0.35);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
 .queue-item {
     display: flex; 
     align-items: center; 
@@ -135,17 +223,10 @@ nav {
     background: var(--card-bg); 
     padding: 10px; 
     border-radius: 8px; 
-    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
     touch-action: pan-y;
     transition: background-color 0.15s ease, transform 0.15s ease;
-}
-
-.queue-item.swipe-play-next {
-    background: #2563eb;
-}
-
-.queue-item.swipe-delete {
-    background: #dc2626;
 }
 
 .queue-item p {
@@ -153,9 +234,8 @@ nav {
     min-width: 0;
 }
 
-.queue-item.dragging {
-    opacity: 0.55;
-    background: #333;
+.queue-item-wrapper.dragging .queue-item {
+    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.4);
 }
 
 .queue-item-drag-handle {

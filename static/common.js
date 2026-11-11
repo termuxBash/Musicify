@@ -278,164 +278,264 @@ async function clearQueue() {
     await fetch("/stop", { method: "POST" }); 
 }
 
-async function removeFromQueue(i) {
-    try {
-        const response = await fetch("/remove_from_queue/" + i, { method: "POST" });
-        if (!response.ok) {
-            showPopup("Failed to remove song from queue.");
-            return;
-        }
-        await updateStats();
-    } catch (error) {
-        console.error("Failed to remove song from queue:", error);
-        showPopup("Failed to remove song from queue.");
-    }
-}
-
-async function playNextInQueue(i) {
-    try {
-        const response = await fetch("/play_next/" + i, { method: "POST" });
-        if (!response.ok) {
-            showPopup("Failed to move song to the front of the queue.");
-            return;
-        }
-        await updateStats();
-    } catch (error) {
-        console.error("Failed to move song to the front of the queue:", error);
-        showPopup("Failed to move song to the front of the queue.");
-    }
-}
-
 let queueItemBeingDragged = null;
-let queueReorderInProgress = false;
+let queueMutationInProgress = false;
+let queueUpdateTimer = null;
+let activeQueueGesture = null;
+
+function setQueueUpdateStatus(state) {
+    const status = document.getElementById("queueUpdateStatus");
+    if (!status) return;
+
+    clearTimeout(queueUpdateTimer);
+    status.classList.remove("is-updating", "is-done");
+    if (state === "updating") {
+        status.classList.add("is-updating");
+        status.setAttribute("aria-label", "Updating queue");
+    } else if (state === "done") {
+        status.classList.add("is-done");
+        status.setAttribute("aria-label", "Queue updated");
+        queueUpdateTimer = setTimeout(() => {
+            status.classList.remove("is-done");
+            status.removeAttribute("aria-label");
+        }, 3000);
+    } else {
+        status.removeAttribute("aria-label");
+    }
+}
+
+async function runQueueMutation(request, errorMessage) {
+    queueMutationInProgress = true;
+    setQueueUpdateStatus("updating");
+    let succeeded = false;
+
+    try {
+        const response = await request();
+        if (!response.ok) throw new Error(`Queue update failed with status ${response.status}`);
+        succeeded = true;
+    } catch (error) {
+        console.error(errorMessage, error);
+        showPopup(errorMessage);
+    } finally {
+        queueMutationInProgress = false;
+        await updateStats();
+        setQueueUpdateStatus(succeeded ? "done" : "idle");
+    }
+}
+
+async function removeFromQueue(index) {
+    await runQueueMutation(
+        () => fetch(`/remove_from_queue/${index}`, { method: "POST" }),
+        "Failed to remove song from queue."
+    );
+}
+
+async function playNextInQueue(index) {
+    await runQueueMutation(
+        () => fetch(`/play_next/${index}`, { method: "POST" }),
+        "Failed to move song to the front of the queue."
+    );
+}
 
 async function reorderQueue(sourceIndex, targetIndex) {
-    queueReorderInProgress = true;
-    try {
-        const response = await fetch(`/reorder_queue/${sourceIndex}/${targetIndex}`, { method: "POST" });
-        if (!response.ok) {
-            showPopup("Failed to reorder queue.");
-        }
-    } catch (error) {
-        console.error("Failed to reorder queue:", error);
-        showPopup("Failed to reorder queue.");
-    } finally {
-        queueReorderInProgress = false;
-        await updateStats();
-    }
+    await runQueueMutation(
+        () => fetch(`/reorder_queue/${sourceIndex}/${targetIndex}`, { method: "POST" }),
+        "Failed to reorder queue."
+    );
 }
 
-function startQueueSwipe(event) {
-    if (event.target.closest(".queue-item-delete, .queue-item-drag-handle")) return;
-    this.dataset.swipeStartX = event.clientX;
-    this.dataset.swipeStartY = event.clientY;
-    this.dataset.swipePointerId = event.pointerId;
-    this.setPointerCapture(event.pointerId);
-}
+function startQueueGesture(event) {
+    if (activeQueueGesture || event.target.closest(".queue-item-delete")) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
 
-function moveQueueSwipe(event) {
-    if (this.dataset.swipePointerId !== String(event.pointerId)) return;
-    const deltaX = event.clientX - Number(this.dataset.swipeStartX);
-    const deltaY = event.clientY - Number(this.dataset.swipeStartY);
-    if (Math.abs(deltaX) < 8 || Math.abs(deltaX) < Math.abs(deltaY)) return;
-
-    event.preventDefault();
-    this.style.transform = `translateX(${deltaX}px)`;
-    this.classList.toggle("swipe-play-next", deltaX > 0);
-    this.classList.toggle("swipe-delete", deltaX < 0);
-}
-
-function endQueueSwipe(event) {
-    if (this.dataset.swipePointerId !== String(event.pointerId)) return;
-    const deltaX = event.clientX - Number(this.dataset.swipeStartX);
-    const wasSwiped = event.type === "pointerup" && Math.abs(deltaX) >= 80;
-    const index = Number(this.dataset.queueIndex);
-
-    this.style.transform = "";
-    this.classList.remove("swipe-play-next", "swipe-delete");
-    delete this.dataset.swipePointerId;
-    delete this.dataset.swipeStartX;
-    delete this.dataset.swipeStartY;
-
-    if (!wasSwiped) return;
-    if (deltaX > 0) {
-        playNextInQueue(index);
+    const wrapper = event.currentTarget;
+    const row = wrapper.querySelector(".queue-item");
+    const handle = event.target.closest(".queue-item-drag-handle");
+    if (event.pointerType === "mouse" || handle) {
+        startQueueReorder(event, wrapper, row);
     } else {
-        removeFromQueue(index);
+        startQueueSwipe(event, wrapper, row);
     }
 }
 
-function startQueueReorder(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.button !== 0 || queueItemBeingDragged) return;
-
-    const handle = event.currentTarget;
-    const item = handle.closest(".queue-item");
-    const list = item?.parentElement;
-    if (!item || !list) return;
-
-    queueItemBeingDragged = item;
-    item.dataset.dragSourceIndex = item.dataset.queueIndex;
-    item.dataset.dragStartY = event.clientY;
-    handle.setPointerCapture(event.pointerId);
-    handle.addEventListener("pointermove", moveQueueReorder);
-    handle.addEventListener("pointerup", endQueueReorder, { once: true });
-    handle.addEventListener("pointercancel", cancelQueueReorder, { once: true });
+function startQueueSwipe(event, wrapper, row) {
+    const blueBackground = wrapper.querySelector(".queue-swipe-bg-play-next");
+    const redBackground = wrapper.querySelector(".queue-swipe-bg-delete");
+    activeQueueGesture = {
+        mode: "swipe",
+        pointerId: event.pointerId,
+        wrapper,
+        row,
+        startX: event.clientX,
+        startY: event.clientY,
+        currentX: event.clientX,
+        isHorizontalSwipe: false,
+        blueBackground,
+        redBackground
+    };
+    try {
+        wrapper.setPointerCapture(event.pointerId);
+    } catch (error) {
+        console.debug("Pointer capture unavailable for queue swipe.", error);
+    }
+    document.addEventListener("pointermove", moveQueueGesture);
+    document.addEventListener("pointerup", endQueueGesture);
+    document.addEventListener("pointercancel", cancelQueueGesture);
 }
 
-function moveQueueReorder(event) {
-    if (!queueItemBeingDragged) return;
-    const item = queueItemBeingDragged;
-    const handle = event.currentTarget;
-    const deltaY = event.clientY - Number(item.dataset.dragStartY);
-    if (!item.classList.contains("dragging") && Math.abs(deltaY) < 6) return;
+function startQueueReorder(event, wrapper, row) {
+    event.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const list = wrapper.parentElement;
+    const placeholder = document.createElement("div");
+    placeholder.className = "queue-item-placeholder";
+    placeholder.style.height = `${wrapper.getBoundingClientRect().height}px`;
+    list.insertBefore(placeholder, wrapper);
 
-    item.classList.add("dragging");
-    const siblings = Array.from(item.parentElement.children).filter(row => row !== item);
-    const target = siblings.find(row => {
-        const bounds = row.getBoundingClientRect();
+    wrapper.classList.add("dragging");
+    wrapper.style.position = "fixed";
+    wrapper.style.zIndex = "2000";
+    wrapper.style.top = `${rect.top}px`;
+    wrapper.style.left = `${rect.left}px`;
+    wrapper.style.width = `${rect.width}px`;
+    wrapper.style.margin = "0";
+    queueItemBeingDragged = wrapper;
+    activeQueueGesture = {
+        mode: "reorder",
+        pointerId: event.pointerId,
+        wrapper,
+        row,
+        list,
+        placeholder,
+        sourceIndex: Number(wrapper.dataset.queueIndex),
+        pointerOffsetY: event.clientY - rect.top
+    };
+    document.addEventListener("pointermove", moveQueueGesture);
+    document.addEventListener("pointerup", endQueueGesture);
+    document.addEventListener("pointercancel", cancelQueueGesture);
+}
+
+function moveQueueGesture(event) {
+    const gesture = activeQueueGesture;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+    if (gesture.mode === "swipe") {
+        const deltaX = event.clientX - gesture.startX;
+        const deltaY = event.clientY - gesture.startY;
+        if (Math.abs(deltaX) < 8 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+
+        event.preventDefault();
+        gesture.currentX = event.clientX;
+        gesture.isHorizontalSwipe = true;
+        gesture.row.style.transition = "none";
+        gesture.row.style.transform = `translateX(${deltaX}px)`;
+        const opacity = Math.min(Math.abs(deltaX) / 100, 1);
+        gesture.blueBackground.style.opacity = deltaX > 0 ? opacity : 0;
+        gesture.redBackground.style.opacity = deltaX < 0 ? opacity : 0;
+        return;
+    }
+
+    event.preventDefault();
+    gesture.wrapper.style.top = `${event.clientY - gesture.pointerOffsetY}px`;
+    const siblings = Array.from(gesture.list.querySelectorAll(".queue-item-wrapper:not(.dragging)"));
+    const nextWrapper = siblings.find(candidate => {
+        const bounds = candidate.getBoundingClientRect();
         return event.clientY < bounds.top + bounds.height / 2;
     });
-    item.parentElement.insertBefore(item, target || null);
+    gesture.list.insertBefore(gesture.placeholder, nextWrapper || null);
 }
 
-function finishQueueReorder(handle, cancelled = false) {
-    handle.removeEventListener("pointermove", moveQueueReorder);
-    if (!queueItemBeingDragged) return;
+function removeQueueGestureListeners() {
+    document.removeEventListener("pointermove", moveQueueGesture);
+    document.removeEventListener("pointerup", endQueueGesture);
+    document.removeEventListener("pointercancel", cancelQueueGesture);
+}
 
-    const item = queueItemBeingDragged;
-    const sourceIndex = Number(item.dataset.dragSourceIndex);
-    const targetIndex = Array.from(item.parentElement.children).indexOf(item);
-    item.classList.remove("dragging");
-    delete item.dataset.dragSourceIndex;
-    delete item.dataset.dragStartY;
+function endQueueGesture(event) {
+    const gesture = activeQueueGesture;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+    removeQueueGestureListeners();
+    activeQueueGesture = null;
+    if (gesture.mode === "swipe") {
+        const deltaX = event.clientX - gesture.startX;
+        const threshold = 110;
+        gesture.row.style.transition = "transform 0.25s ease";
+        gesture.blueBackground.style.opacity = 0;
+        gesture.redBackground.style.opacity = 0;
+
+        if (gesture.isHorizontalSwipe && deltaX > threshold) {
+            gesture.row.style.transform = `translateX(${window.innerWidth}px)`;
+            queueMutationInProgress = true;
+            setQueueUpdateStatus("updating");
+            setTimeout(() => playNextInQueue(Number(gesture.wrapper.dataset.queueIndex)), 250);
+        } else if (gesture.isHorizontalSwipe && deltaX < -threshold) {
+            gesture.row.style.transform = `translateX(-${window.innerWidth}px)`;
+            queueMutationInProgress = true;
+            setQueueUpdateStatus("updating");
+            setTimeout(() => removeFromQueue(Number(gesture.wrapper.dataset.queueIndex)), 250);
+        } else {
+            gesture.row.style.transform = "";
+            setTimeout(() => {
+                if (gesture.row.isConnected) gesture.row.style.transition = "";
+            }, 250);
+        }
+        return;
+    }
+
+    gesture.list.insertBefore(gesture.wrapper, gesture.placeholder);
+    gesture.placeholder.remove();
+    gesture.wrapper.classList.remove("dragging");
+    gesture.wrapper.style.position = "";
+    gesture.wrapper.style.zIndex = "";
+    gesture.wrapper.style.top = "";
+    gesture.wrapper.style.left = "";
+    gesture.wrapper.style.width = "";
+    gesture.wrapper.style.margin = "";
     queueItemBeingDragged = null;
-
-    if (cancelled) {
-        updateStats();
-    } else if (sourceIndex !== targetIndex) {
-        reorderQueue(sourceIndex, targetIndex);
+    const targetIndex = Array.from(gesture.list.querySelectorAll(".queue-item-wrapper"))
+        .indexOf(gesture.wrapper);
+    if (targetIndex !== gesture.sourceIndex) {
+        reorderQueue(gesture.sourceIndex, targetIndex);
     }
 }
 
-function endQueueReorder(event) {
-    finishQueueReorder(event.currentTarget);
-}
+function cancelQueueGesture(event) {
+    const gesture = activeQueueGesture;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
 
-function cancelQueueReorder(event) {
-    finishQueueReorder(event.currentTarget, true);
+    removeQueueGestureListeners();
+    activeQueueGesture = null;
+    if (gesture.mode === "swipe") {
+        gesture.row.style.transition = "";
+        gesture.row.style.transform = "";
+        gesture.blueBackground.style.opacity = 0;
+        gesture.redBackground.style.opacity = 0;
+        return;
+    }
+
+    gesture.placeholder.remove();
+    gesture.wrapper.classList.remove("dragging");
+    gesture.wrapper.style.position = "";
+    gesture.wrapper.style.zIndex = "";
+    gesture.wrapper.style.top = "";
+    gesture.wrapper.style.left = "";
+    gesture.wrapper.style.width = "";
+    gesture.wrapper.style.margin = "";
+    queueItemBeingDragged = null;
+    updateStats();
 }
 
 function keyboardReorderQueue(event) {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
-    const item = event.currentTarget.closest(".queue-item");
-    if (!item) return;
+    const wrapper = event.currentTarget.closest(".queue-item-wrapper");
+    if (!wrapper) return;
 
-    const sourceIndex = Array.from(item.parentElement.children).indexOf(item);
+    const rows = Array.from(wrapper.parentElement.querySelectorAll(".queue-item-wrapper"));
+    const sourceIndex = rows.indexOf(wrapper);
     const targetIndex = sourceIndex + (event.key === "ArrowUp" ? -1 : 1);
-    if (targetIndex < 0 || targetIndex >= item.parentElement.children.length) return;
+    if (targetIndex < 0 || targetIndex >= rows.length) return;
     reorderQueue(sourceIndex, targetIndex);
 }
 
@@ -722,18 +822,33 @@ async function updateStats() {
         }
 
         const qList = document.getElementById("queueList");
-        if (qList && !queueItemBeingDragged && !queueReorderInProgress) {
+        if (qList && !queueItemBeingDragged && !activeQueueGesture && !queueMutationInProgress) {
             if (!data.queue || data.queue.length === 0) {
                 qList.textContent = "No songs queued";
             } else {
                 qList.replaceChildren(...data.queue.map((song, index) => {
+                    const wrapper = document.createElement("div");
+                    wrapper.className = "queue-item-wrapper";
+                    wrapper.dataset.queueIndex = index;
+                    wrapper.addEventListener("pointerdown", startQueueGesture);
+
+                    const playNextBackground = document.createElement("div");
+                    playNextBackground.className = "queue-swipe-bg queue-swipe-bg-play-next";
+                    const playNextIcon = document.createElement("img");
+                    playNextIcon.src = "/static/forward-fast-solid-full.svg";
+                    playNextIcon.alt = "";
+                    playNextBackground.append(playNextIcon);
+
+                    const deleteBackground = document.createElement("div");
+                    deleteBackground.className = "queue-swipe-bg queue-swipe-bg-delete";
+                    deleteBackground.innerHTML = `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    `;
+
                     const item = document.createElement("div");
                     item.className = "queue-item";
-                    item.dataset.queueIndex = index;
-                    item.addEventListener("pointerdown", startQueueSwipe);
-                    item.addEventListener("pointermove", moveQueueSwipe);
-                    item.addEventListener("pointerup", endQueueSwipe);
-                    item.addEventListener("pointercancel", endQueueSwipe);
 
                     const dragHandle = document.createElement("button");
                     dragHandle.type = "button";
@@ -741,7 +856,6 @@ async function updateStats() {
                     dragHandle.textContent = "=";
                     dragHandle.title = "Drag to reorder; use arrow keys to move";
                     dragHandle.setAttribute("aria-label", `Reorder ${song.title || "song"}`);
-                    dragHandle.addEventListener("pointerdown", startQueueReorder);
                     dragHandle.addEventListener("keydown", keyboardReorderQueue);
 
                     const thumbnail = document.createElement("img");
@@ -760,7 +874,8 @@ async function updateStats() {
                     removeButton.addEventListener("click", () => removeFromQueue(index));
 
                     item.append(dragHandle, thumbnail, title, removeButton);
-                    return item;
+                    wrapper.append(playNextBackground, deleteBackground, item);
+                    return wrapper;
                 }));
             }
         }
