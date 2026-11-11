@@ -33,7 +33,10 @@
         <button class="now-playing-modal-close" type="button" onclick="closeNowPlaying()" aria-label="Close now playing details">&times;</button>
         <img class="now-playing-modal-thumb" id="nowPlayingModalThumb" src="" alt="">
         <p class="now-playing-modal-status" id="nowPlayingModalStatus">IDLE</p>
-        <h2 id="nowPlayingModalTitle">Ready to stream</h2>
+        <h2 id="nowPlayingModalTitle">
+            <span id="nowPlayingModalTitleText">Ready to stream</span>
+            <span class="now-playing-romanized-label" id="nowPlayingModalRomanized" hidden>[Romanized]</span>
+        </h2>
         <div class="now-playing-modal-lyrics" id="nowPlayingModalLyrics">No lyrics available</div>
     </div>
 </div>

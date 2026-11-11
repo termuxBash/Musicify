@@ -1047,6 +1047,19 @@ nav {
     font-size: 1.05rem;
 }
 
+.now-playing-romanized-label {
+    display: inline-block;
+    margin-left: 7px;
+    color: var(--spotify-green);
+    font-size: 0.68em;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.now-playing-romanized-label[hidden] {
+    display: none;
+}
+
 .now-playing-modal-lyrics {
     max-height: 42vh;
     min-height: 54px;

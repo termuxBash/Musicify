@@ -4,10 +4,11 @@ import logging
 import re
 import threading
 import time
+import unicodedata
 
 import requests
 
-from core.settings import DEFAULT_LYRICS_ENABLED, LASTFM_KEY
+from core.settings import DEFAULT_LYRICS_ENABLED, GEMINI_API_KEY, GEMINI_MODEL, LASTFM_KEY
 from services.lastfm_service import resolve_track
 
 logger = logging.getLogger(__name__)
@@ -66,12 +67,79 @@ def align_lyrics(transformed_lyrics, synced_lyrics, plain_lyrics=""):
     return aligned
 
 
+def is_non_english_script(lyrics):
+    """Return whether text contains alphabetic characters outside the Latin script."""
+    if not lyrics:
+        return False
+
+    return any(
+        "LATIN" not in unicodedata.name(char, "")
+        for char in lyrics
+        if char.isalpha()
+    )
+
+
+def romanize_lyrics(lyrics):
+    """Romanize non-Latin lyrics with Gemini, preserving source line structure."""
+    if not lyrics or not lyrics.strip() or not GEMINI_API_KEY:
+        return None
+
+    prompt = f"""You are an expert multilingual transliteration and romanization system.
+
+Automatically detect the language and transliterate the lyrics below into Latin characters.
+Do not translate them into English. Preserve the original language, words, meaning,
+pronunciation, every line break, and line order. Use standard conventions such as
+Hepburn for Japanese and readable standard transliteration for Hindi. Leave lines
+already written in Latin characters unchanged. Preserve timestamps and formatting.
+Return only the romanized lyrics, with no headings or explanations.
+
+LYRICS:
+{lyrics}
+"""
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL}:generateContent"
+    )
+
+    try:
+        response = requests.post(
+            endpoint,
+            params={"key": GEMINI_API_KEY},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.1,
+                    "responseMimeType": "text/plain",
+                },
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        response_json = response.json()
+        candidates = response_json.get("candidates", [])
+        content = candidates[0].get("content", {}) if candidates else {}
+        parts = content.get("parts", [])
+        romanized = parts[0].get("text") if parts else None
+        if not isinstance(romanized, str):
+            logger.warning("Gemini returned no lyric text.")
+            return None
+        romanized = romanized.strip()
+        if not romanized or is_non_english_script(romanized):
+            logger.warning("Gemini returned empty or non-Latin lyrics.")
+            return None
+        return romanized
+    except (requests.RequestException, KeyError, IndexError, TypeError, ValueError) as error:
+        logger.exception("Failed to romanize lyrics: %s", error)
+        return None
+
+
 class LyricsService:
     def __init__(self, enabled=DEFAULT_LYRICS_ENABLED):
         self.current_lyrics = []
         self.song_start_time = None
         self.enabled = enabled
         self.last_sent_lyric = None
+        self.is_romanized = False
         self._lock = threading.Lock()
         self._generation = 0
 
@@ -83,6 +151,7 @@ class LyricsService:
             self.current_lyrics = []
             self.song_start_time = time.time()
             self.last_sent_lyric = None
+            self.is_romanized = False
 
         if not song_title or not self.enabled:
             return
@@ -151,10 +220,36 @@ class LyricsService:
             except (requests.RequestException, ValueError) as error:
                 logger.warning("Romanized/translated lyrics lookup failed for %s: %s", query, error)
 
+        lrclib_lyrics = plain_lyrics or "\n".join(
+            text for _, text in parse_synced_lyrics(synced_lyrics)
+        )
+        source_has_non_latin_script = is_non_english_script(lrclib_lyrics)
+        romanized = False
+        if source_has_non_latin_script:
+            gemini_lyrics = romanize_lyrics(lrclib_lyrics)
+            if gemini_lyrics:
+                transformed_lyrics = gemini_lyrics
+                romanized = True
+        elif is_non_english_script(transformed_lyrics):
+            gemini_lyrics = romanize_lyrics(transformed_lyrics)
+            if gemini_lyrics:
+                transformed_lyrics = gemini_lyrics
+                romanized = True
+
         lyrics = align_lyrics(transformed_lyrics, synced_lyrics, plain_lyrics)
+        lyrics = [
+            (timestamp, text)
+            for timestamp, text in lyrics
+            if not is_non_english_script(text)
+        ]
         with self._lock:
             if generation == self._generation:
                 self.current_lyrics = lyrics
+                self.is_romanized = romanized or (
+                    source_has_non_latin_script
+                    and bool(transformed_lyrics)
+                    and not is_non_english_script(transformed_lyrics)
+                )
                 logger.info("Loaded %d lyric lines for %s.", len(lyrics), query)
 
     @staticmethod
@@ -200,6 +295,7 @@ class LyricsService:
                 ] if enabled else [],
                 "current_lyric_index": current_index,
                 "current_lyric": current_lyric,
+                "lyrics_romanized": enabled and self.is_romanized and bool(lyrics),
             }
 
     def get_current_line(self):
