@@ -106,6 +106,8 @@ def toggle_incogni():
 
 @stats_bp.route("/shutdown", methods=["POST"])
 def shutdown():
+    power(power_off_only=True)
+
     player = getattr(current_app, "player", None)
     pid = os.getpid()
 
@@ -120,6 +122,12 @@ def shutdown():
 
     threading.Thread(target=stop_server, daemon=True).start()
     return jsonify({"status": "success", "message": "Server is shutting down..."})
+
+def _power_off_bose():
+    bose_power = check_power().get_json() if check_power else None
+    if bose_power and bose_power.get("is_on"):
+        stop()
+        ctrl("bose_power")
 
 @stats_bp.route("/playlists")
 def playlists():
@@ -208,9 +216,27 @@ def remove_from_queue(index):
         "title": removed["title"]
     })
 
+@stats_bp.route("/play_next/<int:index>", methods=["POST"])
+def play_next(index):
+    if not current_app.playback.move_to_front(index):
+        return jsonify({"error": "song not found in queue"}), 404
+
+    return jsonify({"status": "moved"})
+
+@stats_bp.route("/reorder_queue/<int:source_index>/<int:target_index>", methods=["POST"])
+def reorder_queue(source_index, target_index):
+    if not current_app.playback.move_in_queue(source_index, target_index):
+        return jsonify({"error": "invalid queue position"}), 400
+
+    return jsonify({"status": "reordered"})
+
 @stats_bp.route("/power", methods=["POST"])
-def power():
+def power(power_off_only=False):
     """Handles the power off request and clears the queue."""
+    if power_off_only:
+        _power_off_bose()
+        return jsonify({"status": "success"})
+
     bose_power = check_power().get_json() if check_power else None
     if bose_power and bose_power.get("is_on"):
         stop()

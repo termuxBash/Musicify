@@ -45,12 +45,40 @@ function showPopup(message) {
 function queueButtonSvg() {
     return `
         <svg class="qi-play" width="14" height="14" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
-        <svg class="qi-spin" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#1db954" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="40 20"/></svg>
-        <svg class="qi-check" width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="4,13 9,18 20,7" stroke="#1db954" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <img class="status-icon status-icon-spinner" src="/static/spinner.svg" alt="">
+        <img class="status-icon status-icon-check" src="/static/checkmark.svg" alt="">
     `;
 }
 
+const STATUS_CHECK_DURATION_MS = 5000;
+const statusIndicatorTimers = new WeakMap();
+
+function setStatusIndicator(element, state, onDone) {
+    if (!element) return;
+
+    clearTimeout(statusIndicatorTimers.get(element));
+    statusIndicatorTimers.delete(element);
+    element.classList.add("status-indicator");
+    element.classList.remove("status-loading", "status-done");
+
+    if (state === "loading") {
+        element.classList.add("status-loading");
+        element.setAttribute("aria-label", "Updating");
+    } else if (state === "done") {
+        element.classList.add("status-done");
+        element.setAttribute("aria-label", "Done");
+        const timer = setTimeout(() => {
+            setStatusIndicator(element, "idle");
+            if (onDone) onDone();
+        }, STATUS_CHECK_DURATION_MS);
+        statusIndicatorTimers.set(element, timer);
+    } else {
+        element.removeAttribute("aria-label");
+    }
+}
+
 document.querySelectorAll(".queue-icon-btn").forEach(button => {
+    button.classList.add("status-indicator");
     if (!button.querySelector(".qi-play")) {
         button.innerHTML = queueButtonSvg();
     }
@@ -63,16 +91,11 @@ async function enqueueSong(song, btn, options) {
         body: JSON.stringify(options.payload(song))
     });
 
-    const markQueued = () => {
-        btn.classList.remove("qi-loading");
-        btn.classList.add("qi-done");
-        setTimeout(() => {
-            btn.classList.remove("qi-done");
-            btn.disabled = false;
-        }, 5000);
-    };
+    const markQueued = () => setStatusIndicator(btn, "done", () => {
+        btn.disabled = false;
+    });
 
-    btn.classList.add("qi-loading");
+    setStatusIndicator(btn, "loading");
     btn.disabled = true;
 
     try {
@@ -86,7 +109,7 @@ async function enqueueSong(song, btn, options) {
         if (response.status === 403) {
             const data = await response.json();
             if (options.takeoverOwners.includes(data.owner)) {
-                btn.classList.remove("qi-loading");
+                setStatusIndicator(btn, "idle");
                 btn.disabled = false;
                 const takeOver = confirm(
                     `${data.owner} player is currently controlling playback.\n\n` +
@@ -95,7 +118,7 @@ async function enqueueSong(song, btn, options) {
                 );
                 if (!takeOver) return;
 
-                btn.classList.add("qi-loading");
+                setStatusIndicator(btn, "loading");
                 btn.disabled = true;
 
                 const acquire = await fetch(options.acquireUrl, {
@@ -127,8 +150,8 @@ async function enqueueSong(song, btn, options) {
         console.error("Failed to add song to queue:", error);
         showPopup("Failed to queue song.");
     } finally {
-        if (btn.classList.contains("qi-loading")) {
-            btn.classList.remove("qi-loading");
+        if (btn.classList.contains("status-loading")) {
+            setStatusIndicator(btn, "idle");
             btn.disabled = false;
         }
     }
@@ -278,8 +301,244 @@ async function clearQueue() {
     await fetch("/stop", { method: "POST" }); 
 }
 
-async function removeFromQueue(i) {
-    await fetch("/remove_from_queue/" + i, { method: "POST" }); 
+let queueItemBeingDragged = null;
+let queueMutationInProgress = false;
+let activeQueueGesture = null;
+
+async function runQueueMutation(request, errorMessage) {
+    queueMutationInProgress = true;
+    const status = document.getElementById("queueUpdateStatus");
+    setStatusIndicator(status, "loading");
+    let succeeded = false;
+
+    try {
+        const response = await request();
+        if (!response.ok) throw new Error(`Queue update failed with status ${response.status}`);
+        succeeded = true;
+    } catch (error) {
+        console.error(errorMessage, error);
+        showPopup(errorMessage);
+    } finally {
+        queueMutationInProgress = false;
+        await updateStats();
+        setStatusIndicator(status, succeeded ? "done" : "idle");
+    }
+}
+
+async function removeFromQueue(index) {
+    await runQueueMutation(
+        () => fetch(`/remove_from_queue/${index}`, { method: "POST" }),
+        "Failed to remove song from queue."
+    );
+}
+
+async function playNextInQueue(index) {
+    await runQueueMutation(
+        () => fetch(`/play_next/${index}`, { method: "POST" }),
+        "Failed to move song to the front of the queue."
+    );
+}
+
+async function reorderQueue(sourceIndex, targetIndex) {
+    await runQueueMutation(
+        () => fetch(`/reorder_queue/${sourceIndex}/${targetIndex}`, { method: "POST" }),
+        "Failed to reorder queue."
+    );
+}
+
+function startQueueGesture(event) {
+    if (activeQueueGesture || event.target.closest(".queue-item-delete")) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    const wrapper = event.currentTarget;
+    const row = wrapper.querySelector(".queue-item");
+    const handle = event.target.closest(".queue-item-drag-handle");
+    if (event.pointerType === "mouse" || handle) {
+        startQueueReorder(event, wrapper, row);
+    } else {
+        startQueueSwipe(event, wrapper, row);
+    }
+}
+
+function startQueueSwipe(event, wrapper, row) {
+    const blueBackground = wrapper.querySelector(".queue-swipe-bg-play-next");
+    const redBackground = wrapper.querySelector(".queue-swipe-bg-delete");
+    activeQueueGesture = {
+        mode: "swipe",
+        pointerId: event.pointerId,
+        wrapper,
+        row,
+        startX: event.clientX,
+        startY: event.clientY,
+        currentX: event.clientX,
+        isHorizontalSwipe: false,
+        blueBackground,
+        redBackground
+    };
+    try {
+        wrapper.setPointerCapture(event.pointerId);
+    } catch (error) {
+        console.debug("Pointer capture unavailable for queue swipe.", error);
+    }
+    document.addEventListener("pointermove", moveQueueGesture);
+    document.addEventListener("pointerup", endQueueGesture);
+    document.addEventListener("pointercancel", cancelQueueGesture);
+}
+
+function startQueueReorder(event, wrapper, row) {
+    event.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const list = wrapper.parentElement;
+    const placeholder = document.createElement("div");
+    placeholder.className = "queue-item-placeholder";
+    placeholder.style.height = `${wrapper.getBoundingClientRect().height}px`;
+    list.insertBefore(placeholder, wrapper);
+
+    wrapper.classList.add("dragging");
+    wrapper.style.position = "fixed";
+    wrapper.style.zIndex = "2000";
+    wrapper.style.top = `${rect.top}px`;
+    wrapper.style.left = `${rect.left}px`;
+    wrapper.style.width = `${rect.width}px`;
+    wrapper.style.margin = "0";
+    queueItemBeingDragged = wrapper;
+    activeQueueGesture = {
+        mode: "reorder",
+        pointerId: event.pointerId,
+        wrapper,
+        row,
+        list,
+        placeholder,
+        sourceIndex: Number(wrapper.dataset.queueIndex),
+        pointerOffsetY: event.clientY - rect.top
+    };
+    document.addEventListener("pointermove", moveQueueGesture);
+    document.addEventListener("pointerup", endQueueGesture);
+    document.addEventListener("pointercancel", cancelQueueGesture);
+}
+
+function moveQueueGesture(event) {
+    const gesture = activeQueueGesture;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+    if (gesture.mode === "swipe") {
+        const deltaX = event.clientX - gesture.startX;
+        const deltaY = event.clientY - gesture.startY;
+        if (Math.abs(deltaX) < 8 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+
+        event.preventDefault();
+        gesture.currentX = event.clientX;
+        gesture.isHorizontalSwipe = true;
+        gesture.row.style.transition = "none";
+        gesture.row.style.transform = `translateX(${deltaX}px)`;
+        const opacity = Math.min(Math.abs(deltaX) / 100, 1);
+        gesture.blueBackground.style.opacity = deltaX > 0 ? opacity : 0;
+        gesture.redBackground.style.opacity = deltaX < 0 ? opacity : 0;
+        return;
+    }
+
+    event.preventDefault();
+    gesture.wrapper.style.top = `${event.clientY - gesture.pointerOffsetY}px`;
+    const siblings = Array.from(gesture.list.querySelectorAll(".queue-item-wrapper:not(.dragging)"));
+    const nextWrapper = siblings.find(candidate => {
+        const bounds = candidate.getBoundingClientRect();
+        return event.clientY < bounds.top + bounds.height / 2;
+    });
+    gesture.list.insertBefore(gesture.placeholder, nextWrapper || null);
+}
+
+function removeQueueGestureListeners() {
+    document.removeEventListener("pointermove", moveQueueGesture);
+    document.removeEventListener("pointerup", endQueueGesture);
+    document.removeEventListener("pointercancel", cancelQueueGesture);
+}
+
+function endQueueGesture(event) {
+    const gesture = activeQueueGesture;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+    removeQueueGestureListeners();
+    activeQueueGesture = null;
+    if (gesture.mode === "swipe") {
+        const deltaX = event.clientX - gesture.startX;
+        const threshold = 110;
+        gesture.row.style.transition = "transform 0.25s ease";
+        gesture.blueBackground.style.opacity = 0;
+        gesture.redBackground.style.opacity = 0;
+
+        if (gesture.isHorizontalSwipe && deltaX > threshold) {
+            gesture.row.style.transform = `translateX(${window.innerWidth}px)`;
+            queueMutationInProgress = true;
+            setStatusIndicator(document.getElementById("queueUpdateStatus"), "loading");
+            setTimeout(() => playNextInQueue(Number(gesture.wrapper.dataset.queueIndex)), 250);
+        } else if (gesture.isHorizontalSwipe && deltaX < -threshold) {
+            gesture.row.style.transform = `translateX(-${window.innerWidth}px)`;
+            queueMutationInProgress = true;
+            setStatusIndicator(document.getElementById("queueUpdateStatus"), "loading");
+            setTimeout(() => removeFromQueue(Number(gesture.wrapper.dataset.queueIndex)), 250);
+        } else {
+            gesture.row.style.transform = "";
+            setTimeout(() => {
+                if (gesture.row.isConnected) gesture.row.style.transition = "";
+            }, 250);
+        }
+        return;
+    }
+
+    gesture.list.insertBefore(gesture.wrapper, gesture.placeholder);
+    gesture.placeholder.remove();
+    gesture.wrapper.classList.remove("dragging");
+    gesture.wrapper.style.position = "";
+    gesture.wrapper.style.zIndex = "";
+    gesture.wrapper.style.top = "";
+    gesture.wrapper.style.left = "";
+    gesture.wrapper.style.width = "";
+    gesture.wrapper.style.margin = "";
+    queueItemBeingDragged = null;
+    const targetIndex = Array.from(gesture.list.querySelectorAll(".queue-item-wrapper"))
+        .indexOf(gesture.wrapper);
+    if (targetIndex !== gesture.sourceIndex) {
+        reorderQueue(gesture.sourceIndex, targetIndex);
+    }
+}
+
+function cancelQueueGesture(event) {
+    const gesture = activeQueueGesture;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+    removeQueueGestureListeners();
+    activeQueueGesture = null;
+    if (gesture.mode === "swipe") {
+        gesture.row.style.transition = "";
+        gesture.row.style.transform = "";
+        gesture.blueBackground.style.opacity = 0;
+        gesture.redBackground.style.opacity = 0;
+        return;
+    }
+
+    gesture.placeholder.remove();
+    gesture.wrapper.classList.remove("dragging");
+    gesture.wrapper.style.position = "";
+    gesture.wrapper.style.zIndex = "";
+    gesture.wrapper.style.top = "";
+    gesture.wrapper.style.left = "";
+    gesture.wrapper.style.width = "";
+    gesture.wrapper.style.margin = "";
+    queueItemBeingDragged = null;
+    updateStats();
+}
+
+function keyboardReorderQueue(event) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const wrapper = event.currentTarget.closest(".queue-item-wrapper");
+    if (!wrapper) return;
+
+    const rows = Array.from(wrapper.parentElement.querySelectorAll(".queue-item-wrapper"));
+    const sourceIndex = rows.indexOf(wrapper);
+    const targetIndex = sourceIndex + (event.key === "ArrowUp" ? -1 : 1);
+    if (targetIndex < 0 || targetIndex >= rows.length) return;
+    reorderQueue(sourceIndex, targetIndex);
 }
 
 // --- UNIVERSAL PLAYLIST MODAL MANAGEMENT ---
@@ -565,17 +824,61 @@ async function updateStats() {
         }
 
         const qList = document.getElementById("queueList");
-        if (qList) {
+        if (qList && !queueItemBeingDragged && !activeQueueGesture && !queueMutationInProgress) {
             if (!data.queue || data.queue.length === 0) {
-                qList.innerHTML = "No songs queued";
+                qList.textContent = "No songs queued";
             } else {
-                qList.innerHTML = data.queue.map((s, i) => `
-                    <div class="queue-item">
-                        <img src="${s.thumbnail || ''}" alt="thumb">
-                        <p>${s.title}</p>
-                        <span onclick="removeFromQueue(${i})">✕</span>
-                    </div>
-                `).join("");
+                qList.replaceChildren(...data.queue.map((song, index) => {
+                    const wrapper = document.createElement("div");
+                    wrapper.className = "queue-item-wrapper";
+                    wrapper.dataset.queueIndex = index;
+                    wrapper.addEventListener("pointerdown", startQueueGesture);
+
+                    const playNextBackground = document.createElement("div");
+                    playNextBackground.className = "queue-swipe-bg queue-swipe-bg-play-next";
+                    const playNextIcon = document.createElement("img");
+                    playNextIcon.src = "/static/forward-fast-solid-full.svg";
+                    playNextIcon.alt = "";
+                    playNextBackground.append(playNextIcon);
+
+                    const deleteBackground = document.createElement("div");
+                    deleteBackground.className = "queue-swipe-bg queue-swipe-bg-delete";
+                    deleteBackground.innerHTML = `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    `;
+
+                    const item = document.createElement("div");
+                    item.className = "queue-item";
+
+                    const dragHandle = document.createElement("button");
+                    dragHandle.type = "button";
+                    dragHandle.className = "queue-item-drag-handle";
+                    dragHandle.textContent = "=";
+                    dragHandle.title = "Drag to reorder; use arrow keys to move";
+                    dragHandle.setAttribute("aria-label", `Reorder ${song.title || "song"}`);
+                    dragHandle.addEventListener("keydown", keyboardReorderQueue);
+
+                    const thumbnail = document.createElement("img");
+                    thumbnail.src = song.thumbnail || "";
+                    thumbnail.alt = "Thumbnail";
+
+                    const title = document.createElement("p");
+                    title.textContent = song.title || "Unknown track";
+
+                    const removeButton = document.createElement("button");
+                    removeButton.type = "button";
+                    removeButton.className = "queue-item-delete";
+                    removeButton.setAttribute("aria-label", `Remove ${song.title || "song"} from queue`);
+                    removeButton.textContent = "✕";
+                    removeButton.addEventListener("pointerdown", event => event.stopPropagation());
+                    removeButton.addEventListener("click", () => removeFromQueue(index));
+
+                    item.append(dragHandle, thumbnail, title, removeButton);
+                    wrapper.append(playNextBackground, deleteBackground, item);
+                    return wrapper;
+                }));
             }
         }
         

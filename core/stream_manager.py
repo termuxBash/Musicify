@@ -69,6 +69,18 @@ class QueuePlayer:
                 return self.queue.pop(index)
         return None
 
+    def move_to_front(self, index):
+        return self.move_to_index(index, 0)
+
+    def move_to_index(self, source_index, target_index):
+        with self.lock:
+            if not 0 <= source_index < len(self.queue):
+                return False
+            if not 0 <= target_index < len(self.queue):
+                return False
+            self.queue.insert(target_index, self.queue.pop(source_index))
+            return True
+
     def skip(self):
         self._bump_playback_generation()
         if self.current_process:

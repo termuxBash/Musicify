@@ -384,27 +384,20 @@
     opacity: 1;
 }
 
-.thumb-overlay svg {
+.thumb-overlay svg,
+.thumb-overlay .status-icon {
     filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
 }
 
-/* Spinner replaces play icon while queuing */
-@keyframes thumb-spin {
-    to { transform: rotate(360deg); }
-}
-
-.thumb-wrap.queuing .thumb-overlay {
+.thumb-wrap.status-loading .thumb-overlay,
+.thumb-wrap.status-done .thumb-overlay {
     opacity: 1;
     background: rgba(0, 0, 0, 0.55);
 }
 
-.thumb-wrap.queuing .play-icon { display: none; }
-.thumb-wrap.queuing .spin-icon { display: block !important; }
-
-.spin-icon {
+.thumb-wrap.status-loading .play-icon,
+.thumb-wrap.status-done .play-icon {
     display: none;
-    animation: thumb-spin 0.8s linear infinite;
-    transform-origin: center;
 }
 
 /* Song Name auto-scroll container */
@@ -613,17 +606,15 @@
                 <tr id="row-{{ r.id }}" data-search="{{ r.song_name|lower }} {{ r.song_id|lower }}">
                     <td class="col-id" style="color:#666;font-family:monospace;">{{ r.id }}</td>
                     <td class="col-thumb">
-                        <div class="thumb-wrap" onclick="queueRowSong({{ r.id }}, this)" title="Queue song">
+                        <div class="thumb-wrap status-indicator" onclick="queueRowSong({{ r.id }}, this)" title="Queue song">
                             <img class="song-thumb" src="https://i.ytimg.com/vi/{{ r.song_id }}/default.jpg" alt="" loading="lazy">
                             <div class="thumb-overlay">
                                 <!-- Play icon -->
                                 <svg class="play-icon" width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
                                     <polygon points="6,3 20,12 6,21"/>
                                 </svg>
-                                <!-- Green spinner -->
-                                <svg class="spin-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <circle cx="12" cy="12" r="9" stroke="#1db954" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="40 20"/>
-                                </svg>
+                                <img class="status-icon status-icon-spinner" src="{{ url_for('static', filename='spinner.svg') }}" alt="">
+                                <img class="status-icon status-icon-check" src="{{ url_for('static', filename='checkmark.svg') }}" alt="">
                             </div>
                         </div>
                     </td>
@@ -1092,8 +1083,8 @@ async function deleteRow(id) {
 }
 
 async function queueSong(title, videoId, thumbWrap) {
-    // Show spinner on the thumbnail while queuing
-    if (thumbWrap) thumbWrap.classList.add("queuing");
+    if (thumbWrap) setStatusIndicator(thumbWrap, "loading");
+    let queued = false;
     try {
         const songObj = {
             title: title,
@@ -1106,6 +1097,7 @@ async function queueSong(title, videoId, thumbWrap) {
             body: JSON.stringify(songObj)
         });
         if (res.ok) {
+            queued = true;
             showPopup("Queued: " + title);
         } else {
             showPopup("Failed to queue song.");
@@ -1113,8 +1105,7 @@ async function queueSong(title, videoId, thumbWrap) {
     } catch (e) {
         showPopup("Queue error.");
     } finally {
-        // Always remove spinner once done
-        if (thumbWrap) thumbWrap.classList.remove("queuing");
+        if (thumbWrap) setStatusIndicator(thumbWrap, queued ? "done" : "idle");
     }
 }
 

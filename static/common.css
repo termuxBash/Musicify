@@ -119,6 +119,98 @@ nav {
     flex: 1; 
     overflow-y: auto; 
     margin-top: 20px; 
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.queue-list::-webkit-scrollbar {
+    display: none;
+}
+
+.queue-help {
+    margin: 8px 0 0;
+    color: #aaa;
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.queue-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-icon {
+    display: none;
+    object-fit: contain;
+}
+
+.status-icon-spinner {
+    animation: qi-rotate 0.75s linear infinite;
+    transform-origin: center;
+}
+
+.status-indicator.status-loading .status-icon-spinner,
+.status-indicator.status-done .status-icon-check {
+    display: inline-block;
+}
+
+.queue-update-status {
+    display: none;
+    width: 18px;
+    height: 18px;
+}
+
+.queue-update-status.status-loading,
+.queue-update-status.status-done {
+    display: inline-flex;
+}
+
+.queue-update-status .status-icon {
+    width: 100%;
+    height: 100%;
+}
+
+.queue-item-wrapper {
+    position: relative;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.queue-swipe-bg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease;
+}
+
+.queue-swipe-bg img,
+.queue-swipe-bg svg {
+    width: 24px;
+    height: 24px;
+    filter: brightness(0) invert(1);
+}
+
+.queue-swipe-bg-play-next {
+    justify-content: flex-start;
+    background: #2196f3;
+}
+
+.queue-swipe-bg-delete {
+    justify-content: flex-end;
+    background: #f44336;
+}
+
+.queue-item-placeholder {
+    margin-bottom: 10px;
+    border: 2px dashed rgba(255, 255, 255, 0.35);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .queue-item {
@@ -128,7 +220,46 @@ nav {
     background: var(--card-bg); 
     padding: 10px; 
     border-radius: 8px; 
-    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+    touch-action: pan-y;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.queue-item p {
+    flex: 1;
+    min-width: 0;
+}
+
+.queue-item-wrapper.dragging .queue-item {
+    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.4);
+}
+
+.queue-item-drag-handle {
+    flex: 0 0 auto;
+    padding: 4px 2px;
+    border: 0;
+    background: transparent;
+    color: #aaa;
+    cursor: grab;
+    font: bold 20px/1 monospace;
+    letter-spacing: -3px;
+    touch-action: none;
+}
+
+.queue-item-drag-handle:active {
+    cursor: grabbing;
+}
+
+.queue-item-delete {
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--danger-red);
+    cursor: pointer;
+    font-size: 30px;
+    line-height: 1;
 }
 
 .queue-item img { 
@@ -139,13 +270,6 @@ nav {
 .queue-item p { 
     font-size: 0.75rem; 
     white-space: normal;
-}
-
-.queue-item span {
-    margin-left: auto; 
-    cursor: pointer; 
-    color: var(--danger-red); 
-    font-size: 30px;
 }
 
 .switch-player-link {
@@ -510,36 +634,38 @@ nav {
     background: #444;
 }
 
-.queue-icon-btn .qi-play   { display: inline-block; }
-.queue-icon-btn .qi-spin   { display: none; }
-.queue-icon-btn .qi-check  { display: none; }
-
-/* Loading state */
-.queue-icon-btn.qi-loading {
+.queue-icon-btn.status-loading {
     background: #1a1a1a;
     cursor: wait;
     pointer-events: none;
 }
-.queue-icon-btn.qi-loading .qi-play  { display: none; }
-.queue-icon-btn.qi-loading .qi-spin  { display: inline-block; }
-.queue-icon-btn.qi-loading .qi-check { display: none; }
 
-/* Done/queued state */
-.queue-icon-btn.qi-done {
+.queue-icon-btn.status-done {
     background: rgba(29, 185, 84, 0.15);
     pointer-events: none;
 }
-.queue-icon-btn.qi-done .qi-play  { display: none; }
-.queue-icon-btn.qi-done .qi-spin  { display: none; }
-.queue-icon-btn.qi-done .qi-check { display: inline-block; }
 
 @keyframes qi-rotate {
     to { transform: rotate(360deg); }
 }
 
-.qi-spin {
-    animation: qi-rotate 0.75s linear infinite;
-    transform-origin: center;
+.queue-icon-btn .qi-play {
+    display: inline-block;
+}
+
+.queue-icon-btn .status-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.queue-icon-btn.status-loading .qi-play,
+.queue-icon-btn.status-done .qi-play {
+    display: none;
+}
+
+.thumb-wrap .status-icon {
+    width: 20px;
+    height: 20px;
 }
 
 .auto-pick-btn {

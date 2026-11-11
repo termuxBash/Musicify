@@ -1,9 +1,16 @@
 <div class="side-panel" id="sidePanel">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3>Music Queue</h3>
+        <div class="queue-heading">
+            <h3>Music Queue</h3>
+            <span class="status-indicator queue-update-status" id="queueUpdateStatus" aria-live="polite">
+                <img class="status-icon status-icon-spinner" src="{{ url_for('static', filename='spinner.svg') }}" alt="">
+                <img class="status-icon status-icon-check" src="{{ url_for('static', filename='checkmark.svg') }}" alt="">
+            </span>
+        </div>
         <button class="clear-queue-btn" onclick="clearQueue()">Clear Queue & Stop Music</button>
         <span onclick="toggleMenu()" style="cursor:pointer;font-size:24px;"> ✕ </span>
     </div>
+    <p class="queue-help">Drag = to reorder upcoming songs. Swipe right to play next or left to remove. The current song is not in this list.</p>
 
     <div class="queue-playlist-controls">
         <select id="playlistQueueSelect" class="queue-playlist-select" onmouseover="refreshPlaylistDropdown()">
