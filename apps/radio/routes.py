@@ -1,8 +1,9 @@
 import logging
+import re
 import threading
 import time
 from difflib import get_close_matches
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
 import httpx
@@ -19,6 +20,18 @@ _radio_browser.base_url = "https://de1.api.radio-browser.info/"
 _status_lock = threading.Lock()
 _METADATA_CACHE_SECONDS = 20
 _PLAYBACK_START_GRACE_SECONDS = 8
+_RADIO_FALLBACK_THUMBNAIL = "/static/radio.svg"
+_GENERIC_STREAM_NAMES = {
+    "audio",
+    "feed",
+    "index",
+    "live",
+    "listen",
+    "mp3",
+    "radio",
+    "stream",
+    "streams",
+}
 
 
 def _same_stream_url(first, second):
@@ -119,6 +132,61 @@ def _stream_station(station_name, stream_url):
     return None
 
 
+def _station_for_stream_url(stream_url):
+    parsed_url = urlparse(stream_url)
+    path_name = unquote(parsed_url.path.rstrip("/").rsplit("/", 1)[-1])
+    path_name = re.sub(r"\.(aac|m3u8?|mp3|ogg|pls|wav)$", "", path_name, flags=re.IGNORECASE)
+    host_names = [
+        label
+        for label in (parsed_url.hostname or "").split(".")
+        if label.casefold() not in {"www", "stream", "streams", "radio", "live", "listen"}
+    ]
+    search_names = []
+    if path_name and path_name.casefold() not in _GENERIC_STREAM_NAMES:
+        search_names.append(path_name)
+    search_names.extend(host_names)
+
+    for search_name in dict.fromkeys(search_names):
+        try:
+            stations = _radio_browser.search(name=search_name, limit=25)
+        except Exception:
+            logger.warning(
+                "Could not look up radio station metadata for stream URL %s.",
+                stream_url,
+                exc_info=True,
+            )
+            continue
+
+        for candidate in stations:
+            station = _public_station(candidate)
+            candidate_urls = (
+                candidate.get("url"),
+                candidate.get("url_resolved"),
+            ) if isinstance(candidate, dict) else ()
+            if station and any(
+                _same_stream_url(candidate_url, stream_url)
+                for candidate_url in candidate_urls
+            ):
+                station["name"] = station["name"].strip()
+                station["url"] = stream_url
+                station["favicon"] = station["favicon"] or _RADIO_FALLBACK_THUMBNAIL
+                return station
+
+    display_name = path_name or (host_names[0] if host_names else "Internet Radio")
+    display_name = re.sub(r"[-_.]+", " ", display_name).strip().title()
+    return {
+        "name": display_name or "Internet Radio",
+        "url": stream_url,
+        "favicon": _RADIO_FALLBACK_THUMBNAIL,
+        "stationuuid": "",
+        "homepage": "",
+        "country": "",
+        "tags": "",
+        "codec": "",
+        "bitrate": "",
+    }
+
+
 def _find_favorite(name):
     favorites = get_radio_config()["favorites"]
     query = name.strip().casefold()
@@ -152,8 +220,9 @@ def _play_station(station):
     current_app.radio_playback_error = None
     current_app.radio_now_playing = {
         "title": payload["name"],
-        "thumbnail": payload["favicon"],
+        "thumbnail": payload["favicon"] or _RADIO_FALLBACK_THUMBNAIL,
         "station": payload["name"],
+        "url": payload["url"],
         "song": "",
         "artist": "",
     }
@@ -179,6 +248,19 @@ def _play_station(station):
         except Exception:
             logger.warning("Could not register radio station click.", exc_info=True)
     return payload, None
+
+
+def _play_queued_radio(app, station):
+    with app.app_context():
+        _, error = _play_station(station)
+        if error:
+            app.logger.error("Could not start queued radio station: %s", error[0].get_json())
+
+
+@radio_bp.record
+def _configure_radio_playback(state):
+    app = state.app
+    app.player.radio_handler = lambda station: _play_queued_radio(app, station)
 
 
 @radio_bp.route("/")
@@ -421,8 +503,9 @@ def status():
                 current_app.radio_playback_error = error
                 current_app.radio_now_playing = {
                     "title": station.get("name") or "Radio station",
-                    "thumbnail": station.get("favicon") or "",
+                    "thumbnail": station.get("favicon") or _RADIO_FALLBACK_THUMBNAIL,
                     "station": station.get("name") or "Radio station",
+                    "url": station.get("url") or stream_url,
                     "song": "",
                     "artist": "",
                 }

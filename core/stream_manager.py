@@ -34,6 +34,7 @@ class QueuePlayer:
         self.autoplay_enabled = autoplay_enabled 
         self._autoplay_suppressed = False
         self.incogni_mode = False
+        self.radio_handler = None
 
     def _bump_playback_generation(self):
         with self.lock:
@@ -353,6 +354,26 @@ class QueuePlayer:
             with self.lock:
                 self.current_song = song
                 song_generation = self._playback_generation
+
+            title = song.get("title")
+            if (
+                isinstance(title, str)
+                and title.startswith("Radio:(")
+                and title.endswith(")")
+                and isinstance(song.get("url"), str)
+            ):
+                try:
+                    if self.radio_handler is None:
+                        logger.error("Cannot play queued radio station: no radio handler is configured.")
+                    else:
+                        self.radio_handler(song.get("station") or song)
+                except Exception:
+                    logger.exception("Could not start queued radio station.")
+                finally:
+                    with self.lock:
+                        if self.current_song == song:
+                            self.current_song = None
+                continue
 
             # Record only normal YouTube tracks when playback actually starts.
             from core.stats import record_played_song

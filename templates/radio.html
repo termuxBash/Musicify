@@ -54,6 +54,7 @@
 </main>
 
 {% include "_player_bar.html" %}
+{% include "_playlist_modal.html" %}
 
 <div class="playlist-modal radio-favorite-modal" id="radioFavoriteModal" onclick="if(event.target === this) closeRadioFavoriteModal()">
     <form class="playlist-modal-card" id="radioFavoriteForm">
@@ -142,7 +143,7 @@ function createRadioFavoriteItem(station) {
 }
 
 function radioImage(station) {
-    return station.favicon || station.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='58' font-family='sans-serif'%3E📻%3C/text%3E%3C/svg%3E";
+    return station.favicon || station.thumbnail || {{ url_for('static', filename='radio.svg')|tojson }};
 }
 
 function renderRadioStations(stations) {
@@ -183,6 +184,18 @@ function renderRadioStations(stations) {
         play.className = "radio-play-btn";
         play.textContent = "▶ Play";
         play.addEventListener("click", () => playRadioStation(station, play));
+        const addToPlaylist = document.createElement("button");
+        addToPlaylist.type = "button";
+        addToPlaylist.className = "radio-playlist-btn";
+        addToPlaylist.textContent = "♫";
+        addToPlaylist.title = "Add to playlist";
+        addToPlaylist.setAttribute("aria-label", `Add ${station.name} to a playlist`);
+        addToPlaylist.addEventListener("click", () => openPlaylistMenu({
+            title: `Radio:(${station.name})`,
+            url: station.url,
+            thumbnail: radioImage(station),
+            station
+        }, addToPlaylist));
         const favorite = document.createElement("button");
         favorite.type = "button";
         favorite.className = "radio-star-btn";
@@ -197,7 +210,7 @@ function renderRadioStations(stations) {
         addToFavorites.title = "Add to radio favorites";
         addToFavorites.setAttribute("aria-label", `Add ${station.name} to radio favorites`);
         addToFavorites.addEventListener("click", () => saveRadioFavorite(station, addToFavorites));
-        actions.append(play, favorite, addToFavorites);
+        actions.append(play, addToPlaylist, favorite, addToFavorites);
         card.append(image, details, actions);
         radioResults.append(card);
     });
@@ -220,7 +233,7 @@ async function playRadioStation(station, button) {
         currentRadioStation = data.station;
         document.getElementById("playing-title-text").textContent = data.station.name;
         document.getElementById("playing-status").textContent = data.station.name;
-        document.getElementById("playing-thumb").src = radioImage(data.station);
+        setPlayingThumbnail(radioImage(data.station));
         await refreshRadioStatus();
     } catch (error) {
         console.error("Could not start radio station:", error);
@@ -539,11 +552,10 @@ async function refreshRadioStatus() {
         if (!data.is_playing) {
             const stationName = station.name || station.station || "Radio station";
             document.getElementById("playing-title-text").textContent = stationName;
-            document.getElementById("playing-thumb").src = radioImage(station);
+            setPlayingThumbnail(radioImage(station));
             document.getElementById("playing-status").textContent =
                 data.error ? "PLAYBACK FAILED" : "CONNECTING";
-            const modalThumb = document.getElementById("nowPlayingModalThumb");
-            if (modalThumb) modalThumb.src = radioImage(station);
+            setExpandedThumbnail(radioImage(station));
             const modalTitle = document.getElementById("nowPlayingModalTitleText");
             if (modalTitle) modalTitle.textContent = stationName;
             const modalStatus = document.getElementById("nowPlayingModalStatus");
@@ -570,10 +582,9 @@ async function refreshRadioStatus() {
         const title = station.title || station.name || "Internet Radio";
         const image = radioImage(station);
         document.getElementById("playing-title-text").textContent = title;
-        document.getElementById("playing-thumb").src = image;
+        setPlayingThumbnail(image);
         document.getElementById("playing-status").textContent = station.station || station.name || "Internet Radio";
-        const modalThumb = document.getElementById("nowPlayingModalThumb");
-        if (modalThumb) modalThumb.src = image;
+        setExpandedThumbnail(image);
         const modalTitle = document.getElementById("nowPlayingModalTitleText");
         if (modalTitle) modalTitle.textContent = title;
         const modalStatus = document.getElementById("nowPlayingModalStatus");

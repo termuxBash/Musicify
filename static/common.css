@@ -752,6 +752,7 @@ nav {
 }
 
 .radio-play-btn,
+.radio-playlist-btn,
 .radio-star-btn,
 .radio-heart-btn {
     min-width: 38px;
@@ -766,6 +767,11 @@ nav {
 .radio-play-btn {
     padding: 0 10px;
     background: var(--search-gradient);
+}
+
+.radio-playlist-btn {
+    background: #333;
+    font-size: 1.1rem;
 }
 
 .radio-star-btn {
@@ -1408,6 +1414,13 @@ nav {
     height: 45px; 
     border-radius: 6px; 
     background: #222; 
+    object-fit: cover;
+    flex: 0 0 45px;
+}
+
+.now-playing img.vector-thumbnail {
+    object-fit: contain;
+    padding: 4px;
 }
 
 .now-playing-info h4 { 
@@ -1523,6 +1536,11 @@ nav {
     padding: 24px;
 }
 
+.now-playing-modal-thumb.vector-thumbnail {
+    object-fit: contain;
+    padding: 24px;
+}
+
 .now-playing-modal-status {
     color: var(--spotify-green);
     font-size: 0.72rem;
@@ -1579,6 +1597,17 @@ nav {
 .now-playing-lyrics-empty {
     padding: 4px;
     color: #9ca3af;
+}
+
+.now-playing-lyrics-empty[href] {
+    display: inline-block;
+    color: #1db954;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.now-playing-lyrics-empty[href]:hover {
+    color: #86efac;
 }
 
 @keyframes now-playing-ticker {

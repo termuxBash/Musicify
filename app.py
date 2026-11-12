@@ -15,7 +15,6 @@ from services.lyrics_service import LyricsService
 from core.settings import APP_HOST, APP_PORT, BOSE_IP, DEFAULT_AUTOPLAY_ENABLED, DEFAULT_INCOGNI_MODE, DEFAULT_LYRICS_ENABLED
 
 
-
 def create_app():
     app = Flask(__name__)
     app.config['song_queue'] = deque()

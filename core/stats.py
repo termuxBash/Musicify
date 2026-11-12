@@ -11,6 +11,7 @@ import psutil
 import os
 
 import logging
+from urllib.parse import urlparse
 from services.yt_service import YTService
 from core.bose_routes import check_power, ctrl
 from flask import current_app
@@ -222,6 +223,29 @@ def add_to_playlist():
             error="playlist required"
         ), 400
 
+    if not isinstance(song, dict):
+        return jsonify(error="song must be an object"), 400
+
+    title = song.get("title")
+    if isinstance(title, str) and title.startswith("Radio:(") and title.endswith(")"):
+        stream_url = song.get("url")
+        if not isinstance(stream_url, str):
+            return jsonify(error="radio URL required"), 400
+        stream_url = stream_url.strip()
+        try:
+            parsed_url = urlparse(stream_url)
+        except ValueError:
+            return jsonify(error="invalid radio URL"), 400
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            return jsonify(error="invalid radio URL"), 400
+
+        try:
+            _set_radio_playlist_entry(playlist, stream_url)
+        except ValueError:
+            return jsonify(error="invalid playlist name"), 400
+
+        return jsonify(status="success")
+
     title = song.get("title", "").strip()
 
     source = (
@@ -251,6 +275,23 @@ def _append_to_playlist(playlist, title, source=""):
 
     with open(path, "a", encoding="utf8") as playlist_file:
         playlist_file.write(f"{title}>{source}\n" if source else f"{title}\n")
+
+
+def _set_radio_playlist_entry(playlist, stream_url):
+    os.makedirs(PLAYLIST_DIR, exist_ok=True)
+    path = _safe_path(PLAYLIST_DIR, f"{playlist}.txt")
+
+    existing_lines = []
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf8") as playlist_file:
+            existing_lines = playlist_file.readlines()
+
+    with open(path, "w", encoding="utf8") as playlist_file:
+        for line in existing_lines:
+            title = line.partition(">")[0].strip()
+            if title != "Radio":
+                playlist_file.write(line if line.endswith("\n") else f"{line}\n")
+        playlist_file.write(f"Radio>{stream_url}\n")
 
 
 def record_played_song(song):
@@ -330,14 +371,25 @@ def playlist(name):
     if not raw_lines:
         return jsonify({"error": "playlist empty"}), 400
 
+    radio_lines = []
+    song_lines = []
+    for raw in raw_lines:
+        title, separator, source = raw.partition(">")
+        if separator and title.strip() == "Radio":
+            radio_lines.append(source.strip())
+        else:
+            song_lines.append(raw)
+
     # 1. Take full control under the "playlist" owner identity right away.
     # This automatically clears old queues and prevents inter-blueprint locks.
     current_app.playback.acquire("playlist", force=True)
+    if radio_lines:
+        current_app.player.suppress_autoplay()
 
-    random.shuffle(raw_lines)
+    random.shuffle(song_lines)
     count = 0
 
-    for raw in raw_lines:
+    for raw in song_lines:
         try:
             if ">" in raw:
                 title, source = raw.split(">", 1)
@@ -441,6 +493,26 @@ def playlist(name):
 
         except Exception as e:
             logger.error(f"Playlist line process failed for '{raw}': {e}")
+
+    radio_queued = False
+    if radio_lines:
+        from apps.radio.routes import _station_for_stream_url
+
+        stream_url = radio_lines[-1]
+        if stream_url:
+            station = _station_for_stream_url(stream_url)
+            radio_song = {
+                "title": f"Radio:({station['name']})",
+                "thumbnail": station["favicon"],
+                "url": stream_url,
+                "station": station,
+            }
+            if current_app.playback.enqueue("playlist", radio_song):
+                count += 1
+                radio_queued = True
+
+    if radio_lines and not radio_queued:
+        current_app.player.resume_autoplay()
 
     return jsonify({
         "status": "queued",

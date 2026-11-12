@@ -42,6 +42,29 @@ function showPopup(message) {
     setTimeout(() => window.addEventListener('click', removePopup), 10);
 }
 
+function setPlayingThumbnail(source) {
+    const thumbnail = document.getElementById("playing-thumb");
+    if (!thumbnail) return;
+
+    thumbnail.src = source;
+    thumbnail.classList.toggle(
+        "vector-thumbnail",
+        /^data:image\/svg\+xml/i.test(source) || /\.svg(?:$|[?#])/i.test(source)
+    );
+}
+
+function setExpandedThumbnail(source) {
+    const thumbnail = document.getElementById("nowPlayingModalThumb");
+    if (!thumbnail) return;
+
+    thumbnail.src = source;
+    thumbnail.classList.toggle(
+        "vector-thumbnail",
+        /^data:image\/svg\+xml/i.test(source) || /\.svg(?:$|[?#])/i.test(source)
+    );
+    thumbnail.classList.toggle("no-thumbnail", source === "/static/speaker.svg");
+}
+
 function queueButtonSvg() {
     return `
         <svg class="qi-play" width="14" height="14" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
@@ -462,11 +485,12 @@ function setupNowPlayingSwipe() {
     card.dataset.swipeToCloseReady = "true";
 }
 
-function renderModalLyrics(element, lyrics, currentIndex, trackTitle) {
+function renderModalLyrics(element, lyrics, currentIndex, trackTitle, radioUrl = "") {
     if (!element) return;
 
     const lines = Array.isArray(lyrics) ? lyrics : [];
-    const signature = `${trackTitle}\n${JSON.stringify(lines)}`;
+    const validRadioUrl = /^https?:\/\//i.test(radioUrl) ? radioUrl : "";
+    const signature = `${trackTitle}\n${JSON.stringify(lines)}\n${validRadioUrl}`;
     if (element.dataset.lyricsSignature !== signature) {
         const lyricNodes = lines.map(({ text }) => {
             const line = document.createElement("div");
@@ -476,9 +500,16 @@ function renderModalLyrics(element, lyrics, currentIndex, trackTitle) {
         });
 
         if (lyricNodes.length === 0) {
-            const emptyMessage = document.createElement("div");
+            const emptyMessage = document.createElement(validRadioUrl ? "a" : "div");
             emptyMessage.className = "now-playing-lyrics-empty";
-            emptyMessage.textContent = "No lyrics available";
+            if (validRadioUrl) {
+                emptyMessage.href = validRadioUrl;
+                emptyMessage.target = "_blank";
+                emptyMessage.rel = "noopener noreferrer";
+                emptyMessage.textContent = validRadioUrl;
+            } else {
+                emptyMessage.textContent = "No lyrics available";
+            }
             lyricNodes.push(emptyMessage);
         }
 
@@ -1021,13 +1052,12 @@ async function updateStats() {
             }
             
             if (thumbEl) {
-                thumbEl.src = thumbnail;
+                setPlayingThumbnail(thumbnail);
             }
             if (statusEl) statusEl.textContent = playbackStatus;
             if (lyricsEl) lyricsEl.textContent = data.current_lyric || "";
             if (modalThumbEl) {
-                modalThumbEl.src = modalThumbnail;
-                modalThumbEl.classList.toggle("no-thumbnail", !data.now_playing.thumbnail);
+                setExpandedThumbnail(modalThumbnail);
             }
             if (modalTitleEl) modalTitleEl.textContent = title;
             if (modalLyricsSourceEl) {
@@ -1040,7 +1070,8 @@ async function updateStats() {
                 modalLyricsEl,
                 data.lyrics,
                 data.current_lyric_index,
-                title
+                title,
+                data.is_radio || data.owner === "radio" ? data.now_playing.url : ""
             );
         } else {
             if (titleTextEl) titleTextEl.textContent = "Ready to stream";
@@ -1050,8 +1081,7 @@ async function updateStats() {
             if (lyricsEl) lyricsEl.textContent = "";
 
             if (modalThumbEl) {
-                modalThumbEl.src = "/static/speaker.svg";
-                modalThumbEl.classList.add("no-thumbnail");
+                setExpandedThumbnail("/static/speaker.svg");
             }
             if (modalTitleEl) modalTitleEl.textContent = "Ready to stream";
             if (modalLyricsSourceEl) {
