@@ -178,6 +178,14 @@ class LyricsService:
         with self._lock:
             self.offset_ms = offset_ms
 
+    def _publish_lyrics(self, generation, lyrics, source):
+        if not lyrics:
+            return
+        with self._lock:
+            if generation == self._generation:
+                self.current_lyrics = lyrics
+                self.lyrics_source = source
+
     def _load_lyrics(self, song_title, generation):
         clean_query = re.sub(r"\(.*?\)|\[.*?\]", "", song_title)
         clean_query = re.sub(
@@ -208,6 +216,13 @@ class LyricsService:
         except (requests.RequestException, ValueError) as error:
             logger.warning("LRCLIB lookup failed for %s: %s", query, error)
 
+        lrclib_lyrics = plain_lyrics or "\n".join(
+            text for _, text in parse_synced_lyrics(synced_lyrics)
+        )
+        lrclib_lines = align_lyrics("", synced_lyrics, plain_lyrics)
+        if lrclib_lines:
+            self._publish_lyrics(generation, lrclib_lines, "LRCLIB")
+
         transformed_lyrics = ""
         if artist:
             try:
@@ -220,7 +235,7 @@ class LyricsService:
                         "romanize": "true",
                         "language": "en",
                     },
-                    timeout=20,
+                    timeout=30,
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -231,9 +246,10 @@ class LyricsService:
             except (requests.RequestException, ValueError) as error:
                 logger.warning("Romanized/translated lyrics lookup failed for %s: %s", query, error)
 
-        lrclib_lyrics = plain_lyrics or "\n".join(
-            text for _, text in parse_synced_lyrics(synced_lyrics)
-        )
+        lyrica_lines = align_lyrics(transformed_lyrics, synced_lyrics, plain_lyrics)
+        if transformed_lyrics.strip():
+            self._publish_lyrics(generation, lyrica_lines, "Lyrica")
+
         gemini_source = (
             lrclib_lyrics
             if is_non_english_script(lrclib_lyrics)
@@ -244,26 +260,12 @@ class LyricsService:
         gemini_lyrics = romanize_lyrics(gemini_source) if gemini_source else None
 
         if gemini_lyrics:
-            selected_lyrics = gemini_lyrics
-            lyrics_source = "Gemini"
-        elif transformed_lyrics.strip():
-            selected_lyrics = transformed_lyrics
-            lyrics_source = "Lyrica"
-        elif lrclib_lyrics.strip() or synced_lyrics.strip():
-            selected_lyrics = ""
-            lyrics_source = "LRCLIB"
-        else:
-            selected_lyrics = ""
-            lyrics_source = None
+            gemini_lines = align_lyrics(gemini_lyrics, synced_lyrics, plain_lyrics)
+            self._publish_lyrics(generation, gemini_lines, "Gemini")
 
-        lyrics = align_lyrics(selected_lyrics, synced_lyrics, plain_lyrics)
-        if not lyrics:
-            lyrics_source = None
         with self._lock:
             if generation == self._generation:
-                self.current_lyrics = lyrics
-                self.lyrics_source = lyrics_source
-                logger.info("Loaded %d lyric lines for %s.", len(lyrics), query)
+                logger.info("Loaded %d lyric lines for %s.", len(self.current_lyrics), query)
 
     @staticmethod
     def _resolve_artist_and_track(query):

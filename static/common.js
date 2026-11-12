@@ -245,6 +245,7 @@ async function setLyricsOffset(value) {
             throw new Error(data.message || "Failed to update lyrics offset.");
         }
         if (input) input.value = data.lyrics_offset_ms;
+        await updateStats();
     } catch (error) {
         console.error("Failed to update lyrics offset:", error);
         showPopup(error.message || "Failed to update lyrics offset.");
@@ -307,11 +308,123 @@ async function setVolume(val) {
 }
 
 function openNowPlaying() {
-    document.getElementById("nowPlayingModal")?.classList.add("open");
+    const modal = document.getElementById("nowPlayingModal");
+    modal?.classList.add("open");
+    setupNowPlayingSwipe();
 }
 
 function closeNowPlaying() {
     document.getElementById("nowPlayingModal")?.classList.remove("open");
+}
+
+function setupNowPlayingSwipe() {
+    const card = document.querySelector(".now-playing-modal-card");
+    const modal = document.getElementById("nowPlayingModal");
+    if (!card || card.dataset.swipeToCloseReady) return;
+
+    let touchStart = null;
+    let isInsideLyrics = false;
+    let currentDeltaY = 0;
+
+    card.addEventListener("touchstart", event => {
+        if (event.touches.length !== 1) {
+            touchStart = null;
+            return;
+        }
+
+        const touch = event.touches[0];
+        const lyricsEl = event.target.closest(".now-playing-modal-lyrics");
+        
+        isInsideLyrics = !!lyricsEl;
+        touchStart = {
+            x: touch.clientX,
+            y: touch.clientY
+        };
+        
+        // Disable CSS transition during active drag for instant response
+        card.style.transition = "none";
+    }, { passive: true });
+
+    card.addEventListener("touchmove", event => {
+        if (!touchStart) return;
+        const touch = event.touches[0];
+        const deltaX = touch.clientX - touchStart.x;
+        const deltaY = touch.clientY - touchStart.y;
+
+        // If touching inside lyrics, handle normal scrolling logic
+        if (isInsideLyrics) {
+            const lyricsEl = card.querySelector(".now-playing-modal-lyrics");
+            // If lyrics are scrolled down, or if dragging upwards, don't drag the modal
+            if (lyricsEl && (lyricsEl.scrollTop > 0 || deltaY < 0)) {
+                return;
+            }
+        }
+
+        // Only allow dragging downwards (ignore upward or extreme sideways drags)
+        if (deltaY > 0 && deltaY > Math.abs(deltaX)) {
+            currentDeltaY = deltaY;
+            card.style.transform = `translateY(${currentDeltaY}px)`;
+            
+            // Optionally fade out the background modal backdrop as you drag down
+            if (modal) {
+                const progress = Math.max(0, 1 - (currentDeltaY / 300));
+                modal.style.backgroundColor = `rgba(0, 0, 0, ${progress * 0.5})`;
+            }
+            
+            // Prevent default scrolling/refresh behaviors while dragging the modal down
+            if (event.cancelable) {
+                event.preventDefault();
+            }
+        }
+    }, { passive: false });
+
+    card.addEventListener("touchend", event => {
+        if (!touchStart) return;
+        touchStart = null;
+
+        // Restore CSS transition for smooth snapping/closing
+        card.style.transition = "transform 0.25s ease, background-color 0.25s ease";
+        if (modal) modal.style.transition = "background-color 0.25s ease";
+
+        // Check if dragged down far enough (> 100px) or fast enough
+        if (currentDeltaY > 100) {
+            // Snap off-screen and close
+            card.style.transform = `translateY(100%)`;
+            if (modal) modal.style.backgroundColor = `rgba(0, 0, 0, 0)`;
+            
+            setTimeout(() => {
+                closeNowPlaying();
+                // Reset styles after closing so it's fresh next time it opens
+                card.style.transform = "";
+                card.style.transition = "";
+                if (modal) {
+                    modal.style.backgroundColor = "";
+                    modal.style.transition = "";
+                }
+            }, 250);
+        } else {
+            // Spring back to original position if not dragged far enough
+            card.style.transform = "translateY(0)";
+            if (modal) modal.style.backgroundColor = "";
+        }
+
+        currentDeltaY = 0;
+        isInsideLyrics = false;
+    }, { passive: true });
+
+    card.addEventListener("touchcancel", () => {
+        touchStart = null;
+        isInsideLyrics = false;
+        currentDeltaY = 0;
+        card.style.transform = "";
+        card.style.transition = "";
+        if (modal) {
+            modal.style.backgroundColor = "";
+            modal.style.transition = "";
+        }
+    }, { passive: true });
+    
+    card.dataset.swipeToCloseReady = "true";
 }
 
 function renderModalLyrics(element, lyrics, currentIndex, trackTitle) {

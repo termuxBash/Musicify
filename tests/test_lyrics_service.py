@@ -102,6 +102,16 @@ class LyricsServiceTests(unittest.TestCase):
 
         self.assertEqual(state["current_lyric_index"], 1)
 
+    def test_changing_offset_recalculates_the_current_line(self):
+        service = LyricsService(enabled=True, offset_ms=0)
+        service.current_lyrics = [(1.0, "First line"), (4.0, "Second line")]
+        service.song_start_time = 100
+
+        with patch("services.lyrics_service.time.time", return_value=104.5):
+            self.assertEqual(service.get_lyrics_state()["current_lyric"], "Second line")
+            service.set_offset(-2000)
+            self.assertEqual(service.get_lyrics_state()["current_lyric"], "First line")
+
     @patch("services.lyrics_service.resolve_track", return_value=("Ado", "Ussewa"))
     @patch("services.lyrics_service.LASTFM_KEY", "test-key")
     @patch("services.lyrics_service.requests.get")
@@ -193,32 +203,43 @@ class LyricsServiceTests(unittest.TestCase):
             def json(self):
                 return self.data
 
-        get.side_effect = [
-            FakeResponse(
-                [
-                    {
-                        "syncedLyrics": "[00:01.00] 正しさとは\n[00:04.00] 愚かさとは",
-                        "plainLyrics": "正しさとは\n愚かさとは",
-                    }
-                ]
-            ),
-            FakeResponse({"lyrics": "正しさとは\n愚かさとは"}),
-        ]
-        post.return_value = FakeResponse(
-            {
-                "candidates": [
-                    {
-                        "content": {
-                            "parts": [
-                                {"text": "Tadashisa to wa 正しさとは\nOrokasa to wa"}
-                            ]
-                        }
-                    }
-                ]
-            }
-        )
         service = LyricsService()
 
+        def fake_get(_url, **kwargs):
+            if kwargs["params"].get("q"):
+                return FakeResponse(
+                    [
+                        {
+                            "syncedLyrics": "[00:01.00] 正しさとは\n[00:04.00] 愚かさとは",
+                            "plainLyrics": "正しさとは\n愚かさとは",
+                        }
+                    ]
+                )
+
+            self.assertEqual(service.lyrics_source, "LRCLIB")
+            self.assertEqual(service.current_lyrics[0][1], "正しさとは")
+            self.assertEqual(kwargs["timeout"], 30)
+            return FakeResponse({"lyrics": "Lyrica line one\nLyrica line two"})
+
+        def fake_post(*_args, **_kwargs):
+            self.assertEqual(service.lyrics_source, "Lyrica")
+            self.assertEqual(service.current_lyrics[0][1], "Lyrica line one")
+            return FakeResponse(
+                {
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {"text": "Tadashisa to wa 正しさとは\nOrokasa to wa"}
+                                ]
+                            }
+                        }
+                    ]
+                }
+            )
+
+        get.side_effect = fake_get
+        post.side_effect = fake_post
         service._load_lyrics("Ado - Ussewa", 0)
 
         self.assertEqual(
