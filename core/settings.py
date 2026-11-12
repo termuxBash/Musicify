@@ -2,11 +2,18 @@
 Settings file that can be imported for access to all environment variables and configuration values in one place. This helps avoid circular imports and keeps configuration organized.
 
 """
-from dotenv import load_dotenv
-import requests
-load_dotenv()
+import json
+import logging
 import os
+import tempfile
 import threading
+from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def env_bool(name, default=False):
     value = os.getenv(name)
@@ -29,6 +36,82 @@ def env_int(name, default=0):
         return int(v)
     except ValueError:
         return default
+
+
+DEFAULT_LYRICS_OFFSET_MS = -13000
+LYRICS_EFFORT_LEVELS = ("LRCLIB", "LYRICA", "GEMINI")
+USER_CONFIG_PATH = Path(__file__).resolve().parent.parent / "userconfig.json"
+_user_config_lock = threading.RLock()
+_logger = logging.getLogger(__name__)
+
+
+def _read_user_config():
+    config = {}
+    try:
+        with USER_CONFIG_PATH.open(encoding="utf-8") as config_file:
+            loaded_config = json.load(config_file)
+        if isinstance(loaded_config, dict):
+            config = loaded_config
+        else:
+            _logger.warning("Ignoring userconfig.json because its root value must be an object.")
+    except FileNotFoundError:
+        pass
+    except (OSError, json.JSONDecodeError) as error:
+        _logger.warning("Could not read userconfig.json: %s", error)
+
+    offset_ms = config.get("lyrics_offset_ms", DEFAULT_LYRICS_OFFSET_MS)
+    if type(offset_ms) is not int:
+        _logger.warning("Invalid lyrics_offset_ms in userconfig.json; using %d.", DEFAULT_LYRICS_OFFSET_MS)
+        offset_ms = DEFAULT_LYRICS_OFFSET_MS
+
+    effort = config.get("lyrics_effort", "GEMINI")
+    if not isinstance(effort, str) or effort.upper() not in LYRICS_EFFORT_LEVELS:
+        _logger.warning("Invalid lyrics_effort in userconfig.json; using GEMINI.")
+        effort = "GEMINI"
+    else:
+        effort = effort.upper()
+
+    return {**config, "lyrics_offset_ms": offset_ms, "lyrics_effort": effort}
+
+
+_user_config = _read_user_config()
+LYRICS_OFFSET_MS = _user_config["lyrics_offset_ms"]
+LYRICS_EFFORT = _user_config["lyrics_effort"]
+
+
+def update_user_config(key, value):
+    """Persist an app-managed setting and update the in-memory config."""
+    global _user_config
+    if key == "lyrics_offset_ms":
+        if type(value) is not int:
+            raise ValueError("lyrics_offset_ms must be an integer")
+    elif key == "lyrics_effort":
+        if not isinstance(value, str) or value not in LYRICS_EFFORT_LEVELS:
+            raise ValueError("lyrics_effort must be LRCLIB, LYRICA, or GEMINI")
+    else:
+        raise ValueError(f"Unsupported userconfig setting: {key}")
+
+    with _user_config_lock:
+        updated_config = {**_user_config, key: value}
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=USER_CONFIG_PATH.parent,
+                prefix=".userconfig-",
+                suffix=".tmp",
+                delete=False,
+            ) as config_file:
+                temporary_path = Path(config_file.name)
+                json.dump(updated_config, config_file, indent=2)
+                config_file.write("\n")
+            os.replace(temporary_path, USER_CONFIG_PATH)
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
+        _user_config = updated_config
+
 
 #Server settings
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
@@ -75,7 +158,6 @@ def set_history_table(table_name):
         HISTORY_TABLE = table_name
 
 TIME_OFFSET = env_int("TIME_OFFSET", 0)
-LYRICS_OFFSET_MS = env_int("LYRICS_OFFSET_MS", -15000)
 DEFAULT_LYRICS_ENABLED = env_bool("LYRICS_ENABLED", False)
 DEFAULT_AUTOPLAY_ENABLED = env_bool("AUTOPLAY_ENABLED", False)
 DEFAULT_INCOGNI_MODE = env_bool("INCOGNI_MODE", False)

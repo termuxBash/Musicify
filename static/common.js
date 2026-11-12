@@ -251,6 +251,41 @@ async function setLyricsOffset(value) {
         showPopup(error.message || "Failed to update lyrics offset.");
     }
 }
+
+const LYRICS_EFFORTS = ["LRCLIB", "LYRICA", "GEMINI"];
+
+function updateLyricsEffortLabel(value) {
+    const effort = LYRICS_EFFORTS[Number(value) - 1];
+    const output = document.getElementById("lyricsEffortValue");
+    if (output && effort) output.value = effort;
+}
+
+async function setLyricsEffort(value) {
+    const input = document.getElementById("lyricsEffort");
+    const lyricsEffort = LYRICS_EFFORTS[Number(value) - 1];
+    if (!lyricsEffort) {
+        showPopup("Choose LRCLIB, LYRICA, or GEMINI for lyrics effort.");
+        return;
+    }
+
+    try {
+        const response = await fetch("/lyrics_effort", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lyrics_effort: lyricsEffort })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || "Failed to update lyrics effort.");
+        }
+        if (input) input.value = String(LYRICS_EFFORTS.indexOf(data.lyrics_effort) + 1);
+        updateLyricsEffortLabel(input?.value);
+        await updateStats();
+    } catch (error) {
+        console.error("Failed to update lyrics effort:", error);
+        showPopup(error.message || "Failed to update lyrics effort.");
+    }
+}
 /* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */
 async function toggleAutoplay(){
     await fetch("/toggle_autoplay", {
@@ -1086,6 +1121,12 @@ async function updateStats() {
         const lyricsOffsetInput = document.getElementById("lyricsOffsetMs");
         if (lyricsOffsetInput && document.activeElement !== lyricsOffsetInput) {
             lyricsOffsetInput.value = data.lyrics_offset_ms;
+        }
+
+        const lyricsEffortInput = document.getElementById("lyricsEffort");
+        if (lyricsEffortInput && document.activeElement !== lyricsEffortInput) {
+            lyricsEffortInput.value = String(LYRICS_EFFORTS.indexOf(data.lyrics_effort) + 1);
+            updateLyricsEffortLabel(lyricsEffortInput.value);
         }
 
         const autoplayToggle = document.getElementById("autoplayToggle");

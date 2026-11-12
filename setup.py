@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import getpass
 import ipaddress
+import json
 import os
 import pwd
 import shutil
@@ -18,6 +19,7 @@ from xml.etree import ElementTree
 PROJECT_DIR = Path(__file__).resolve().parent
 ENV_FILE = PROJECT_DIR / ".env"
 EXAMPLE_ENV_FILE = PROJECT_DIR / "example.env"
+USER_CONFIG_FILE = PROJECT_DIR / "userconfig.json"
 ICECAST_CONFIG = Path("/etc/icecast2/icecast.xml")
 STREAM_MOUNT = "/mpv.ogg"
 
@@ -182,7 +184,6 @@ def write_env() -> None:
         "ROOT_DIR": root_dir,
         "TIME_OFFSET": "0",
         "LYRICS_ENABLED": "false",
-        "LYRICS_OFFSET_MS": "-3000",
         "AUTOPLAY_ENABLED": "false",
         "INCOGNI_MODE": "false",
         "SONG_NAME_CLEANUP": "live,acoustic,performance",
@@ -222,8 +223,19 @@ def write_env() -> None:
 
     if os.environ.get("SUDO_USER"):
         user = pwd.getpwnam(os.environ["SUDO_USER"])
-        for path in (ENV_FILE, Path(playlist_dir).expanduser(), Path(root_dir).expanduser()):
+        for path in (ENV_FILE, USER_CONFIG_FILE, Path(playlist_dir).expanduser(), Path(root_dir).expanduser()):
             os.chown(path, user.pw_uid, user.pw_gid)
+
+
+def ensure_user_config() -> None:
+    if not USER_CONFIG_FILE.exists():
+        USER_CONFIG_FILE.write_text(
+            json.dumps(
+                {"lyrics_offset_ms": -13000, "lyrics_effort": "GEMINI"},
+                indent=2,
+            ) + "\n",
+            encoding="utf-8",
+        )
 
 
 def create_systemd_service() -> None:
@@ -261,6 +273,7 @@ def main() -> int:
     try:
         install_system_dependencies()
         configure_icecast()
+        ensure_user_config()
         write_env()
         create_systemd_service()
     except (OSError, RuntimeError, ElementTree.ParseError, subprocess.CalledProcessError) as error:

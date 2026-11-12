@@ -55,8 +55,18 @@
 
                 <div class="settings-popup-offset">
                     <label class="settings-popup-label" for="lyricsOffsetMs">Lyrics offset (ms)</label>
-                    <input id="lyricsOffsetMs" class="settings-popup-number" type="number" step="100" value="-3000" onchange="setLyricsOffset(this.value)">
+                    <input id="lyricsOffsetMs" class="settings-popup-number" type="number" step="100" value="-13000" onchange="setLyricsOffset(this.value)">
                     <p class="settings-popup-help">Negative delays lyrics that appear too fast; positive advances lyrics that appear too slow.</p>
+                </div>
+
+                <div class="settings-popup-effort">
+                    <label class="settings-popup-label" for="lyricsEffort">Lyrics effort: <output id="lyricsEffortValue">GEMINI</output></label>
+                    <input id="lyricsEffort" class="settings-popup-range" type="range" min="1" max="3" step="1" value="3"
+                           aria-label="Lyrics effort" onchange="setLyricsEffort(this.value)" oninput="updateLyricsEffortLabel(this.value)">
+                    <div class="settings-popup-effort-labels" aria-hidden="true">
+                        <span>LRCLIB</span><span>LYRICA</span><span>GEMINI</span>
+                    </div>
+                    <p class="settings-popup-help">Sets the maximum lyrics lookup stage.</p>
                 </div>
 
                 <div class="settings-popup-divider"></div>

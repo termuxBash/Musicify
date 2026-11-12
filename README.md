@@ -55,7 +55,6 @@ Set these in your `.env` file to override runtime defaults:
 - `DB_FILENAME` for the SQLite database filename. Defaults to `history.sqlite3`.
 - `TIME_OFFSET` for the hexadecimal Unix timestamp baseline used in playback history.
 - `LYRICS_ENABLED` to control lyrics on startup (`true` / `false`).
-- `LYRICS_OFFSET_MS` to adjust synced lyric timing in milliseconds. Defaults to `-3000`; negative values delay lyrics and positive values advance them. Settings-panel changes take effect immediately and last until the server restarts.
 - `AUTOPLAY_ENABLED` to control autoplay on startup (`true` / `false`).
 - `INCOGNI_MODE` to disable history recording by default (`true` / `false`).
 - `SONG_NAME_CLEANUP` for comma-separated title suffixes to remove.
@@ -65,6 +64,15 @@ Set these in your `.env` file to override runtime defaults:
 - `GEMINI_API_KEY` for AI recommendations (required for that feature).
 - `GEMINI_MODEL` for the Gemini model name.
 - `LASTFM_KEY` and `MUSIC_ATLAS_KEY` for optional integrations.
+
+## User settings
+
+`userconfig.json` stores app-managed lyrics settings and is created by setup if it does not exist. It contains:
+
+- `lyrics_offset_ms`: synced lyric timing adjustment in milliseconds. Defaults to `-13000`; negative values delay lyrics and positive values advance them.
+- `lyrics_effort`: maximum lyrics lookup stage, one of `LRCLIB`, `LYRICA`, or `GEMINI`. These stages allow the app to use LRCLIB lyrics, then Lyrica transformations, then Gemini romanization, respectively. The default is `GEMINI`.
+
+The settings panel saves changes to `userconfig.json` immediately, so they persist across server restarts. If a setting is absent or invalid, `settings.py` uses its default. Neither lyrics setting is configured in `.env`.
 
 After setup, install Python dependencies and start Musicify:
 ```bash
