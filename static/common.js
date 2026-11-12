@@ -9,7 +9,7 @@ function showPopup(message) {
         bottom: '20px',
         right: '20px',
         backgroundColor: '#1e1e24',
-        color: '#ffffff',
+        color: '#fff',
         padding: '12px 24px',
         borderRadius: '8px',
         fontFamily: 'system-ui, sans-serif',

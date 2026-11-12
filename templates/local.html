@@ -46,11 +46,11 @@
             <a href="{{ api_prefix }}/{{ item.rel_path }}"
             class="folder-link"
             style="color:white;text-decoration:none;">
-                <div class="file-icon">📁</div>
+                <img class="file-icon" src="/static/folder.svg" alt="Folder">
                 <div class="file-name">{{ item.name }}</div>
             </a>
             {% else %}
-            <div class="file-icon">🎵</div>
+            <img class="file-icon" src="/static/local-audio.svg" alt="Local Audio">
             <div class="file-name">{{ item.name }}</div>
             {% endif %}
 
@@ -119,7 +119,7 @@ async function performSearch() {
                 let escapingPath = item.rel_path.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 
                 card.innerHTML = `
-                    <div class="file-icon">${item.is_dir ? "📁" : "🎵"}</div>
+                    <img class="file-icon" src="${item.is_dir ? "/static/folder.svg" : "/static/local-audio.svg"}" alt="${item.is_dir ? "Folder" : "Audio"}">
                     <div class="file-name">
                         ${item.is_dir ? `<a href="${window.API_PREFIX}/${item.rel_path}" style="color:white;text-decoration:none">${item.name}</a>` : item.name}
                     </div>
