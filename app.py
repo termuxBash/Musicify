@@ -5,6 +5,7 @@ from core.bose_routes import bose_control_bp
 from core.stats import stats_bp
 from apps.local.routes import local_bp
 from apps.yt.routes import youtube_bp
+from apps.radio.routes import radio_bp
 from collections import deque
 from core.bose_worker import BoseSoundTouchWorker
 from core.playback_controller import PlaybackController
@@ -44,6 +45,7 @@ def create_app():
     app.register_blueprint(bose_control_bp)
     app.register_blueprint(local_bp, url_prefix='/local')
     app.register_blueprint(youtube_bp, url_prefix='/youtube')
+    app.register_blueprint(radio_bp, url_prefix='/radio')
     app.register_blueprint(stats_bp)
     return app
 

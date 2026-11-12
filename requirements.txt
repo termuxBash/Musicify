@@ -5,3 +5,5 @@ python-dotenv>=1.2.4
 Requests>=2.34.2
 upnpclient>=2.0.3
 yt_dlp>=2026.10.26
+pyradios>=2.1.1
+httpx>=0.27

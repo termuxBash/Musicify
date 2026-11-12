@@ -228,14 +228,29 @@ def write_env() -> None:
 
 
 def ensure_user_config() -> None:
-    if not USER_CONFIG_FILE.exists():
-        USER_CONFIG_FILE.write_text(
-            json.dumps(
-                {"lyrics_offset_ms": -13000, "lyrics_effort": "GEMINI"},
-                indent=2,
-            ) + "\n",
-            encoding="utf-8",
-        )
+    defaults = {
+        "lyrics_offset_ms": -13000,
+        "lyrics_effort": "GEMINI",
+        "radio": {
+            **{str(number): None for number in range(1, 7)},
+            "favorites": [],
+        },
+    }
+    if USER_CONFIG_FILE.exists():
+        with USER_CONFIG_FILE.open(encoding="utf-8") as config_file:
+            config = json.load(config_file)
+        if not isinstance(config, dict):
+            raise ValueError("userconfig.json must contain a JSON object")
+        if "radio" in config:
+            return
+        config["radio"] = defaults["radio"]
+    else:
+        config = defaults
+
+    USER_CONFIG_FILE.write_text(
+        json.dumps(config, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def create_systemd_service() -> None:

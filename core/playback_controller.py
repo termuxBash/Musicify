@@ -32,6 +32,10 @@ class PlaybackController:
             # nobody owns it
             if self._owner is None:
                 self._owner = blueprint_name
+                if blueprint_name == "radio":
+                    self.player.suppress_autoplay()
+                else:
+                    self.player.resume_autoplay()
                 return True
 
             # same owner
@@ -42,6 +46,10 @@ class PlaybackController:
             if force:
                 self._reset_player()
                 self._owner = blueprint_name
+                if blueprint_name == "radio":
+                    self.player.suppress_autoplay()
+                else:
+                    self.player.resume_autoplay()
                 return True
 
             return False

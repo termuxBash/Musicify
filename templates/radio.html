@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+{% set show_incogni = false %}
+{% set show_live_lyrics = false %}
+{% set switch_player_url = url_for('youtube.index') %}
+{% set switch_player_label = "Online Player" %}
+{% set playlist_modal_message = "Select a playlist" %}
+{% include "_head.html" %}
+<body>
+{% include "_nav.html" %}
+{% include "_side_panel.html" %}
+
+<main class="main radio-main" id="main">
+    <form class="radio-search" id="radioSearchForm">
+        <input type="search" id="radioQuery" name="query" placeholder="Search radio stations..." aria-label="Search radio stations">
+        <button type="submit">Search</button>
+    </form>
+
+    <div class="radio-filter-controls">
+        <div class="radio-genre-filters" role="group" aria-label="Filter by radio genre">
+            {% for genre in radio_genres %}
+            <button type="button" class="radio-genre-filter" data-radio-genre="{{ genre }}" aria-pressed="false">{{ genre }}</button>
+            {% endfor %}
+        </div>
+        <div class="radio-filter-actions">
+            <button type="button" class="radio-clear-filter" id="clearRadioGenreFilter" disabled>Clear filters</button>
+            <button type="button" class="radio-delete-presets-btn" id="openDeleteRadioPresetModal">
+                <img src="{{ url_for('static', filename='delete.svg') }}" alt="">
+                Delete a preset
+            </button>
+        </div>
+    </div>
+
+    <div class="radio-presets" aria-label="Radio presets">
+        {% for number in range(1, 7) %}
+        {% set preset = radio_presets[number|string] %}
+        <a class="radio-preset" href="{{ url_for('radio.play_preset', number=number) }}"
+           data-radio-preset-number="{{ number }}"
+           {% if not preset %}aria-disabled="true" onclick="event.preventDefault()"{% endif %}>
+            <span class="radio-preset-number">{{ number }}</span>
+            <span class="radio-preset-name">{{ preset.name if preset else "Empty preset" }}</span>
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if load_error %}
+    <p class="radio-error" role="alert">{{ load_error }}</p>
+    {% endif %}
+    <div class="radio-results-heading">
+        <h2 id="radioResultsTitle">Top 18 stations</h2>
+        <span id="radioSearchStatus" role="status"></span>
+    </div>
+    <div class="radio-grid" id="radioResults"></div>
+</main>
+
+{% include "_player_bar.html" %}
+
+<div class="playlist-modal radio-favorite-modal" id="radioFavoriteModal" onclick="if(event.target === this) closeRadioFavoriteModal()">
+    <form class="playlist-modal-card" id="radioFavoriteForm">
+        <h4>Save radio station to a preset</h4>
+        <p id="radioFavoriteStationName"></p>
+        <label for="radioPresetSelect">Preset number</label>
+        <select id="radioPresetSelect" required>
+            {% for number in range(1, 7) %}
+            <option value="{{ number }}">{{ number }}{% if radio_presets[number|string] %} — {{ radio_presets[number|string].name }}{% endif %}</option>
+            {% endfor %}
+        </select>
+        <div class="playlist-modal-actions">
+            <button class="playlist-cancel" type="button" onclick="closeRadioFavoriteModal()">Cancel</button>
+            <button class="queue-playlist-btn" type="submit">Save preset</button>
+        </div>
+    </form>
+</div>
+
+<div class="playlist-modal radio-favorite-modal" id="radioDeletePresetModal" onclick="if(event.target === this) closeRadioPresetDeleteModal()">
+    <form class="playlist-modal-card" id="radioDeletePresetForm">
+        <h4>Delete a radio preset</h4>
+        <label for="radioDeletePresetSelect">Choose a preset to delete</label>
+        <select id="radioDeletePresetSelect" required>
+            {% for number in range(1, 7) %}
+            {% set preset = radio_presets[number|string] %}
+            <option value="{{ number }}" {% if not preset %}disabled{% endif %}>
+                {{ number }}{% if preset %} — {{ preset.name }}{% else %} — Empty preset{% endif %}
+            </option>
+            {% endfor %}
+        </select>
+        <div class="playlist-modal-actions">
+            <button class="playlist-cancel" type="button" onclick="closeRadioPresetDeleteModal()">Cancel</button>
+            <button class="radio-delete-presets-btn" id="confirmDeleteRadioPreset" type="submit">
+                <img src="{{ url_for('static', filename='delete.svg') }}" alt="">
+                Delete preset
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    window.API_PREFIX = {{ api_prefix|tojson }};
+    window.CURRENT_OWNER = "radio";
+</script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script>
+const API_PREFIX = {{ api_prefix|tojson }};
+const DELETE_ICON_URL = {{ url_for('static', filename='delete.svg')|tojson }};
+const initialRadioStations = {{ stations|tojson }};
+const radioPresets = {{ radio_presets|tojson }};
+const radioFavorites = {{ radio_favorites|tojson }};
+const radioResults = document.getElementById("radioResults");
+let stationToSave = null;
+let currentRadioStation = null;
+const activeRadioGenres = new Set();
+let lastRadioPlaybackError = "";
+let radioStatusRetryTimeout = null;
+
+function createRadioFavoriteItem(station) {
+    const item = document.createElement("div");
+    item.className = "radio-sidebar-favorite-item";
+    const link = document.createElement("a");
+    link.className = "radio-sidebar-favorite";
+    link.href = `${API_PREFIX}/fav/${encodeURIComponent(station.name)}`;
+    link.addEventListener("click", confirmFavoriteNavigation);
+    const icon = document.createElement("span");
+    icon.textContent = "▶";
+    const name = document.createElement("span");
+    name.textContent = station.name;
+    link.append(icon, name);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "radio-sidebar-favorite-delete";
+    remove.dataset.stationUrl = station.url;
+    remove.dataset.stationName = station.name;
+    remove.title = "Delete favorite";
+    remove.setAttribute("aria-label", `Delete ${station.name} from radio favorites`);
+    const deleteIcon = document.createElement("img");
+    deleteIcon.src = DELETE_ICON_URL;
+    deleteIcon.alt = "";
+    remove.append(deleteIcon);
+    remove.addEventListener("click", () => deleteRadioFavorite(remove));
+    item.append(link, remove);
+    return item;
+}
+
+function radioImage(station) {
+    return station.favicon || station.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='58' font-family='sans-serif'%3E📻%3C/text%3E%3C/svg%3E";
+}
+
+function renderRadioStations(stations) {
+    radioResults.replaceChildren();
+    if (!stations.length) {
+        const empty = document.createElement("p");
+        empty.className = "radio-empty";
+        empty.textContent = "No radio stations found.";
+        radioResults.append(empty);
+        return;
+    }
+
+    stations.forEach(station => {
+        const card = document.createElement("article");
+        card.className = "radio-card";
+
+        const image = document.createElement("img");
+        image.className = "radio-card-image";
+        image.src = radioImage(station);
+        image.alt = "";
+        image.loading = "lazy";
+        image.referrerPolicy = "no-referrer";
+
+        const details = document.createElement("div");
+        details.className = "radio-card-details";
+        const title = document.createElement("h3");
+        title.title = station.name || "Unknown station";
+        title.textContent = station.name || "Unknown station";
+        const subtitle = document.createElement("p");
+        subtitle.textContent = [station.country, station.codec, station.bitrate ? `${station.bitrate} kbps` : ""]
+            .filter(Boolean).join(" · ");
+        details.append(title, subtitle);
+
+        const actions = document.createElement("div");
+        actions.className = "radio-card-actions";
+        const play = document.createElement("button");
+        play.type = "button";
+        play.className = "radio-play-btn";
+        play.textContent = "▶ Play";
+        play.addEventListener("click", () => playRadioStation(station, play));
+        const favorite = document.createElement("button");
+        favorite.type = "button";
+        favorite.className = "radio-star-btn";
+        favorite.textContent = "☆";
+        favorite.title = "Save to a radio preset";
+        favorite.setAttribute("aria-label", `Save ${station.name} to a radio preset`);
+        favorite.addEventListener("click", () => openRadioFavoriteModal(station));
+        const addToFavorites = document.createElement("button");
+        addToFavorites.type = "button";
+        addToFavorites.className = "radio-heart-btn";
+        addToFavorites.textContent = "♡";
+        addToFavorites.title = "Add to radio favorites";
+        addToFavorites.setAttribute("aria-label", `Add ${station.name} to radio favorites`);
+        addToFavorites.addEventListener("click", () => saveRadioFavorite(station, addToFavorites));
+        actions.append(play, favorite, addToFavorites);
+        card.append(image, details, actions);
+        radioResults.append(card);
+    });
+}
+
+async function playRadioStation(station, button) {
+    if (!await confirmRadioPlayback()) return;
+    if (button) button.disabled = true;
+    try {
+        const response = await fetch(API_PREFIX + "/play", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(station)
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showPopup(data.error || "Could not play this radio station.");
+            return;
+        }
+        currentRadioStation = data.station;
+        document.getElementById("playing-title-text").textContent = data.station.name;
+        document.getElementById("playing-status").textContent = data.station.name;
+        document.getElementById("playing-thumb").src = radioImage(data.station);
+        await refreshRadioStatus();
+    } catch (error) {
+        console.error("Could not start radio station:", error);
+        showPopup("Could not contact the radio player.");
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+function openRadioFavoriteModal(station) {
+    stationToSave = station;
+    document.getElementById("radioFavoriteStationName").textContent = station.name;
+    document.getElementById("radioFavoriteModal").classList.add("open");
+    document.getElementById("radioPresetSelect").focus();
+}
+
+function closeRadioFavoriteModal() {
+    document.getElementById("radioFavoriteModal").classList.remove("open");
+    stationToSave = null;
+}
+
+document.getElementById("radioFavoriteForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!stationToSave) return;
+
+    try {
+        const response = await fetch(API_PREFIX + "/preset", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                number: Number(document.getElementById("radioPresetSelect").value),
+                station: stationToSave
+            })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showPopup(data.error || "Could not save this radio preset.");
+            return;
+        }
+        radioPresets[String(data.number)] = data.station;
+        const preset = document.querySelectorAll(".radio-preset")[data.number - 1];
+        preset.querySelector(".radio-preset-name").textContent = data.station.name;
+        preset.removeAttribute("aria-disabled");
+        preset.removeAttribute("onclick");
+        const presetOption = document.querySelector(`#radioDeletePresetSelect option[value="${data.number}"]`);
+        presetOption.textContent = `${data.number} — ${data.station.name}`;
+        presetOption.disabled = false;
+        wirePresetLink(preset);
+        showPopup(`Saved ${data.station.name} to radio preset ${data.number}.`);
+        closeRadioFavoriteModal();
+    } catch (error) {
+        console.error("Could not save radio preset:", error);
+        showPopup("Could not contact the radio settings service.");
+    }
+});
+
+function openRadioPresetDeleteModal() {
+    const select = document.getElementById("radioDeletePresetSelect");
+    const firstSavedPreset = [...select.options].find(option => !option.disabled);
+    if (!firstSavedPreset) {
+        showPopup("There are no saved radio presets to delete.");
+        return;
+    }
+    firstSavedPreset.selected = true;
+    document.getElementById("radioDeletePresetModal").classList.add("open");
+    select.focus();
+}
+
+function closeRadioPresetDeleteModal() {
+    document.getElementById("radioDeletePresetModal").classList.remove("open");
+}
+
+async function deleteRadioPreset(number, button) {
+    const station = radioPresets[String(number)];
+    if (!station) return;
+
+    if (button) button.disabled = true;
+    try {
+        const response = await fetch(`${API_PREFIX}/preset/${number}`, { method: "DELETE" });
+        const data = await response.json();
+        if (!response.ok) {
+            showPopup(data.error || "Could not delete this radio preset.");
+            return;
+        }
+        radioPresets[String(number)] = null;
+        const preset = document.querySelectorAll(".radio-preset")[number - 1];
+        preset.querySelector(".radio-preset-name").textContent = "Empty preset";
+        preset.setAttribute("aria-disabled", "true");
+        preset.setAttribute("onclick", "event.preventDefault()");
+        const presetOption = document.querySelector(`#radioDeletePresetSelect option[value="${number}"]`);
+        presetOption.textContent = `${number} — Empty preset`;
+        presetOption.disabled = true;
+        closeRadioPresetDeleteModal();
+        showPopup(`Deleted radio preset ${number}.`);
+    } catch (error) {
+        console.error("Could not delete radio preset:", error);
+        showPopup("Could not contact the radio settings service.");
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+document.getElementById("openDeleteRadioPresetModal").addEventListener("click", openRadioPresetDeleteModal);
+document.getElementById("radioDeletePresetForm").addEventListener("submit", event => {
+    event.preventDefault();
+    deleteRadioPreset(Number(document.getElementById("radioDeletePresetSelect").value), event.submitter);
+});
+
+async function saveRadioFavorite(station, button) {
+    if (button) button.disabled = true;
+    try {
+        const response = await fetch(API_PREFIX + "/favorites", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ station })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showPopup(data.error || "Could not save this radio favorite.");
+            return;
+        }
+        if (data.status === "saved") {
+            radioFavorites.push(data.station);
+            addRadioFavorite(data.station);
+        }
+        showPopup(data.status === "saved" ? `Added ${data.station.name} to radio favorites.` : "This station is already a favorite.");
+    } catch (error) {
+        console.error("Could not save radio favorite:", error);
+        showPopup("Could not contact the radio settings service.");
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+function addRadioFavorite(station) {
+    const list = document.querySelector(".radio-sidebar-favorite-list");
+    if (!list) return;
+    list.querySelector(".radio-sidebar-empty")?.remove();
+    list.append(createRadioFavoriteItem(station));
+}
+
+async function deleteRadioFavorite(button) {
+    const stationUrl = button.dataset.stationUrl;
+    const stationName = button.dataset.stationName;
+    if (!window.confirm(`Delete ${stationName} from radio favorites?`)) return;
+
+    button.disabled = true;
+    try {
+        const response = await fetch(API_PREFIX + "/favorites", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: stationUrl })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showPopup(data.error || "Could not delete this radio favorite.");
+            return;
+        }
+        const index = radioFavorites.findIndex(station => station.url === stationUrl);
+        if (index >= 0) radioFavorites.splice(index, 1);
+        button.closest(".radio-sidebar-favorite-item")?.remove();
+        const list = document.querySelector(".radio-sidebar-favorite-list");
+        if (list && !list.querySelector(".radio-sidebar-favorite-item")) {
+            const empty = document.createElement("p");
+            empty.className = "radio-sidebar-empty";
+            empty.textContent = "Star a station to add it here.";
+            list.append(empty);
+        }
+        showPopup(`Removed ${stationName} from radio favorites.`);
+    } catch (error) {
+        console.error("Could not delete radio favorite:", error);
+        showPopup("Could not contact the radio settings service.");
+    } finally {
+        if (button.isConnected) button.disabled = false;
+    }
+}
+
+async function confirmRadioPlayback() {
+    try {
+        const response = await fetch("/stats");
+        const data = await response.json();
+        if (!response.ok) throw new Error("Could not check the current player.");
+        const owner = data.owner;
+        const message = owner && owner !== "radio"
+            ? `Take control from ${owner} and start radio playback?`
+            : "Start radio playback?";
+        return window.confirm(message);
+    } catch (error) {
+        console.error("Could not check current playback owner:", error);
+        showPopup("Could not check which player currently owns playback.");
+        return false;
+    }
+}
+
+function confirmFavoriteNavigation(event) {
+    event.preventDefault();
+    const link = event.currentTarget;
+    confirmRadioPlayback().then(confirmed => {
+        if (confirmed) window.location.href = link.href;
+    });
+}
+
+function wirePresetLink(link) {
+    if (link.dataset.confirmationBound || link.getAttribute("aria-disabled") === "true") return;
+    link.dataset.confirmationBound = "true";
+    link.addEventListener("click", event => {
+        event.preventDefault();
+        if (link.getAttribute("aria-disabled") === "true") return;
+        const presetNumber = link.dataset.radioPresetNumber;
+        confirmRadioPlayback().then(confirmed => {
+            if (confirmed) window.location.href = `${API_PREFIX}/${presetNumber}`;
+        });
+    });
+}
+
+document.querySelectorAll(".radio-preset").forEach(wirePresetLink);
+
+document.querySelectorAll(".radio-sidebar-favorite").forEach(link => {
+    link.addEventListener("click", confirmFavoriteNavigation);
+});
+document.querySelectorAll(".radio-sidebar-favorite-delete").forEach(button => {
+    button.addEventListener("click", () => deleteRadioFavorite(button));
+});
+
+let radioSearchRequest = 0;
+let radioSearchTimer = null;
+
+async function searchRadioStations(query, genres = [...activeRadioGenres]) {
+    const requestId = ++radioSearchRequest;
+    if (!query && genres.length === 0) {
+        renderRadioStations(initialRadioStations);
+        document.getElementById("radioResultsTitle").textContent = "Top 18 stations";
+        document.getElementById("radioSearchStatus").textContent = "";
+        return;
+    }
+
+    const status = document.getElementById("radioSearchStatus");
+    status.textContent = "Searching...";
+    try {
+        const params = new URLSearchParams();
+        if (query) params.set("q", query);
+        if (genres.length) params.set("tags", genres.join(","));
+        const response = await fetch(`${API_PREFIX}/search?${params.toString()}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Radio search failed.");
+        if (requestId !== radioSearchRequest) return;
+        renderRadioStations(data);
+        const titleParts = [];
+        if (query) titleParts.push(`“${query}”`);
+        if (genres.length) titleParts.push(genres.join(", "));
+        document.getElementById("radioResultsTitle").textContent =
+            `Stations matching ${titleParts.join(" · ")}`;
+    } catch (error) {
+        if (requestId !== radioSearchRequest) return;
+        console.error("Radio search failed:", error);
+        status.textContent = error.message || "Radio search failed.";
+        return;
+    }
+    status.textContent = "";
+}
+
+document.getElementById("radioSearchForm").addEventListener("submit", event => {
+    event.preventDefault();
+    clearTimeout(radioSearchTimer);
+    searchRadioStations(document.getElementById("radioQuery").value.trim());
+});
+
+document.getElementById("radioQuery").addEventListener("input", event => {
+    clearTimeout(radioSearchTimer);
+    const query = event.target.value.trim();
+    if (query.length > 0 && query.length < 2 && activeRadioGenres.size === 0) return;
+    radioSearchTimer = setTimeout(
+        () => searchRadioStations(query),
+        query ? 300 : 0
+    );
+});
+
+document.querySelectorAll(".radio-genre-filter").forEach(button => {
+    button.addEventListener("click", () => {
+        const genre = button.dataset.radioGenre;
+        if (activeRadioGenres.has(genre)) activeRadioGenres.delete(genre);
+        else activeRadioGenres.add(genre);
+        document.querySelectorAll(".radio-genre-filter").forEach(filter => {
+            const selected = activeRadioGenres.has(filter.dataset.radioGenre);
+            filter.classList.toggle("active", selected);
+            filter.setAttribute("aria-pressed", String(selected));
+        });
+        document.getElementById("clearRadioGenreFilter").disabled = activeRadioGenres.size === 0;
+        clearTimeout(radioSearchTimer);
+        searchRadioStations(document.getElementById("radioQuery").value.trim());
+    });
+});
+
+document.getElementById("clearRadioGenreFilter").addEventListener("click", () => {
+    activeRadioGenres.clear();
+    document.querySelectorAll(".radio-genre-filter").forEach(button => {
+        button.classList.remove("active");
+        button.setAttribute("aria-pressed", "false");
+    });
+    document.getElementById("clearRadioGenreFilter").disabled = true;
+    searchRadioStations(document.getElementById("radioQuery").value.trim(), []);
+});
+
+async function refreshRadioStatus() {
+    try {
+        const response = await fetch(API_PREFIX + "/status");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not read radio status.");
+        if (!data.is_radio || !data.station) {
+            if (radioStatusRetryTimeout) clearTimeout(radioStatusRetryTimeout);
+            radioStatusRetryTimeout = null;
+            return;
+        }
+        const station = data.station;
+        currentRadioStation = station;
+        if (!data.is_playing) {
+            const stationName = station.name || station.station || "Radio station";
+            document.getElementById("playing-title-text").textContent = stationName;
+            document.getElementById("playing-thumb").src = radioImage(station);
+            document.getElementById("playing-status").textContent =
+                data.error ? "PLAYBACK FAILED" : "CONNECTING";
+            const modalThumb = document.getElementById("nowPlayingModalThumb");
+            if (modalThumb) modalThumb.src = radioImage(station);
+            const modalTitle = document.getElementById("nowPlayingModalTitleText");
+            if (modalTitle) modalTitle.textContent = stationName;
+            const modalStatus = document.getElementById("nowPlayingModalStatus");
+            if (modalStatus) modalStatus.textContent =
+                data.error ? "PLAYBACK FAILED" : "CONNECTING";
+            if (data.error && lastRadioPlaybackError !== data.error) {
+                showPopup(data.error);
+            }
+            lastRadioPlaybackError = data.error || "";
+            if (data.pending && !radioStatusRetryTimeout && !document.hidden && document.hasFocus()) {
+                radioStatusRetryTimeout = setTimeout(() => {
+                    radioStatusRetryTimeout = null;
+                    refreshRadioStatus();
+                }, 2000);
+            } else if (!data.pending && radioStatusRetryTimeout) {
+                clearTimeout(radioStatusRetryTimeout);
+                radioStatusRetryTimeout = null;
+            }
+            return;
+        }
+        if (radioStatusRetryTimeout) clearTimeout(radioStatusRetryTimeout);
+        radioStatusRetryTimeout = null;
+        lastRadioPlaybackError = "";
+        const title = station.title || station.name || "Internet Radio";
+        const image = radioImage(station);
+        document.getElementById("playing-title-text").textContent = title;
+        document.getElementById("playing-thumb").src = image;
+        document.getElementById("playing-status").textContent = station.station || station.name || "Internet Radio";
+        const modalThumb = document.getElementById("nowPlayingModalThumb");
+        if (modalThumb) modalThumb.src = image;
+        const modalTitle = document.getElementById("nowPlayingModalTitleText");
+        if (modalTitle) modalTitle.textContent = title;
+        const modalStatus = document.getElementById("nowPlayingModalStatus");
+        if (modalStatus) modalStatus.textContent = station.station || station.name || "Internet Radio";
+    } catch (error) {
+        console.error("Could not refresh radio status:", error);
+        if (lastRadioPlaybackError !== error.message) {
+            showPopup(error.message || "Could not check radio playback status.");
+        }
+        lastRadioPlaybackError = error.message || "Could not check radio playback status.";
+    }
+}
+
+window.reconnectStream = async function() {
+    if (!currentRadioStation) {
+        showPopup("Choose a radio station first.");
+        return;
+    }
+    await playRadioStation(currentRadioStation);
+};
+window.skipTrack = function() {
+    showPopup("Live radio streams do not support skipping tracks.");
+};
+
+let radioStatusInterval = null;
+function startRadioStatusPolling() {
+    if (!radioStatusInterval) {
+        refreshRadioStatus();
+        radioStatusInterval = setInterval(refreshRadioStatus, 20000);
+    }
+}
+
+function stopRadioStatusPolling() {
+    if (radioStatusInterval) {
+        clearInterval(radioStatusInterval);
+        radioStatusInterval = null;
+    }
+    if (radioStatusRetryTimeout) {
+        clearTimeout(radioStatusRetryTimeout);
+        radioStatusRetryTimeout = null;
+    }
+}
+
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopRadioStatusPolling();
+    else startRadioStatusPolling();
+});
+
+window.addEventListener("blur", stopRadioStatusPolling);
+window.addEventListener("focus", () => {
+    if (!document.hidden) startRadioStatusPolling();
+});
+
+renderRadioStations(initialRadioStations);
+if (!document.hidden) startRadioStatusPolling();
+</script>
+</body>
+</html>
