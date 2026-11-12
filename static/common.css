@@ -407,8 +407,7 @@ nav {
     text-decoration: none;
 }
 
-.radio-sidebar-favorite-delete,
-.radio-preset-delete {
+.radio-sidebar-favorite-delete {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -426,14 +425,18 @@ nav {
     height: 32px;
 }
 
-.radio-sidebar-favorite-delete:hover,
-.radio-preset-delete:hover:not(:disabled) {
+.radio-sidebar-favorite-delete img {
+    width: 16px;
+    height: 16px;
+    filter: brightness(0) invert(1);
+}
+
+.radio-sidebar-favorite-delete:hover {
     border-color: #ef4444;
     color: #f87171;
 }
 
-.radio-sidebar-favorite-delete:disabled,
-.radio-preset-delete:disabled {
+.radio-sidebar-favorite-delete:disabled {
     opacity: 0.4;
     cursor: default;
 }
@@ -523,13 +526,6 @@ nav {
     margin-bottom: 22px;
 }
 
-.radio-preset-item {
-    display: flex;
-    min-width: 0;
-    align-items: stretch;
-    gap: 4px;
-}
-
 .radio-preset {
     display: flex;
     min-width: 0;
@@ -548,9 +544,45 @@ nav {
     text-decoration: none;
 }
 
-.radio-preset-delete {
-    width: 30px;
-    font-size: 1.15rem;
+.radio-delete-presets-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    grid-column: 1 / -1;
+    justify-self: end;
+    min-height: 42px;
+    padding: 0 18px;
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    border-radius: 9px;
+    background: linear-gradient(135deg, #991b1b, #b91c1c);
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.radio-delete-presets-btn img {
+    width: 17px;
+    height: 17px;
+    filter: brightness(0) invert(1);
+}
+
+.radio-delete-presets-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #b91c1c, #dc2626);
+    box-shadow: 0 4px 14px rgba(220, 38, 38, 0.28);
+}
+
+.radio-delete-presets-btn:focus-visible {
+    outline: 2px solid #f87171;
+    outline-offset: 2px;
+}
+
+.radio-delete-presets-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
 }
 
 .radio-preset:hover {

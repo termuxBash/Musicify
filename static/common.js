@@ -1080,11 +1080,10 @@ async function updateStats() {
 
                     const deleteBackground = document.createElement("div");
                     deleteBackground.className = "queue-swipe-bg queue-swipe-bg-delete";
-                    deleteBackground.innerHTML = `
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                        </svg>
-                    `;
+                    const deleteIcon = document.createElement("img");
+                    deleteIcon.src = "/static/delete.svg";
+                    deleteIcon.alt = "";
+                    deleteBackground.append(deleteIcon);
 
                     const item = document.createElement("div");
                     item.className = "queue-item";

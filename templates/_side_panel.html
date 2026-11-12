@@ -35,7 +35,9 @@
                 </a>
                 <button type="button" class="radio-sidebar-favorite-delete"
                         data-station-url="{{ station.url }}" data-station-name="{{ station.name }}"
-                        aria-label="Delete {{ station.name }} from radio favorites" title="Delete favorite">×</button>
+                        aria-label="Delete {{ station.name }} from radio favorites" title="Delete favorite">
+                    <img src="{{ url_for('static', filename='delete.svg') }}" alt="">
+                </button>
             </div>
             {% else %}
             <p class="radio-sidebar-empty">Star a station to add it here.</p>

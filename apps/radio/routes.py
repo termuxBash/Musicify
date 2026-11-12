@@ -5,6 +5,7 @@ from difflib import get_close_matches
 from urllib.parse import urlparse
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
+import httpx
 from pyradios import RadioBrowser
 
 from core.settings import get_radio_config, update_user_config
@@ -12,11 +13,8 @@ from core.settings import get_radio_config, update_user_config
 
 logger = logging.getLogger(__name__)
 radio_bp = Blueprint("radio", __name__)
-import ssl
-
-# Disable global SSL certificate verification for this process
-ssl._create_default_https_context = ssl._create_unverified_context
-_radio_browser = RadioBrowser(verify=False)
+# Keep the certificate workaround scoped to Radio Browser requests.
+_radio_browser = RadioBrowser(session=httpx.Client(verify=False))
 _status_lock = threading.Lock()
 _METADATA_CACHE_SECONDS = 20
 

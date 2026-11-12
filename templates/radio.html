@@ -19,18 +19,17 @@
     <div class="radio-presets" aria-label="Radio presets">
         {% for number in range(1, 7) %}
         {% set preset = radio_presets[number|string] %}
-        <div class="radio-preset-item">
-            <a class="radio-preset" href="{{ url_for('radio.play_preset', number=number) }}"
-               data-radio-preset-number="{{ number }}"
-               {% if not preset %}aria-disabled="true" onclick="event.preventDefault()"{% endif %}>
-                <span class="radio-preset-number">{{ number }}</span>
-                <span class="radio-preset-name">{{ preset.name if preset else "Empty preset" }}</span>
-            </a>
-            <button type="button" class="radio-preset-delete" data-radio-preset-number="{{ number }}"
-                    aria-label="Delete radio preset {{ number }}" title="Delete preset {{ number }}"
-                    {% if not preset %}disabled{% endif %}>×</button>
-        </div>
+        <a class="radio-preset" href="{{ url_for('radio.play_preset', number=number) }}"
+           data-radio-preset-number="{{ number }}"
+           {% if not preset %}aria-disabled="true" onclick="event.preventDefault()"{% endif %}>
+            <span class="radio-preset-number">{{ number }}</span>
+            <span class="radio-preset-name">{{ preset.name if preset else "Empty preset" }}</span>
+        </a>
         {% endfor %}
+        <button type="button" class="radio-delete-presets-btn" id="openDeleteRadioPresetModal">
+            <img src="{{ url_for('static', filename='delete.svg') }}" alt="">
+            Delete a preset
+        </button>
     </div>
 
     <section class="radio-now-playing" aria-live="polite">
@@ -71,6 +70,28 @@
     </form>
 </div>
 
+<div class="playlist-modal radio-favorite-modal" id="radioDeletePresetModal" onclick="if(event.target === this) closeRadioPresetDeleteModal()">
+    <form class="playlist-modal-card" id="radioDeletePresetForm">
+        <h4>Delete a radio preset</h4>
+        <label for="radioDeletePresetSelect">Choose a preset to delete</label>
+        <select id="radioDeletePresetSelect" required>
+            {% for number in range(1, 7) %}
+            {% set preset = radio_presets[number|string] %}
+            <option value="{{ number }}" {% if not preset %}disabled{% endif %}>
+                {{ number }}{% if preset %} — {{ preset.name }}{% else %} — Empty preset{% endif %}
+            </option>
+            {% endfor %}
+        </select>
+        <div class="playlist-modal-actions">
+            <button class="playlist-cancel" type="button" onclick="closeRadioPresetDeleteModal()">Cancel</button>
+            <button class="radio-delete-presets-btn" id="confirmDeleteRadioPreset" type="submit">
+                <img src="{{ url_for('static', filename='delete.svg') }}" alt="">
+                Delete preset
+            </button>
+        </div>
+    </form>
+</div>
+
 <script>
     window.API_PREFIX = {{ api_prefix|tojson }};
     window.CURRENT_OWNER = "radio";
@@ -78,6 +99,7 @@
 <script src="{{ url_for('static', filename='common.js') }}"></script>
 <script>
 const API_PREFIX = {{ api_prefix|tojson }};
+const DELETE_ICON_URL = {{ url_for('static', filename='delete.svg')|tojson }};
 const initialRadioStations = {{ stations|tojson }};
 const radioPresets = {{ radio_presets|tojson }};
 const radioFavorites = {{ radio_favorites|tojson }};
@@ -101,11 +123,14 @@ function createRadioFavoriteItem(station) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "radio-sidebar-favorite-delete";
-    remove.textContent = "×";
     remove.dataset.stationUrl = station.url;
     remove.dataset.stationName = station.name;
     remove.title = "Delete favorite";
     remove.setAttribute("aria-label", `Delete ${station.name} from radio favorites`);
+    const deleteIcon = document.createElement("img");
+    deleteIcon.src = DELETE_ICON_URL;
+    deleteIcon.alt = "";
+    remove.append(deleteIcon);
     remove.addEventListener("click", () => deleteRadioFavorite(remove));
     item.append(link, remove);
     return item;
@@ -234,7 +259,9 @@ document.getElementById("radioFavoriteForm").addEventListener("submit", async ev
         preset.querySelector(".radio-preset-name").textContent = data.station.name;
         preset.removeAttribute("aria-disabled");
         preset.removeAttribute("onclick");
-        document.querySelectorAll(".radio-preset-delete")[data.number - 1].disabled = false;
+        const presetOption = document.querySelector(`#radioDeletePresetSelect option[value="${data.number}"]`);
+        presetOption.textContent = `${data.number} — ${data.station.name}`;
+        presetOption.disabled = false;
         wirePresetLink(preset);
         showPopup(`Saved ${data.station.name} to radio preset ${data.number}.`);
         closeRadioFavoriteModal();
@@ -244,12 +271,27 @@ document.getElementById("radioFavoriteForm").addEventListener("submit", async ev
     }
 });
 
-async function deleteRadioPreset(button) {
-    const number = Number(button.dataset.radioPresetNumber);
-    const station = radioPresets[String(number)];
-    if (!station || !window.confirm(`Delete radio preset ${number} (${station.name})?`)) return;
+function openRadioPresetDeleteModal() {
+    const select = document.getElementById("radioDeletePresetSelect");
+    const firstSavedPreset = [...select.options].find(option => !option.disabled);
+    if (!firstSavedPreset) {
+        showPopup("There are no saved radio presets to delete.");
+        return;
+    }
+    firstSavedPreset.selected = true;
+    document.getElementById("radioDeletePresetModal").classList.add("open");
+    select.focus();
+}
 
-    button.disabled = true;
+function closeRadioPresetDeleteModal() {
+    document.getElementById("radioDeletePresetModal").classList.remove("open");
+}
+
+async function deleteRadioPreset(number, button) {
+    const station = radioPresets[String(number)];
+    if (!station) return;
+
+    if (button) button.disabled = true;
     try {
         const response = await fetch(`${API_PREFIX}/preset/${number}`, { method: "DELETE" });
         const data = await response.json();
@@ -262,14 +304,24 @@ async function deleteRadioPreset(button) {
         preset.querySelector(".radio-preset-name").textContent = "Empty preset";
         preset.setAttribute("aria-disabled", "true");
         preset.setAttribute("onclick", "event.preventDefault()");
+        const presetOption = document.querySelector(`#radioDeletePresetSelect option[value="${number}"]`);
+        presetOption.textContent = `${number} — Empty preset`;
+        presetOption.disabled = true;
+        closeRadioPresetDeleteModal();
         showPopup(`Deleted radio preset ${number}.`);
     } catch (error) {
         console.error("Could not delete radio preset:", error);
         showPopup("Could not contact the radio settings service.");
     } finally {
-        button.disabled = !radioPresets[String(number)];
+        if (button) button.disabled = false;
     }
 }
+
+document.getElementById("openDeleteRadioPresetModal").addEventListener("click", openRadioPresetDeleteModal);
+document.getElementById("radioDeletePresetForm").addEventListener("submit", event => {
+    event.preventDefault();
+    deleteRadioPreset(Number(document.getElementById("radioDeletePresetSelect").value), event.submitter);
+});
 
 async function saveRadioFavorite(station, button) {
     if (button) button.disabled = true;
@@ -379,9 +431,6 @@ function wirePresetLink(link) {
 }
 
 document.querySelectorAll(".radio-preset").forEach(wirePresetLink);
-document.querySelectorAll(".radio-preset-delete").forEach(button => {
-    button.addEventListener("click", () => deleteRadioPreset(button));
-});
 
 document.querySelectorAll(".radio-sidebar-favorite").forEach(link => {
     link.addEventListener("click", confirmFavoriteNavigation);
