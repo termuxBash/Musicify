@@ -6,7 +6,7 @@ from time import sleep, time
 import threading
 import signal
 
-from flask import Blueprint, jsonify, request ,current_app
+from flask import Blueprint, jsonify, request ,current_app, url_for
 import psutil
 import os
 
@@ -364,7 +364,7 @@ def playlist(name):
                     "playlist",
                     {
                         "title": title,
-                        "thumbnail": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E",
+                        "thumbnail": url_for("static", filename="local-audio.svg"),
                         "url": full_local_url
                     }
                 )

@@ -34,6 +34,10 @@ def _safe_path(base_dir, relative_path):
     return candidate_path
 
 
+def _local_thumbnail_url():
+    return url_for("static", filename="local-audio.svg")
+
+
 @local_bp.route('/')
 @local_bp.route('/browse/')
 @local_bp.route('/browse/<path:subpath>')
@@ -103,10 +107,8 @@ def get_random_local_track_payload(subpath=""):
         for f in filenames:
             if f.lower().endswith(audio_exts):
                 abs_path = _safe_path(root, f)
-                rel_path = os.path.relpath(abs_path, ROOT_DIR)
                 all_files.append({
                     "title": f,
-                    "rel_path": rel_path,
                     "url": abs_path
                 })
                 
@@ -116,7 +118,7 @@ def get_random_local_track_payload(subpath=""):
     picked = random.choice(all_files)
     return {
         "title": picked["title"],
-        "thumbnail": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E",
+        "thumbnail": _local_thumbnail_url(),
         "url": picked["url"]
     }
 
@@ -167,7 +169,7 @@ def enqueue():
         "local",
         {
             "title": song["title"],
-            "thumbnail": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E",
+            "thumbnail": _local_thumbnail_url(),
             "url": url
         }
     )
@@ -207,11 +209,9 @@ def play_folder():
         for f in filenames:
             if f.lower().endswith(audio_exts):
                 abs_path = _safe_path(root, f)
-                rel_path = os.path.relpath(abs_path, ROOT_DIR)
 
                 files.append({
                     "title": f,
-                    "rel_path": rel_path,
                     "url": abs_path
                 })
 
@@ -229,25 +229,25 @@ def play_folder():
     if current_app.playback.owner is None:
         current_app.playback.acquire("local")
 
-    # enqueue in order
-    queued = 0
+    songs = [
+        {
+            "title": song["title"],
+            "thumbnail": _local_thumbnail_url(),
+            "url": song["url"]
+        }
+        for song in files
+    ]
+    success = current_app.playback.enqueue_many("local", songs)
 
-    for song in files:
-        # Build the exact object payload structure your streaming playback architecture requires
-        ok = current_app.playback.enqueue(
-            "local",
-            {
-                "title": song["title"],
-                "thumbnail": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E",
-                "url": song["url"]
-            }
-        )
-        if ok:
-            queued += 1
+    if not success:
+        return jsonify({
+            "error": "local blueprint does not own player",
+            "owner": current_app.playback.owner
+        }), 403
 
     return jsonify({
         "status": "ok",
-        "queued": queued,
+        "queued": len(songs),
         "folder": subpath
     })
 

@@ -997,12 +997,12 @@ async function updateStats() {
         const modalLyricsSourceEl = document.getElementById("nowPlayingModalLyricsSource");
         const modalStatusEl = document.getElementById("nowPlayingModalStatus");
         const modalLyricsEl = document.getElementById("nowPlayingModalLyrics");
-        const defaultSpeakerThumb = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E";
+        const defaultSpeakerThumb = "/static/speaker.svg";
 
         if (data.now_playing) {
             const title = data.now_playing.title || "Unknown track";
-            const thumbnail = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
-            const modalThumbnail = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='72' text-anchor='middle' font-size='88' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
+            const thumbnail = data.now_playing.thumbnail || "/static/local-audio.svg";
+            const modalThumbnail = data.now_playing.thumbnail || "/static/local-audio.svg";
             const playbackStatus = data.is_radio || data.owner === "radio"
                 ? (data.radio_playback_error
                     ? "PLAYBACK FAILED"
@@ -1050,7 +1050,7 @@ async function updateStats() {
             if (lyricsEl) lyricsEl.textContent = "";
 
             if (modalThumbEl) {
-                modalThumbEl.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🔊️%3C/text%3E%3C/svg%3E";
+                modalThumbEl.src = "/static/speaker.svg";
                 modalThumbEl.classList.add("no-thumbnail");
             }
             if (modalTitleEl) modalTitleEl.textContent = "Ready to stream";
