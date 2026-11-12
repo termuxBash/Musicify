@@ -126,6 +126,12 @@ def _find_favorite(name):
     if exact:
         return exact
 
+    partial_matches = [
+        station for station in favorites if query and query in station["name"].casefold()
+    ]
+    if partial_matches:
+        return min(partial_matches, key=lambda station: len(station["name"]))
+
     names = {station["name"].casefold(): station for station in favorites}
     matches = get_close_matches(query, names.keys(), n=1, cutoff=0.55)
     return names[matches[0]] if matches else None

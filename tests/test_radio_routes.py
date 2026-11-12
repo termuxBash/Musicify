@@ -273,6 +273,25 @@ def test_favorite_get_route_fuzzy_matches_and_forces_playback(monkeypatch):
     assert bose.played_urls == [station["url"]]
 
 
+def test_favorite_get_route_matches_partial_name(monkeypatch):
+    station = {"name": "101 SMOOTH JAZZ", "url": "https://stream.example/jazz"}
+    monkeypatch.setattr(
+        routes,
+        "get_radio_config",
+        lambda: {
+            **{str(number): None for number in range(1, 7)},
+            "favorites": [station],
+        },
+    )
+    bose = FakeBose()
+    app = create_radio_app(bose)
+
+    response = app.test_client().get("/radio/fav/jaz")
+
+    assert response.status_code == 302
+    assert bose.played_urls == [station["url"]]
+
+
 def test_homepage_stations_use_pyradios_vote_search(monkeypatch):
     results = [
         {
