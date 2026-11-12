@@ -23,6 +23,22 @@
         <p style="color:#666;text-align:center;margin-top:40px;">No songs queued.</p>
     </div>
 
+    {% if radio_favorites is defined %}
+    <section class="radio-sidebar-favorites">
+        <h4>Radio favorites</h4>
+        <div class="radio-sidebar-favorite-list">
+            {% for station in radio_favorites %}
+            <a class="radio-sidebar-favorite" href="{{ url_for('radio.play_favorite_by_name', name=station.name) }}">
+                <span>▶</span>
+                <span>{{ station.name }}</span>
+            </a>
+            {% else %}
+            <p class="radio-sidebar-empty">Star a station to add it here.</p>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
     {% if show_incogni %}
     <div style="margin: 10px 0 4px 0;">
         <button type="button" class="queue-playlist-btn" id="aiRecommendationsBtn" onclick="openAiPrompt()" style="width:100%;">✨ Ai Recommendations</button>
@@ -87,6 +103,9 @@
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                     </svg>
                 </button>
+                {% if radio_favorites is not defined %}
+                <a href="{{ url_for('radio.index') }}" class="switch-player-link radio-nav-link">Radio</a>
+                {% endif %}
                 <a href="{{ switch_player_url }}" class="switch-player-link">Switch to {{ switch_player_label }}</a>
             </div>
         </div>

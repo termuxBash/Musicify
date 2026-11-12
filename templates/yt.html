@@ -87,7 +87,7 @@ async function autoPickSong(btn){
 
         if(res.status === 403){
             const data = await res.json();
-            if(data.owner === "local" || data.owner === "playlist"){
+            if(data.owner === "local" || data.owner === "playlist" || data.owner === "radio"){
                 const takeOver = confirm(
                     data.owner + " player is currently controlling playback.\n\n" +
                     "Taking ownership will clear its queue and stop playback.\n\n" +
@@ -163,7 +163,7 @@ function addToQueue(song, btn) {
         enqueueUrl: API_PREFIX + enqueueRoute,
         acquireUrl: API_PREFIX + "/acquire",
         payload: track => track,
-        takeoverOwners: ["local", "playlist"]
+        takeoverOwners: ["local", "playlist", "radio"]
     });
 }
 

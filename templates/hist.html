@@ -1092,7 +1092,7 @@ async function queueSong(title, videoId, thumbWrap) {
         enqueueUrl: window.API_PREFIX + "/enqueue",
         acquireUrl: window.API_PREFIX + "/acquire",
         payload: track => track,
-        takeoverOwners: ["local", "playlist"]
+        takeoverOwners: ["local", "playlist", "radio"]
     });
 }
 

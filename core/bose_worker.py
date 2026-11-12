@@ -164,3 +164,238 @@ class BoseSoundTouchWorker:
             print(f"[Bose Worker] DLNA/UPnP playback injection failed: {e}")
             self._upnp_device = None  # Reset tracking token for reconstruction retry
             return False
+        
+    def play_direct(self, stream_url):
+        """
+        Try the original URL first.
+        If HTTPS fails, retry using HTTP.
+        """
+        success = self.trigger_upnp_stream(stream_url)
+
+        if success:
+            return True
+
+        if stream_url.lower().startswith("https://"):
+            http_url = "http://" + stream_url[8:]
+
+            print(f"[Bose Worker] Retrying with HTTP: {http_url}")
+
+            return self.trigger_upnp_stream(http_url)
+
+        return False
+    
+    def get_playing_url(self):
+        """
+        Retrieves the currently playing stream URL
+        using UPnP GetPositionInfo.
+        """
+        import requests
+        import xml.etree.ElementTree as ET
+
+        url = f"http://{self.ip}:8091/AVTransport/Control"
+
+        service = "urn:schemas-upnp-org:service:AVTransport:1"
+
+        soap = f"""<?xml version="1.0" encoding="utf-8"?>
+        <s:Envelope
+            xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
+            s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+            <s:Body>
+                <u:GetPositionInfo xmlns:u="{service}">
+                    <InstanceID>0</InstanceID>
+                </u:GetPositionInfo>
+            </s:Body>
+        </s:Envelope>
+        """
+
+        headers = {
+            "Content-Type": 'text/xml; charset="utf-8"',
+            "SOAPACTION": f'"{service}#GetPositionInfo"'
+        }
+
+        try:
+            response = requests.post(
+                url,
+                data=soap.encode("utf-8"),
+                headers=headers,
+                timeout=5
+            )
+
+            response.raise_for_status()
+
+            root = ET.fromstring(response.content)
+
+            def get_value(name):
+                element = next(
+                    (
+                        item for item in root.iter()
+                        if item.tag.split("}")[-1] == name
+                    ),
+                    None
+                )
+                return element.text if element is not None else None
+
+            return {
+                "success": bool(get_value("TrackURI")),
+                "url": get_value("TrackURI"),
+                "track": get_value("Track"),
+                "duration": get_value("TrackDuration"),
+                "position": get_value("RelTime"),
+                "metadata": get_value("TrackMetaData")
+            }
+
+        except Exception as e:
+            print(f"[Bose Worker] Get playing URL failed: {e}")
+
+            return {
+                "success": False,
+                "url": None,
+                "track": None,
+                "duration": None,
+                "position": None,
+                "metadata": None
+            }
+
+        
+    def get_stream_metadata(self, stream_url=None):
+        """
+        Retrieves radio station and currently playing song
+        using ICY metadata from the internet radio stream.
+        """
+        import requests
+        import re
+
+        if not stream_url:
+            playing = self.get_playing_url()
+            stream_url = playing.get("url") if playing else None
+
+        if not stream_url:
+            return {
+                "success": False,
+                "error": "No playing stream URL found"
+            }
+
+        response = None
+
+        try:
+            response = requests.get(
+                stream_url,
+                headers={
+                    "Icy-MetaData": "1",
+                    "User-Agent": "Mozilla/5.0"
+                },
+                stream=True,
+                timeout=(5, 15)
+            )
+
+            response.raise_for_status()
+
+            headers = response.headers
+
+            station = headers.get("icy-name")
+            genre = headers.get("icy-genre")
+            bitrate = headers.get("icy-br")
+            metaint = headers.get("icy-metaint")
+
+            result = {
+                "success": True,
+                "url": stream_url,
+                "station": station,
+                "genre": genre,
+                "bitrate": bitrate,
+                "song": None,
+                "artist": None,
+                "stream_title": None
+            }
+
+            if not metaint:
+                result["metadata_available"] = False
+                result["message"] = (
+                    "Stream does not expose ICY metadata"
+                )
+                return result
+
+            metaint = int(metaint)
+
+            def read_exact(stream, size):
+                data = bytearray()
+
+                while len(data) < size:
+                    chunk = stream.read(size - len(data))
+
+                    if not chunk:
+                        return None
+
+                    data.extend(chunk)
+
+                return bytes(data)
+
+            # Try several metadata intervals because
+            # some stations initially send empty metadata.
+            for _ in range(5):
+
+                audio = read_exact(response.raw, metaint)
+
+                if audio is None:
+                    break
+
+                length_byte = read_exact(response.raw, 1)
+
+                if length_byte is None:
+                    break
+
+                metadata_length = length_byte[0] * 16
+
+                if metadata_length == 0:
+                    continue
+
+                metadata_bytes = read_exact(
+                    response.raw,
+                    metadata_length
+                )
+
+                if metadata_bytes is None:
+                    break
+
+                metadata = metadata_bytes.decode(
+                    "utf-8",
+                    errors="replace"
+                ).rstrip("\x00")
+
+                match = re.search(
+                    r"StreamTitle='(.*?)';",
+                    metadata
+                )
+
+                if match:
+                    title = match.group(1).strip()
+
+                    result["stream_title"] = title
+                    result["metadata_available"] = True
+
+                    if " - " in title:
+                        artist, song = title.split(" - ", 1)
+                        result["artist"] = artist.strip()
+                        result["song"] = song.strip()
+                    else:
+                        result["song"] = title
+
+                    return result
+
+            result["metadata_available"] = False
+            result["message"] = (
+                "No song title received in the sampled metadata blocks"
+            )
+
+            return result
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "url": stream_url
+            }
+
+        finally:
+            if response is not None:
+                response.close()

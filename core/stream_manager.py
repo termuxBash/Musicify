@@ -63,6 +63,13 @@ class QueuePlayer:
         with self.lock:
             self.queue.extend(songs)
 
+    def _enqueue_autoplay(self, songs):
+        with self.lock:
+            if not self.autoplay_enabled or self._autoplay_suppressed:
+                return False
+            self.queue.extend(songs)
+            return True
+
     def remove_from_queue(self, index):
         with self.lock:
             if 0 <= index < len(self.queue):
@@ -195,8 +202,8 @@ class QueuePlayer:
                             break
                             
                 if autoplays_to_append:
-                    self.enqueue_many(autoplays_to_append)
-                    logger.info(f"✅ Success! Enqueued {len(autoplays_to_append)} random local tracks into the buffer.")
+                    if self._enqueue_autoplay(autoplays_to_append):
+                        logger.info(f"✅ Success! Enqueued {len(autoplays_to_append)} random local tracks into the buffer.")
                 else:
                     logger.warning("⚠️ Local random autoplay loop found no music files in directory structure.")
             except Exception as local_err:
@@ -295,8 +302,8 @@ class QueuePlayer:
                     logger.error(f"Failed to resolve YouTube context query entry '{query}': {track_err}")
 
             if autoplays_to_append:
-                self.enqueue_many(autoplays_to_append)
-                logger.info(f"✅ Success! Enqueued {len(autoplays_to_append)} lookahead tracks into the buffer.")
+                if self._enqueue_autoplay(autoplays_to_append):
+                    logger.info(f"✅ Success! Enqueued {len(autoplays_to_append)} lookahead tracks into the buffer.")
             else:
                 logger.warning("YouTube lookahead loop completed but stream links could not be verified.")
 

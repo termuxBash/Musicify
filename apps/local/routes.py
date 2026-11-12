@@ -218,6 +218,13 @@ def play_folder():
     # sort alphabetically
     files.sort(key=lambda x: x["title"].lower())
 
+    owner = current_app.playback.owner
+    if owner is not None and owner != "local":
+        return jsonify({
+            "error": "local blueprint does not own player",
+            "owner": owner
+        }), 403
+
     # Ensure player blueprint ownership is checked/acquired just like individual enqueues
     if current_app.playback.owner is None:
         current_app.playback.acquire("local")

@@ -45,18 +45,21 @@ def stats():
     volume = bose.get("volume", 0) if bose else 0
         
     player_status = current_app.player.status()
-    is_playing = player_status.get("playing", False)
+    is_playing = player_status.get("playing", False) or current_app.playback.owner == "radio"
     
     current_song = player_status.get("current_song")
+    if current_app.playback.owner == "radio":
+        current_song = getattr(current_app, "radio_now_playing", None)
     current_title = current_song.get("title") if current_song else None
+    lyrics_title = current_title if current_app.playback.owner != "radio" else None
     
     # Reference the service tied directly to current_app context
     lyrics_svc = current_app.lyrics_service
 
     # Check if a new track started playing
-    if getattr(current_app, 'last_known_title', None) != current_title:
-        current_app.last_known_title = current_title
-        lyrics_svc.reset(current_title)
+    if getattr(current_app, 'last_known_title', None) != lyrics_title:
+        current_app.last_known_title = lyrics_title
+        lyrics_svc.reset(lyrics_title)
     # If paused, shift back the clock baseline so lyrics don't keep running ahead
     if not is_playing and lyrics_svc.song_start_time is not None:
         lyrics_svc.shift_timeline(2)  # Match front-end poll loop interval
@@ -66,6 +69,7 @@ def stats():
     return jsonify({
         "cpu": int(round(psutil.cpu_percent())),
         "volume": volume,
+        "owner": current_app.playback.owner,
         "bose_is_on": bose.get("is_on", False) if bose else False,
         "bose_power_state": bose.get("power_state", "disconnected") if bose else "disconnected",
         "queue": list(player_status.get("queue", [])),

@@ -67,12 +67,15 @@ Set these in your `.env` file to override runtime defaults:
 
 ## User settings
 
-`userconfig.json` stores app-managed lyrics settings and is created by setup if it does not exist. It contains:
+`userconfig.json` stores app-managed settings and is created or migrated by setup. It contains:
 
 - `lyrics_offset_ms`: synced lyric timing adjustment in milliseconds. Defaults to `-13000`; negative values delay lyrics and positive values advance them.
 - `lyrics_effort`: maximum lyrics lookup stage, one of `LRCLIB`, `LYRICA`, or `GEMINI`. These stages allow the app to use LRCLIB lyrics, then Lyrica transformations, then Gemini romanization, respectively. The default is `GEMINI`.
+- `radio`: numbered station presets (`1` through `6`) and a `favorites` list populated when a station is starred.
 
 The settings panel saves changes to `userconfig.json` immediately, so they persist across server restarts. If a setting is absent or invalid, `settings.py` uses its default. Neither lyrics setting is configured in `.env`.
+
+The Radio page is available at `/radio`. It shows the top-voted stations from Radio Browser, supports station search, and plays streams directly through the SoundTouch speaker. Use a station's star button to save it to one of the six numbered presets; the separate heart button adds it to Radio favorites in the side panel. Presets can be played from the page or directly at `/radio/1` through `/radio/6`. Favorites can be played from the side panel or directly at `/radio/fav/<station-name>`; the route fuzzy-matches the requested name against saved favorites. Page controls ask for confirmation before starting Radio playback, while direct preset and favorite URLs intentionally take control immediately. Presets and favorites are stored independently in the `radio` object in `userconfig.json`.
 
 After setup, install Python dependencies and start Musicify:
 ```bash

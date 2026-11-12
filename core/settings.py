@@ -88,6 +88,25 @@ def update_user_config(key, value):
     elif key == "lyrics_effort":
         if not isinstance(value, str) or value not in LYRICS_EFFORT_LEVELS:
             raise ValueError("lyrics_effort must be LRCLIB, LYRICA, or GEMINI")
+    elif key == "radio":
+        if not isinstance(value, dict):
+            raise ValueError("radio must be an object")
+        for number in map(str, range(1, 7)):
+            station = value.get(number)
+            if station is not None and (
+                not isinstance(station, dict)
+                or not isinstance(station.get("name"), str)
+                or not isinstance(station.get("url"), str)
+            ):
+                raise ValueError(f"radio slot {number} must contain a name and URL")
+        favorites = value.get("favorites")
+        if not isinstance(favorites, list) or any(
+            not isinstance(station, dict)
+            or not isinstance(station.get("name"), str)
+            or not isinstance(station.get("url"), str)
+            for station in favorites
+        ):
+            raise ValueError("radio favorites must be a list of stations")
     else:
         raise ValueError(f"Unsupported userconfig setting: {key}")
 
@@ -111,6 +130,34 @@ def update_user_config(key, value):
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
         _user_config = updated_config
+
+
+def get_radio_config():
+    """Return a copy of the saved radio presets and favorites."""
+    with _user_config_lock:
+        configured_radio = _user_config.get("radio", {})
+        configured_radio = configured_radio if isinstance(configured_radio, dict) else {}
+        presets = {}
+        for number in range(1, 7):
+            key = str(number)
+            station = configured_radio.get(key)
+            presets[key] = (
+                dict(station)
+                if isinstance(station, dict)
+                and isinstance(station.get("name"), str)
+                and isinstance(station.get("url"), str)
+                else None
+            )
+
+        configured_favorites = configured_radio.get("favorites", [])
+        favorites = [
+            dict(station)
+            for station in configured_favorites
+            if isinstance(station, dict)
+            and isinstance(station.get("name"), str)
+            and isinstance(station.get("url"), str)
+        ] if isinstance(configured_favorites, list) else []
+        return {**presets, "favorites": favorites}
 
 
 #Server settings

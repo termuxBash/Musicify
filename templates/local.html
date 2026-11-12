@@ -242,16 +242,46 @@ function addToQueue(song, btn) {
         enqueueUrl: "/local/enqueue",
         acquireUrl: "/local/acquire",
         payload: track => ({ rel_path: track.url, title: track.title }),
-        takeoverOwners: ["youtube", "playlist"]
+        takeoverOwners: ["youtube", "playlist", "radio"]
     });
 }
 
-function playCurrentFolder(p){
-    fetch('/local/play_folder',{
+async function playCurrentFolder(p){
+    const request = () => fetch('/local/play_folder',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({path:p})
     });
+
+    try {
+        let response = await request();
+        if (response.status === 403) {
+            const data = await response.json();
+            const takeOver = confirm(`${data.owner} player is currently controlling playback.\n\nTaking ownership will clear its queue and stop playback.\n\nContinue?`);
+            if (!takeOver) return;
+
+            const acquire = await fetch("/local/acquire", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ force: true })
+            });
+            if (!acquire.ok) {
+                showPopup("Failed to acquire ownership.");
+                return;
+            }
+            response = await request();
+        }
+
+        const data = await response.json();
+        if (!response.ok) {
+            showPopup(data.error || "Failed to play folder.");
+        } else if (data.queued === 0) {
+            showPopup("No playable music files found in this folder.");
+        }
+    } catch (error) {
+        console.error("Could not play local folder:", error);
+        showPopup("Could not play this folder.");
+    }
 }
 
 </script>
