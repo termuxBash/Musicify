@@ -13,6 +13,8 @@ from core.settings import (
     GEMINI_API_KEY,
     GEMINI_MODEL,
     LASTFM_KEY,
+    LYRICS_EFFORT,
+    LYRICS_EFFORT_LEVELS,
     LYRICS_OFFSET_MS,
 )
 from services.lastfm_service import resolve_track
@@ -140,11 +142,17 @@ LYRICS:
 
 
 class LyricsService:
-    def __init__(self, enabled=DEFAULT_LYRICS_ENABLED, offset_ms=LYRICS_OFFSET_MS):
+    def __init__(
+        self,
+        enabled=DEFAULT_LYRICS_ENABLED,
+        offset_ms=LYRICS_OFFSET_MS,
+        lyrics_effort=LYRICS_EFFORT,
+    ):
         self.current_lyrics = []
         self.song_start_time = None
         self.enabled = enabled
         self.offset_ms = offset_ms
+        self.lyrics_effort = lyrics_effort
         self.last_sent_lyric = None
         self.lyrics_source = None
         self._lock = threading.Lock()
@@ -178,6 +186,10 @@ class LyricsService:
         with self._lock:
             self.offset_ms = offset_ms
 
+    def set_effort(self, lyrics_effort):
+        with self._lock:
+            self.lyrics_effort = lyrics_effort
+
     def _publish_lyrics(self, generation, lyrics, source):
         if not lyrics:
             return
@@ -187,6 +199,10 @@ class LyricsService:
                 self.lyrics_source = source
 
     def _load_lyrics(self, song_title, generation):
+        with self._lock:
+            lyrics_effort = self.lyrics_effort
+        max_step = LYRICS_EFFORT_LEVELS.index(lyrics_effort)
+
         clean_query = re.sub(r"\(.*?\)|\[.*?\]", "", song_title)
         clean_query = re.sub(
             r"official music video|official video|video|lyrics",
@@ -224,7 +240,7 @@ class LyricsService:
             self._publish_lyrics(generation, lrclib_lines, "LRCLIB")
 
         transformed_lyrics = ""
-        if artist:
+        if max_step >= 1 and artist:
             try:
                 response = requests.get(
                     LYRICS_API_URL,
@@ -250,14 +266,16 @@ class LyricsService:
         if transformed_lyrics.strip():
             self._publish_lyrics(generation, lyrica_lines, "Lyrica")
 
-        gemini_source = (
-            lrclib_lyrics
-            if is_non_english_script(lrclib_lyrics)
-            else transformed_lyrics
-            if is_non_english_script(transformed_lyrics)
-            else ""
-        )
-        gemini_lyrics = romanize_lyrics(gemini_source) if gemini_source else None
+        gemini_lyrics = None
+        if max_step >= 2:
+            gemini_source = (
+                lrclib_lyrics
+                if is_non_english_script(lrclib_lyrics)
+                else transformed_lyrics
+                if is_non_english_script(transformed_lyrics)
+                else ""
+            )
+            gemini_lyrics = romanize_lyrics(gemini_source) if gemini_source else None
 
         if gemini_lyrics:
             gemini_lines = align_lyrics(gemini_lyrics, synced_lyrics, plain_lyrics)
@@ -317,6 +335,7 @@ class LyricsService:
                 "current_lyric": current_lyric,
                 "lyrics_source": self.lyrics_source if enabled and lyrics else None,
                 "lyrics_offset_ms": offset_ms,
+                "lyrics_effort": self.lyrics_effort,
             }
 
     def get_current_line(self):

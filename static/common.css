@@ -453,6 +453,23 @@ nav {
     line-height: 1.4;
 }
 
+.settings-popup-effort {
+    display: grid;
+    gap: 6px;
+}
+
+.settings-popup-range {
+    width: 100%;
+    accent-color: #9b87f5;
+}
+
+.settings-popup-effort-labels {
+    display: flex;
+    justify-content: space-between;
+    color: #929299;
+    font-size: 0.68rem;
+}
+
 .settings-popup-divider {
     height: 1px;
     background: rgba(255, 255, 255, 0.08);

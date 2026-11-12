@@ -14,7 +14,7 @@ import logging
 from services.yt_service import YTService
 from core.bose_routes import check_power, ctrl
 from flask import current_app
-from core.settings import PLAYLIST_DIR, ROOT_DIR
+from core.settings import LYRICS_EFFORT_LEVELS, PLAYLIST_DIR, ROOT_DIR, update_user_config
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 from dotenv import load_dotenv
 import random
@@ -99,11 +99,36 @@ def set_lyrics_offset():
         return jsonify({"status": "error", "message": "offset_ms must be an integer"}), 400
 
     lyrics_svc = current_app.lyrics_service
+    try:
+        update_user_config("lyrics_offset_ms", offset_ms)
+    except OSError:
+        logger.exception("Could not persist the lyrics offset.")
+        return jsonify({"status": "error", "message": "Could not save lyrics offset."}), 500
     lyrics_svc.set_offset(offset_ms)
     return jsonify({
         "status": "success",
         "lyrics_offset_ms": offset_ms,
     })
+
+
+@stats_bp.route("/lyrics_effort", methods=["POST"])
+def set_lyrics_effort():
+    data = request.get_json()
+    lyrics_effort = data.get("lyrics_effort") if isinstance(data, dict) else None
+    if lyrics_effort not in LYRICS_EFFORT_LEVELS:
+        return jsonify({
+            "status": "error",
+            "message": "lyrics_effort must be LRCLIB, LYRICA, or GEMINI",
+        }), 400
+
+    try:
+        update_user_config("lyrics_effort", lyrics_effort)
+    except OSError:
+        logger.exception("Could not persist the lyrics effort.")
+        return jsonify({"status": "error", "message": "Could not save lyrics effort."}), 500
+
+    current_app.lyrics_service.set_effort(lyrics_effort)
+    return jsonify({"status": "success", "lyrics_effort": lyrics_effort})
 
 
 @stats_bp.route("/toggle_autoplay", methods=["POST"])
