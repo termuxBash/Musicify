@@ -185,7 +185,6 @@ def shutdown():
 def _power_off_bose():
     bose_power = check_power().get_json() if check_power else None
     if bose_power and bose_power.get("is_on"):
-        stop()
         ctrl("bose_power")
 
 @stats_bp.route("/playlists")
@@ -296,13 +295,7 @@ def power(power_off_only=False):
         _power_off_bose()
         return jsonify({"status": "success"})
 
-    bose_power = check_power().get_json() if check_power else None
-    if bose_power and bose_power.get("is_on"):
-        stop()
-        ctrl("bose_power")
-    else:
-        ctrl("bose_power")
-    return jsonify({"status": "success"})
+    return ctrl("bose_power")
 
 @stats_bp.route("/stop", methods=["POST"])
 def stop():

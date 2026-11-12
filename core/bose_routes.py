@@ -6,7 +6,7 @@ The routes return JSON responses that indicate the success of the operations and
 **This file is focused solely on the Flask route definitions and their interactions with the BoseSoundTouchWorker. The actual implementation of the worker, including how it communicates with the Bose hardware, is contained in the bose_worker module. This separation allows for cleaner code organization and easier maintenance.**
 """
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, current_app, jsonify
 from core.bose_worker import BoseSoundTouchWorker
 from core.settings import BOSE_IP, STREAM_URL
 
@@ -26,7 +26,18 @@ def ctrl(cmd):
     elif cmd == "vol_down":
         bose.volume_down()
     elif cmd == "bose_power":
-        bose.toggle_power()
+        if bose.get_status().get("is_on"):
+            current_app.player.toggle_autoplay(False)
+            owner = current_app.playback.owner
+            if owner is None:
+                current_app.playback.stop()
+            else:
+                current_app.playback.release(owner)
+            volume_set = bose.set_volume(0)
+        else:
+            volume_set = True
+        power_toggled = bose.toggle_power()
+        status = "success" if volume_set and power_toggled else "failed"
     elif cmd == "mute":
         bose.toggle_mute()
     elif cmd == "bluetooth":
