@@ -693,6 +693,11 @@ def _enqueue_song(add_to_history):
 
     if current_app.playback.owner is None:
         current_app.playback.acquire("youtube")
+    if current_app.playback.owner != "youtube":
+        return jsonify({
+            "error": "youtube blueprint does not own player",
+            "owner": current_app.playback.owner
+        }), 403
 
     song = request.get_json()
 

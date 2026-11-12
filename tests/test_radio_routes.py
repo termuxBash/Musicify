@@ -681,6 +681,14 @@ def test_stats_keeps_confirmed_bose_radio_metadata_in_player_bar(monkeypatch):
     assert stats_response.json["is_playing"] is True
     assert stats_response.json["now_playing"]["title"] == "Alle Farben & Ilira - Fading"
 
+    app.playback.acquire("youtube", force=True)
+    stats_response = client.get("/stats")
+
+    assert app.radio_is_playing is True
+    assert stats_response.json["owner"] == "youtube"
+    assert stats_response.json["is_radio"] is False
+    assert stats_response.json["now_playing"]["title"] == "Youtube song"
+
 
 def test_status_remains_non_radio_for_other_playback_without_bose_metadata():
     bose = FakeBose(

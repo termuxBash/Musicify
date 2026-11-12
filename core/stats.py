@@ -45,10 +45,7 @@ def stats():
     volume = bose.get("volume", 0) if bose else 0
         
     player_status = current_app.player.status()
-    radio_is_active = (
-        current_app.playback.owner == "radio"
-        or getattr(current_app, "radio_is_playing", False)
-    )
+    radio_is_active = current_app.playback.owner == "radio"
     is_playing = (
         getattr(current_app, "radio_is_playing", False)
         if radio_is_active
