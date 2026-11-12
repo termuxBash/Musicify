@@ -16,6 +16,15 @@
         <button type="submit">Search</button>
     </form>
 
+    <div class="radio-filter-controls">
+        <div class="radio-genre-filters" role="group" aria-label="Filter by radio genre">
+            {% for genre in radio_genres %}
+            <button type="button" class="radio-genre-filter" data-radio-genre="{{ genre }}" aria-pressed="false">{{ genre }}</button>
+            {% endfor %}
+        </div>
+        <button type="button" class="radio-clear-filter" id="clearRadioGenreFilter" disabled>Clear filters</button>
+    </div>
+
     <div class="radio-presets" aria-label="Radio presets">
         {% for number in range(1, 7) %}
         {% set preset = radio_presets[number|string] %}
@@ -31,15 +40,6 @@
             Delete a preset
         </button>
     </div>
-
-    <section class="radio-now-playing" aria-live="polite">
-        <div>
-            <p class="radio-section-label">NOW PLAYING</p>
-            <h2 id="radioStationName">Choose a station</h2>
-            <p id="radioTrackName">Top-voted stations from Radio Browser</p>
-        </div>
-        <button type="button" class="radio-reconnect-btn" onclick="reconnectStream()">Reconnect</button>
-    </section>
 
     {% if load_error %}
     <p class="radio-error" role="alert">{{ load_error }}</p>
@@ -106,6 +106,7 @@ const radioFavorites = {{ radio_favorites|tojson }};
 const radioResults = document.getElementById("radioResults");
 let stationToSave = null;
 let currentRadioStation = null;
+const activeRadioGenres = new Set();
 
 function createRadioFavoriteItem(station) {
     const item = document.createElement("div");
@@ -213,8 +214,9 @@ async function playRadioStation(station, button) {
             return;
         }
         currentRadioStation = data.station;
-        document.getElementById("radioStationName").textContent = data.station.name;
-        document.getElementById("radioTrackName").textContent = "Connecting to live stream...";
+        document.getElementById("playing-title-text").textContent = data.station.name;
+        document.getElementById("playing-status").textContent = data.station.name;
+        document.getElementById("playing-thumb").src = radioImage(data.station);
         await refreshRadioStatus();
     } catch (error) {
         console.error("Could not start radio station:", error);
@@ -442,24 +444,31 @@ document.querySelectorAll(".radio-sidebar-favorite-delete").forEach(button => {
 let radioSearchRequest = 0;
 let radioSearchTimer = null;
 
-async function searchRadioStations(query) {
-    if (!query) {
+async function searchRadioStations(query, genres = [...activeRadioGenres]) {
+    const requestId = ++radioSearchRequest;
+    if (!query && genres.length === 0) {
         renderRadioStations(initialRadioStations);
         document.getElementById("radioResultsTitle").textContent = "Top 18 stations";
         document.getElementById("radioSearchStatus").textContent = "";
         return;
     }
 
-    const requestId = ++radioSearchRequest;
     const status = document.getElementById("radioSearchStatus");
     status.textContent = "Searching...";
     try {
-        const response = await fetch(API_PREFIX + "/search?q=" + encodeURIComponent(query));
+        const params = new URLSearchParams();
+        if (query) params.set("q", query);
+        if (genres.length) params.set("tags", genres.join(","));
+        const response = await fetch(`${API_PREFIX}/search?${params.toString()}`);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Radio search failed.");
         if (requestId !== radioSearchRequest) return;
         renderRadioStations(data);
-        document.getElementById("radioResultsTitle").textContent = `Search results for “${query}”`;
+        const titleParts = [];
+        if (query) titleParts.push(`“${query}”`);
+        if (genres.length) titleParts.push(genres.join(", "));
+        document.getElementById("radioResultsTitle").textContent =
+            `Stations matching ${titleParts.join(" · ")}`;
     } catch (error) {
         if (requestId !== radioSearchRequest) return;
         console.error("Radio search failed:", error);
@@ -478,8 +487,37 @@ document.getElementById("radioSearchForm").addEventListener("submit", event => {
 document.getElementById("radioQuery").addEventListener("input", event => {
     clearTimeout(radioSearchTimer);
     const query = event.target.value.trim();
-    if (query.length > 0 && query.length < 2) return;
-    radioSearchTimer = setTimeout(() => searchRadioStations(query), query ? 300 : 0);
+    if (query.length > 0 && query.length < 2 && activeRadioGenres.size === 0) return;
+    radioSearchTimer = setTimeout(
+        () => searchRadioStations(query),
+        query ? 300 : 0
+    );
+});
+
+document.querySelectorAll(".radio-genre-filter").forEach(button => {
+    button.addEventListener("click", () => {
+        const genre = button.dataset.radioGenre;
+        if (activeRadioGenres.has(genre)) activeRadioGenres.delete(genre);
+        else activeRadioGenres.add(genre);
+        document.querySelectorAll(".radio-genre-filter").forEach(filter => {
+            const selected = activeRadioGenres.has(filter.dataset.radioGenre);
+            filter.classList.toggle("active", selected);
+            filter.setAttribute("aria-pressed", String(selected));
+        });
+        document.getElementById("clearRadioGenreFilter").disabled = activeRadioGenres.size === 0;
+        clearTimeout(radioSearchTimer);
+        searchRadioStations(document.getElementById("radioQuery").value.trim());
+    });
+});
+
+document.getElementById("clearRadioGenreFilter").addEventListener("click", () => {
+    activeRadioGenres.clear();
+    document.querySelectorAll(".radio-genre-filter").forEach(button => {
+        button.classList.remove("active");
+        button.setAttribute("aria-pressed", "false");
+    });
+    document.getElementById("clearRadioGenreFilter").disabled = true;
+    searchRadioStations(document.getElementById("radioQuery").value.trim(), []);
 });
 
 async function refreshRadioStatus() {
@@ -490,9 +528,6 @@ async function refreshRadioStatus() {
         if (!data.is_radio || !data.station) return;
         const station = data.station;
         currentRadioStation = currentRadioStation || station;
-        document.getElementById("radioStationName").textContent = station.station || station.name || "Internet Radio";
-        document.getElementById("radioTrackName").textContent =
-            station.artist && station.song ? `${station.artist} — ${station.song}` : station.song || "Live radio";
         const title = station.title || station.name || "Internet Radio";
         const image = radioImage(station);
         document.getElementById("playing-title-text").textContent = title;

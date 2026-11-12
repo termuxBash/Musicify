@@ -8,13 +8,14 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 import httpx
 from pyradios import RadioBrowser
 
-from core.settings import get_radio_config, update_user_config
+from core.settings import RADIO_GENRES, get_radio_config, update_user_config
 
 
 logger = logging.getLogger(__name__)
 radio_bp = Blueprint("radio", __name__)
 # Keep the certificate workaround scoped to Radio Browser requests.
 _radio_browser = RadioBrowser(session=httpx.Client(verify=False))
+_radio_browser.base_url = "https://de1.api.radio-browser.info/"
 _status_lock = threading.Lock()
 _METADATA_CACHE_SECONDS = 20
 
@@ -130,6 +131,7 @@ def index():
         stations=stations,
         radio_presets=config,
         radio_favorites=config["favorites"],
+        radio_genres=config["genres"],
         load_error=load_error,
     )
 
@@ -137,17 +139,28 @@ def index():
 @radio_bp.route("/search")
 def search():
     query = request.args.get("q", "").strip()
-    if not query:
+    tags = [
+        tag.strip().lower()
+        for tag in request.args.get("tags", "").split(",")
+        if tag.strip()
+    ]
+    if not query and not tags:
         return jsonify([])
+    if len(set(tags)) != len(tags) or any(tag not in RADIO_GENRES for tag in tags):
+        return jsonify({"error": "Choose a supported radio genre."}), 400
 
     try:
-        results = _radio_browser.search(
-            name=query,
-            limit=18,
-            order="votes",
-            reverse=True,
-            hidebroken=True,
-        )
+        search_options = {
+            "limit": 18,
+            "order": "votes",
+            "reverse": True,
+            "hidebroken": True,
+        }
+        if query:
+            search_options["name"] = query
+        if tags:
+            search_options["tag_list"] = ",".join(tags)
+        results = _radio_browser.search(**search_options)
     except Exception:
         logger.exception("Radio station search failed.")
         return jsonify({"error": "Radio station search failed."}), 502

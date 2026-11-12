@@ -40,6 +40,28 @@ def env_int(name, default=0):
 
 DEFAULT_LYRICS_OFFSET_MS = -13000
 LYRICS_EFFORT_LEVELS = ("LRCLIB", "LYRICA", "GEMINI")
+RADIO_GENRES = (
+    "pop",
+    "rock",
+    "jazz",
+    "classical",
+    "electronic",
+    "dance",
+    "hip hop",
+    "metal",
+    "country",
+    "blues",
+    "ambient",
+    "folk",
+    "reggae",
+    "soul",
+    "funk",
+    "indie",
+    "alternative",
+    "house",
+    "techno",
+    "chillout",
+)
 USER_CONFIG_PATH = Path(__file__).resolve().parent.parent / "userconfig.json"
 _user_config_lock = threading.RLock()
 _logger = logging.getLogger(__name__)
@@ -107,6 +129,12 @@ def update_user_config(key, value):
             for station in favorites
         ):
             raise ValueError("radio favorites must be a list of stations")
+        genres = value.get("genres", RADIO_GENRES)
+        if not isinstance(genres, (list, tuple)) or any(
+            not isinstance(genre, str) or genre not in RADIO_GENRES
+            for genre in genres
+        ):
+            raise ValueError("radio genres must be selected from the supported genre list")
     else:
         raise ValueError(f"Unsupported userconfig setting: {key}")
 
@@ -157,7 +185,13 @@ def get_radio_config():
             and isinstance(station.get("name"), str)
             and isinstance(station.get("url"), str)
         ] if isinstance(configured_favorites, list) else []
-        return {**presets, "favorites": favorites}
+        configured_genres = configured_radio.get("genres", RADIO_GENRES)
+        genres = (
+            [genre for genre in configured_genres if genre in RADIO_GENRES]
+            if isinstance(configured_genres, list)
+            else list(RADIO_GENRES)
+        )
+        return {**presets, "favorites": favorites, "genres": genres}
 
 
 #Server settings

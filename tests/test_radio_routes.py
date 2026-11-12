@@ -286,6 +286,78 @@ def test_homepage_stations_use_pyradios_vote_search(monkeypatch):
     assert calls == [{"order": "votes", "reverse": True, "limit": 18}]
 
 
+def test_radio_browser_uses_official_api_host():
+    assert routes._radio_browser.base_url == "https://de1.api.radio-browser.info/"
+
+
+def test_search_route_filters_by_supported_genre(monkeypatch):
+    results = [{"name": "Example Hip Hop", "url": "https://stream.example/hip-hop"}]
+    calls = []
+
+    def search(**kwargs):
+        calls.append(kwargs)
+        return results
+
+    monkeypatch.setattr(routes._radio_browser, "search", search)
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().get("/radio/search?tags=hip%20hop")
+
+    assert response.status_code == 200
+    assert response.json[0]["name"] == "Example Hip Hop"
+    assert calls == [{
+        "limit": 18,
+        "order": "votes",
+        "reverse": True,
+        "hidebroken": True,
+        "tag_list": "hip hop",
+    }]
+
+
+def test_search_route_combines_name_and_genre_filters(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        routes._radio_browser,
+        "search",
+        lambda **kwargs: calls.append(kwargs) or [],
+    )
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().get("/radio/search?q=live&tags=jazz")
+
+    assert response.status_code == 200
+    assert calls[0]["name"] == "live"
+    assert calls[0]["tag_list"] == "jazz"
+
+
+def test_search_route_supports_multiple_genres(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        routes._radio_browser,
+        "search",
+        lambda **kwargs: calls.append(kwargs) or [],
+    )
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().get("/radio/search?tags=pop%2Crock%2Cjazz")
+
+    assert response.status_code == 200
+    assert calls[0]["tag_list"] == "pop,rock,jazz"
+
+
+def test_search_route_rejects_unsupported_genre(monkeypatch):
+    monkeypatch.setattr(
+        routes._radio_browser,
+        "search",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("search should not run")),
+    )
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().get("/radio/search?tags=not-a-genre")
+
+    assert response.status_code == 400
+
+
 def test_search_route_passes_query_and_returns_station_cards(monkeypatch):
     results = [
         {
