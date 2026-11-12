@@ -98,6 +98,27 @@ def _top_stations():
     return [station for item in stations if (station := _public_station(item))]
 
 
+def _stream_station(station_name, stream_url):
+    if not station_name:
+        return None
+
+    try:
+        stations = _radio_browser.search(
+            name=station_name,
+            name_exact=True,
+            limit=10,
+        )
+    except Exception:
+        logger.warning("Could not look up radio station artwork.", exc_info=True)
+        return None
+
+    for candidate in stations:
+        station = _public_station(candidate)
+        if station and _same_stream_url(station["url"], stream_url):
+            return station
+    return None
+
+
 def _find_favorite(name):
     favorites = get_radio_config()["favorites"]
     query = name.strip().casefold()
@@ -423,6 +444,10 @@ def status():
                     metadata = bose.get_stream_metadata(stream_url)
                 station = getattr(current_app, "radio_station", {}) or {}
                 station_name = metadata.get("station") or station.get("name") or "Internet Radio"
+                if not station.get("favicon"):
+                    matched_station = _stream_station(station_name, stream_url)
+                    if matched_station is not None:
+                        station = matched_station
                 song = metadata.get("song") or metadata.get("stream_title") or ""
                 artist = metadata.get("artist") or ""
                 title = f"{artist} - {song}" if artist and song else song or station_name
@@ -433,11 +458,13 @@ def status():
                     "song": song,
                     "artist": artist,
                     "url": stream_url,
+                    "favicon": station.get("favicon") or "",
                     "genre": metadata.get("genre") or "",
                     "bitrate": metadata.get("bitrate") or "",
                     "stream_title": metadata.get("stream_title") or "",
                     "metadata_available": metadata.get("metadata_available", False),
                 }
+                current_app.radio_station = station
                 current_app.radio_now_playing = cached
                 current_app.radio_metadata_updated_at = now
             return jsonify({

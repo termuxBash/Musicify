@@ -574,6 +574,47 @@ def test_status_assigns_radio_owner_when_bose_radio_is_detected_at_startup():
     assert bose.metadata_calls == [None]
 
 
+def test_status_uses_stream_url_lookup_for_detected_station_thumbnail(monkeypatch):
+    bose = FakeBose(
+        playing_url={"success": False, "url": None},
+        fallback_metadata={
+            "success": True,
+            "url": "http://mangoradio.stream.laut.fm/mangoradio",
+            "station": "mangoradio",
+            "genre": "Electro",
+            "bitrate": "128",
+            "song": "Fading",
+            "artist": "Alle Farben & Ilira",
+            "stream_title": "Alle Farben & Ilira - Fading",
+            "metadata_available": True,
+        },
+    )
+    app = create_radio_app(bose)
+    calls = []
+
+    def search(**kwargs):
+        calls.append(kwargs)
+        return [{
+            "name": "mangoradio",
+            "url": "https://mangoradio.stream.laut.fm/mangoradio",
+            "favicon": "https://images.example/mango-radio.png",
+        }]
+
+    monkeypatch.setattr(routes._radio_browser, "search", search)
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json["station"]["thumbnail"] == "https://images.example/mango-radio.png"
+    assert response.json["station"]["favicon"] == "https://images.example/mango-radio.png"
+    assert app.radio_station["favicon"] == "https://images.example/mango-radio.png"
+    assert calls == [{
+        "name": "mangoradio",
+        "name_exact": True,
+        "limit": 10,
+    }]
+
+
 def test_stats_keeps_confirmed_bose_radio_metadata_in_player_bar(monkeypatch):
     bose = FakeBose(
         playing_url={"success": False, "url": None},
