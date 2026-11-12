@@ -384,8 +384,17 @@ nav {
     overflow-y: auto;
 }
 
+.radio-sidebar-favorite-item {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+}
+
 .radio-sidebar-favorite {
     display: flex;
+    min-width: 0;
+    flex: 1;
     gap: 9px;
     width: 100%;
     padding: 7px 9px;
@@ -396,6 +405,37 @@ nav {
     cursor: pointer;
     text-align: left;
     text-decoration: none;
+}
+
+.radio-sidebar-favorite-delete,
+.radio-preset-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border: 1px solid #444;
+    border-radius: 7px;
+    background: #252525;
+    color: #ccc;
+    cursor: pointer;
+    font: inherit;
+}
+
+.radio-sidebar-favorite-delete {
+    width: 30px;
+    height: 32px;
+}
+
+.radio-sidebar-favorite-delete:hover,
+.radio-preset-delete:hover:not(:disabled) {
+    border-color: #ef4444;
+    color: #f87171;
+}
+
+.radio-sidebar-favorite-delete:disabled,
+.radio-preset-delete:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
 .radio-sidebar-favorite span:last-child {
@@ -483,8 +523,17 @@ nav {
     margin-bottom: 22px;
 }
 
+.radio-preset-item {
+    display: flex;
+    min-width: 0;
+    align-items: stretch;
+    gap: 4px;
+}
+
 .radio-preset {
     display: flex;
+    min-width: 0;
+    flex: 1;
     min-height: 70px;
     flex-direction: column;
     align-items: center;
@@ -497,6 +546,11 @@ nav {
     color: #fff;
     text-align: center;
     text-decoration: none;
+}
+
+.radio-preset-delete {
+    width: 30px;
+    font-size: 1.15rem;
 }
 
 .radio-preset:hover {
@@ -572,15 +626,16 @@ nav {
 
 .radio-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
 }
 
 .radio-card {
-    display: flex;
+    display: grid;
     min-width: 0;
+    grid-template-columns: 52px minmax(0, 1fr);
     align-items: center;
-    gap: 12px;
+    gap: 10px 12px;
     padding: 12px;
     border: 1px solid var(--border-color);
     border-radius: 12px;
@@ -588,6 +643,8 @@ nav {
 }
 
 .radio-card-image {
+    grid-column: 1;
+    grid-row: 1;
     width: 52px;
     height: 52px;
     flex: 0 0 52px;
@@ -597,15 +654,16 @@ nav {
 }
 
 .radio-card-details {
+    grid-column: 2;
+    grid-row: 1;
     min-width: 0;
     flex: 1;
 }
 
 .radio-card-details h3 {
-    overflow: hidden;
+    overflow-wrap: anywhere;
     font-size: 0.85rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.25;
 }
 
 .radio-card-details p {
@@ -616,12 +674,14 @@ nav {
 
 .radio-card-actions {
     display: flex;
-    flex: 0 0 auto;
+    grid-column: 1 / -1;
+    justify-content: flex-end;
     gap: 6px;
 }
 
 .radio-play-btn,
-.radio-star-btn {
+.radio-star-btn,
+.radio-heart-btn {
     min-width: 38px;
     min-height: 36px;
     border: 0;
@@ -642,8 +702,12 @@ nav {
 }
 
 .radio-heart-btn {
-    background: #333;
-    font-size: 1.25rem;
+    border: 1px solid rgba(251, 113, 133, 0.35);
+    background: rgba(190, 24, 93, 0.16);
+    color: #fda4af;
+    font-size: 1.35rem;
+    line-height: 1;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
 .radio-star-btn:hover {
@@ -651,7 +715,20 @@ nav {
 }
 
 .radio-heart-btn:hover {
-    color: #fb7185;
+    transform: translateY(-1px);
+    border-color: #fb7185;
+    background: rgba(190, 24, 93, 0.42);
+    color: #fff;
+}
+
+.radio-heart-btn:focus-visible {
+    outline: 2px solid #fb7185;
+    outline-offset: 2px;
+}
+
+.radio-heart-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
 }
 
 .radio-play-btn:disabled {
@@ -1649,6 +1726,12 @@ input:checked + .slider:before {
 
     .radio-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (min-width: 541px) and (max-width: 900px) {
+    .radio-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

@@ -12,6 +12,10 @@ from core.settings import get_radio_config, update_user_config
 
 logger = logging.getLogger(__name__)
 radio_bp = Blueprint("radio", __name__)
+import ssl
+
+# Disable global SSL certificate verification for this process
+ssl._create_default_https_context = ssl._create_unverified_context
 _radio_browser = RadioBrowser(verify=False)
 _status_lock = threading.Lock()
 _METADATA_CACHE_SECONDS = 20
@@ -59,7 +63,7 @@ def _top_stations():
     stations = _radio_browser.search(
         order="votes",
         reverse=True,
-        limit=20,
+        limit=18,
     )
     return [station for item in stations if (station := _public_station(item))]
 
@@ -141,7 +145,7 @@ def search():
     try:
         results = _radio_browser.search(
             name=query,
-            limit=20,
+            limit=18,
             order="votes",
             reverse=True,
             hidebroken=True,
@@ -208,6 +212,23 @@ def save_preset():
     return jsonify({"status": "saved", "number": number, "station": station})
 
 
+@radio_bp.route("/preset/<int:number>", methods=["DELETE"])
+def delete_preset(number):
+    if number not in range(1, 7):
+        return jsonify({"error": "Radio preset must be between 1 and 6."}), 404
+
+    config = get_radio_config()
+    if config[str(number)] is None:
+        return jsonify({"error": f"Radio preset {number} is empty."}), 404
+    config[str(number)] = None
+    try:
+        update_user_config("radio", config)
+    except (OSError, ValueError):
+        logger.exception("Could not delete radio preset.")
+        return jsonify({"error": "Could not delete the radio preset."}), 500
+    return jsonify({"status": "deleted", "number": number})
+
+
 @radio_bp.route("/favorites", methods=["POST"])
 def save_favorite():
     data = request.get_json(silent=True)
@@ -230,6 +251,30 @@ def save_favorite():
         logger.exception("Could not save radio favorite.")
         return jsonify({"error": "Could not save the radio favorite."}), 500
     return jsonify({"status": "saved", "station": station})
+
+
+@radio_bp.route("/favorites", methods=["DELETE"])
+def delete_favorite():
+    data = request.get_json(silent=True)
+    station_url = data.get("url") if isinstance(data, dict) else None
+    if not isinstance(station_url, str) or not station_url.strip():
+        return jsonify({"error": "Choose a radio favorite to delete."}), 400
+
+    config = get_radio_config()
+    favorite = next(
+        (station for station in config["favorites"] if station["url"] == station_url),
+        None,
+    )
+    if favorite is None:
+        return jsonify({"error": "Radio favorite was not found."}), 404
+
+    config["favorites"].remove(favorite)
+    try:
+        update_user_config("radio", config)
+    except (OSError, ValueError):
+        logger.exception("Could not delete radio favorite.")
+        return jsonify({"error": "Could not delete the radio favorite."}), 500
+    return jsonify({"status": "deleted", "station": favorite})
 
 
 @radio_bp.route("/status")

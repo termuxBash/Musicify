@@ -171,6 +171,76 @@ def test_saving_favorite_does_not_change_presets(monkeypatch):
     }]
 
 
+def test_deleting_preset_clears_only_the_selected_slot(monkeypatch):
+    saved = {}
+    config = {
+        **{str(number): None for number in range(1, 7)},
+        "2": {"name": "Preset FM", "url": "https://stream.example/preset"},
+        "favorites": [{"name": "Favorite FM", "url": "https://stream.example/favorite"}],
+    }
+    monkeypatch.setattr(routes, "get_radio_config", lambda: config.copy())
+    monkeypatch.setattr(
+        routes,
+        "update_user_config",
+        lambda key, value: saved.update({key: value}),
+    )
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().delete("/radio/preset/2")
+
+    assert response.status_code == 200
+    assert response.json == {"status": "deleted", "number": 2}
+    assert saved["radio"]["2"] is None
+    assert saved["radio"]["favorites"] == config["favorites"]
+
+
+def test_deleting_favorite_keeps_other_favorites_and_presets(monkeypatch):
+    saved = {}
+    first_favorite = {"name": "First FM", "url": "https://stream.example/first"}
+    second_favorite = {"name": "Second FM", "url": "https://stream.example/second"}
+    config = {
+        **{str(number): None for number in range(1, 7)},
+        "3": {"name": "Preset FM", "url": "https://stream.example/preset"},
+        "favorites": [first_favorite, second_favorite],
+    }
+    monkeypatch.setattr(routes, "get_radio_config", lambda: config.copy())
+    monkeypatch.setattr(
+        routes,
+        "update_user_config",
+        lambda key, value: saved.update({key: value}),
+    )
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().delete(
+        "/radio/favorites",
+        json={"url": first_favorite["url"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json["status"] == "deleted"
+    assert saved["radio"]["3"] == config["3"]
+    assert saved["radio"]["favorites"] == [second_favorite]
+
+
+def test_deleting_unknown_favorite_returns_not_found(monkeypatch):
+    monkeypatch.setattr(
+        routes,
+        "get_radio_config",
+        lambda: {
+            **{str(number): None for number in range(1, 7)},
+            "favorites": [],
+        },
+    )
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().delete(
+        "/radio/favorites",
+        json={"url": "https://stream.example/missing"},
+    )
+
+    assert response.status_code == 404
+
+
 def test_favorite_get_route_fuzzy_matches_and_forces_playback(monkeypatch):
     station = {"name": "Example Favorite FM", "url": "https://stream.example/radio"}
     monkeypatch.setattr(
@@ -199,7 +269,7 @@ def test_homepage_stations_use_pyradios_vote_search(monkeypatch):
             "url": f"https://stream.example/{number}",
             "votes": 20 - number,
         }
-        for number in range(1, 21)
+        for number in range(1, 19)
     ]
     calls = []
 
@@ -211,9 +281,9 @@ def test_homepage_stations_use_pyradios_vote_search(monkeypatch):
 
     stations = routes._top_stations()
 
-    assert len(stations) == 20
+    assert len(stations) == 18
     assert stations[0]["name"] == "Station 1"
-    assert calls == [{"order": "votes", "reverse": True, "limit": 20}]
+    assert calls == [{"order": "votes", "reverse": True, "limit": 18}]
 
 
 def test_search_route_passes_query_and_returns_station_cards(monkeypatch):
@@ -239,7 +309,7 @@ def test_search_route_passes_query_and_returns_station_cards(monkeypatch):
     assert response.json[0]["name"] == "Example FM"
     assert calls == [{
         "name": "example",
-        "limit": 20,
+        "limit": 18,
         "order": "votes",
         "reverse": True,
         "hidebroken": True,

@@ -19,12 +19,17 @@
     <div class="radio-presets" aria-label="Radio presets">
         {% for number in range(1, 7) %}
         {% set preset = radio_presets[number|string] %}
-        <a class="radio-preset" href="{{ url_for('radio.play_preset', number=number) }}"
-           data-radio-preset-number="{{ number }}"
-           {% if not preset %}aria-disabled="true" onclick="event.preventDefault()"{% endif %}>
-            <span class="radio-preset-number">{{ number }}</span>
-            <span class="radio-preset-name">{{ preset.name if preset else "Empty preset" }}</span>
-        </a>
+        <div class="radio-preset-item">
+            <a class="radio-preset" href="{{ url_for('radio.play_preset', number=number) }}"
+               data-radio-preset-number="{{ number }}"
+               {% if not preset %}aria-disabled="true" onclick="event.preventDefault()"{% endif %}>
+                <span class="radio-preset-number">{{ number }}</span>
+                <span class="radio-preset-name">{{ preset.name if preset else "Empty preset" }}</span>
+            </a>
+            <button type="button" class="radio-preset-delete" data-radio-preset-number="{{ number }}"
+                    aria-label="Delete radio preset {{ number }}" title="Delete preset {{ number }}"
+                    {% if not preset %}disabled{% endif %}>×</button>
+        </div>
         {% endfor %}
     </div>
 
@@ -41,7 +46,7 @@
     <p class="radio-error" role="alert">{{ load_error }}</p>
     {% endif %}
     <div class="radio-results-heading">
-        <h2 id="radioResultsTitle">Top 20 stations</h2>
+        <h2 id="radioResultsTitle">Top 18 stations</h2>
         <span id="radioSearchStatus" role="status"></span>
     </div>
     <div class="radio-grid" id="radioResults"></div>
@@ -80,6 +85,32 @@ const radioResults = document.getElementById("radioResults");
 let stationToSave = null;
 let currentRadioStation = null;
 
+function createRadioFavoriteItem(station) {
+    const item = document.createElement("div");
+    item.className = "radio-sidebar-favorite-item";
+    const link = document.createElement("a");
+    link.className = "radio-sidebar-favorite";
+    link.href = `${API_PREFIX}/fav/${encodeURIComponent(station.name)}`;
+    link.addEventListener("click", confirmFavoriteNavigation);
+    const icon = document.createElement("span");
+    icon.textContent = "▶";
+    const name = document.createElement("span");
+    name.textContent = station.name;
+    link.append(icon, name);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "radio-sidebar-favorite-delete";
+    remove.textContent = "×";
+    remove.dataset.stationUrl = station.url;
+    remove.dataset.stationName = station.name;
+    remove.title = "Delete favorite";
+    remove.setAttribute("aria-label", `Delete ${station.name} from radio favorites`);
+    remove.addEventListener("click", () => deleteRadioFavorite(remove));
+    item.append(link, remove);
+    return item;
+}
+
 function radioImage(station) {
     return station.favicon || station.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='58' font-family='sans-serif'%3E📻%3C/text%3E%3C/svg%3E";
 }
@@ -108,6 +139,7 @@ function renderRadioStations(stations) {
         const details = document.createElement("div");
         details.className = "radio-card-details";
         const title = document.createElement("h3");
+        title.title = station.name || "Unknown station";
         title.textContent = station.name || "Unknown station";
         const subtitle = document.createElement("p");
         subtitle.textContent = [station.country, station.codec, station.bitrate ? `${station.bitrate} kbps` : ""]
@@ -202,6 +234,7 @@ document.getElementById("radioFavoriteForm").addEventListener("submit", async ev
         preset.querySelector(".radio-preset-name").textContent = data.station.name;
         preset.removeAttribute("aria-disabled");
         preset.removeAttribute("onclick");
+        document.querySelectorAll(".radio-preset-delete")[data.number - 1].disabled = false;
         wirePresetLink(preset);
         showPopup(`Saved ${data.station.name} to radio preset ${data.number}.`);
         closeRadioFavoriteModal();
@@ -210,6 +243,33 @@ document.getElementById("radioFavoriteForm").addEventListener("submit", async ev
         showPopup("Could not contact the radio settings service.");
     }
 });
+
+async function deleteRadioPreset(button) {
+    const number = Number(button.dataset.radioPresetNumber);
+    const station = radioPresets[String(number)];
+    if (!station || !window.confirm(`Delete radio preset ${number} (${station.name})?`)) return;
+
+    button.disabled = true;
+    try {
+        const response = await fetch(`${API_PREFIX}/preset/${number}`, { method: "DELETE" });
+        const data = await response.json();
+        if (!response.ok) {
+            showPopup(data.error || "Could not delete this radio preset.");
+            return;
+        }
+        radioPresets[String(number)] = null;
+        const preset = document.querySelectorAll(".radio-preset")[number - 1];
+        preset.querySelector(".radio-preset-name").textContent = "Empty preset";
+        preset.setAttribute("aria-disabled", "true");
+        preset.setAttribute("onclick", "event.preventDefault()");
+        showPopup(`Deleted radio preset ${number}.`);
+    } catch (error) {
+        console.error("Could not delete radio preset:", error);
+        showPopup("Could not contact the radio settings service.");
+    } finally {
+        button.disabled = !radioPresets[String(number)];
+    }
+}
 
 async function saveRadioFavorite(station, button) {
     if (button) button.disabled = true;
@@ -241,16 +301,43 @@ function addRadioFavorite(station) {
     const list = document.querySelector(".radio-sidebar-favorite-list");
     if (!list) return;
     list.querySelector(".radio-sidebar-empty")?.remove();
-    const link = document.createElement("a");
-    link.className = "radio-sidebar-favorite";
-    link.href = `${API_PREFIX}/fav/${encodeURIComponent(station.name)}`;
-    link.addEventListener("click", confirmFavoriteNavigation);
-    const icon = document.createElement("span");
-    icon.textContent = "▶";
-    const name = document.createElement("span");
-    name.textContent = station.name;
-    link.append(icon, name);
-    list.append(link);
+    list.append(createRadioFavoriteItem(station));
+}
+
+async function deleteRadioFavorite(button) {
+    const stationUrl = button.dataset.stationUrl;
+    const stationName = button.dataset.stationName;
+    if (!window.confirm(`Delete ${stationName} from radio favorites?`)) return;
+
+    button.disabled = true;
+    try {
+        const response = await fetch(API_PREFIX + "/favorites", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: stationUrl })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showPopup(data.error || "Could not delete this radio favorite.");
+            return;
+        }
+        const index = radioFavorites.findIndex(station => station.url === stationUrl);
+        if (index >= 0) radioFavorites.splice(index, 1);
+        button.closest(".radio-sidebar-favorite-item")?.remove();
+        const list = document.querySelector(".radio-sidebar-favorite-list");
+        if (list && !list.querySelector(".radio-sidebar-favorite-item")) {
+            const empty = document.createElement("p");
+            empty.className = "radio-sidebar-empty";
+            empty.textContent = "Star a station to add it here.";
+            list.append(empty);
+        }
+        showPopup(`Removed ${stationName} from radio favorites.`);
+    } catch (error) {
+        console.error("Could not delete radio favorite:", error);
+        showPopup("Could not contact the radio settings service.");
+    } finally {
+        if (button.isConnected) button.disabled = false;
+    }
 }
 
 async function confirmRadioPlayback() {
@@ -283,6 +370,7 @@ function wirePresetLink(link) {
     link.dataset.confirmationBound = "true";
     link.addEventListener("click", event => {
         event.preventDefault();
+        if (link.getAttribute("aria-disabled") === "true") return;
         const presetNumber = link.dataset.radioPresetNumber;
         confirmRadioPlayback().then(confirmed => {
             if (confirmed) window.location.href = `${API_PREFIX}/${presetNumber}`;
@@ -291,9 +379,15 @@ function wirePresetLink(link) {
 }
 
 document.querySelectorAll(".radio-preset").forEach(wirePresetLink);
+document.querySelectorAll(".radio-preset-delete").forEach(button => {
+    button.addEventListener("click", () => deleteRadioPreset(button));
+});
 
 document.querySelectorAll(".radio-sidebar-favorite").forEach(link => {
     link.addEventListener("click", confirmFavoriteNavigation);
+});
+document.querySelectorAll(".radio-sidebar-favorite-delete").forEach(button => {
+    button.addEventListener("click", () => deleteRadioFavorite(button));
 });
 
 let radioSearchRequest = 0;
@@ -302,7 +396,7 @@ let radioSearchTimer = null;
 async function searchRadioStations(query) {
     if (!query) {
         renderRadioStations(initialRadioStations);
-        document.getElementById("radioResultsTitle").textContent = "Top 20 stations";
+        document.getElementById("radioResultsTitle").textContent = "Top 18 stations";
         document.getElementById("radioSearchStatus").textContent = "";
         return;
     }
@@ -354,13 +448,13 @@ async function refreshRadioStatus() {
         const image = radioImage(station);
         document.getElementById("playing-title-text").textContent = title;
         document.getElementById("playing-thumb").src = image;
-        document.getElementById("playing-status").textContent = "LIVE RADIO";
+        document.getElementById("playing-status").textContent = station.station || station.name || "Internet Radio";
         const modalThumb = document.getElementById("nowPlayingModalThumb");
         if (modalThumb) modalThumb.src = image;
         const modalTitle = document.getElementById("nowPlayingModalTitleText");
         if (modalTitle) modalTitle.textContent = title;
         const modalStatus = document.getElementById("nowPlayingModalStatus");
-        if (modalStatus) modalStatus.textContent = "LIVE RADIO";
+        if (modalStatus) modalStatus.textContent = station.station || station.name || "Internet Radio";
     } catch (error) {
         console.error("Could not refresh radio status:", error);
     }

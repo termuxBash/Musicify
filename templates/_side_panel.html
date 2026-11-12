@@ -28,10 +28,15 @@
         <h4>Radio favorites</h4>
         <div class="radio-sidebar-favorite-list">
             {% for station in radio_favorites %}
-            <a class="radio-sidebar-favorite" href="{{ url_for('radio.play_favorite_by_name', name=station.name) }}">
-                <span>▶</span>
-                <span>{{ station.name }}</span>
-            </a>
+            <div class="radio-sidebar-favorite-item">
+                <a class="radio-sidebar-favorite" href="{{ url_for('radio.play_favorite_by_name', name=station.name) }}">
+                    <span>▶</span>
+                    <span>{{ station.name }}</span>
+                </a>
+                <button type="button" class="radio-sidebar-favorite-delete"
+                        data-station-url="{{ station.url }}" data-station-name="{{ station.name }}"
+                        aria-label="Delete {{ station.name }} from radio favorites" title="Delete favorite">×</button>
+            </div>
             {% else %}
             <p class="radio-sidebar-empty">Star a station to add it here.</p>
             {% endfor %}
@@ -105,8 +110,11 @@
                 </button>
                 {% if radio_favorites is not defined %}
                 <a href="{{ url_for('radio.index') }}" class="switch-player-link radio-nav-link">Radio</a>
-                {% endif %}
                 <a href="{{ switch_player_url }}" class="switch-player-link">Switch to {{ switch_player_label }}</a>
+                {% else %}
+                <a href="{{ url_for('youtube.index') }}" class="switch-player-link">Online Player</a>
+                <a href="{{ url_for('local.browse') }}" class="switch-player-link">Local Player</a>
+                {% endif %}
             </div>
         </div>
 
