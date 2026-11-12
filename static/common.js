@@ -1003,11 +1003,13 @@ async function updateStats() {
             const title = data.now_playing.title || "Unknown track";
             const thumbnail = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='60' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
             const modalThumbnail = data.now_playing.thumbnail || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='72' text-anchor='middle' font-size='88' font-family='sans-serif'%3E🎵️%3C/text%3E%3C/svg%3E";
-            const playbackStatus = data.is_playing
-                ? (data.owner === "radio"
-                    ? (data.now_playing.station || data.now_playing.name || "LIVE RADIO")
-                    : "BROADCASTING")
-                : "PAUSED";
+            const playbackStatus = data.is_radio || data.owner === "radio"
+                ? (data.radio_playback_error
+                    ? "PLAYBACK FAILED"
+                    : data.is_playing
+                        ? (data.now_playing.station || data.now_playing.name || "LIVE RADIO")
+                        : "CONNECTING")
+                : data.is_playing ? "BROADCASTING" : "PAUSED";
 
             if (titleEl && titleTextEl) {
                 titleTextEl.textContent = title;

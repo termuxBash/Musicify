@@ -22,7 +22,13 @@
             <button type="button" class="radio-genre-filter" data-radio-genre="{{ genre }}" aria-pressed="false">{{ genre }}</button>
             {% endfor %}
         </div>
-        <button type="button" class="radio-clear-filter" id="clearRadioGenreFilter" disabled>Clear filters</button>
+        <div class="radio-filter-actions">
+            <button type="button" class="radio-clear-filter" id="clearRadioGenreFilter" disabled>Clear filters</button>
+            <button type="button" class="radio-delete-presets-btn" id="openDeleteRadioPresetModal">
+                <img src="{{ url_for('static', filename='delete.svg') }}" alt="">
+                Delete a preset
+            </button>
+        </div>
     </div>
 
     <div class="radio-presets" aria-label="Radio presets">
@@ -35,10 +41,6 @@
             <span class="radio-preset-name">{{ preset.name if preset else "Empty preset" }}</span>
         </a>
         {% endfor %}
-        <button type="button" class="radio-delete-presets-btn" id="openDeleteRadioPresetModal">
-            <img src="{{ url_for('static', filename='delete.svg') }}" alt="">
-            Delete a preset
-        </button>
     </div>
 
     {% if load_error %}
@@ -107,6 +109,8 @@ const radioResults = document.getElementById("radioResults");
 let stationToSave = null;
 let currentRadioStation = null;
 const activeRadioGenres = new Set();
+let lastRadioPlaybackError = "";
+let radioStatusRetryTimeout = null;
 
 function createRadioFavoriteItem(station) {
     const item = document.createElement("div");
@@ -525,9 +529,44 @@ async function refreshRadioStatus() {
         const response = await fetch(API_PREFIX + "/status");
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Could not read radio status.");
-        if (!data.is_radio || !data.station) return;
+        if (!data.is_radio || !data.station) {
+            if (radioStatusRetryTimeout) clearTimeout(radioStatusRetryTimeout);
+            radioStatusRetryTimeout = null;
+            return;
+        }
         const station = data.station;
-        currentRadioStation = currentRadioStation || station;
+        currentRadioStation = station;
+        if (!data.is_playing) {
+            const stationName = station.name || station.station || "Radio station";
+            document.getElementById("playing-title-text").textContent = stationName;
+            document.getElementById("playing-thumb").src = radioImage(station);
+            document.getElementById("playing-status").textContent =
+                data.error ? "PLAYBACK FAILED" : "CONNECTING";
+            const modalThumb = document.getElementById("nowPlayingModalThumb");
+            if (modalThumb) modalThumb.src = radioImage(station);
+            const modalTitle = document.getElementById("nowPlayingModalTitleText");
+            if (modalTitle) modalTitle.textContent = stationName;
+            const modalStatus = document.getElementById("nowPlayingModalStatus");
+            if (modalStatus) modalStatus.textContent =
+                data.error ? "PLAYBACK FAILED" : "CONNECTING";
+            if (data.error && lastRadioPlaybackError !== data.error) {
+                showPopup(data.error);
+            }
+            lastRadioPlaybackError = data.error || "";
+            if (data.pending && !radioStatusRetryTimeout && !document.hidden && document.hasFocus()) {
+                radioStatusRetryTimeout = setTimeout(() => {
+                    radioStatusRetryTimeout = null;
+                    refreshRadioStatus();
+                }, 2000);
+            } else if (!data.pending && radioStatusRetryTimeout) {
+                clearTimeout(radioStatusRetryTimeout);
+                radioStatusRetryTimeout = null;
+            }
+            return;
+        }
+        if (radioStatusRetryTimeout) clearTimeout(radioStatusRetryTimeout);
+        radioStatusRetryTimeout = null;
+        lastRadioPlaybackError = "";
         const title = station.title || station.name || "Internet Radio";
         const image = radioImage(station);
         document.getElementById("playing-title-text").textContent = title;
@@ -541,6 +580,10 @@ async function refreshRadioStatus() {
         if (modalStatus) modalStatus.textContent = station.station || station.name || "Internet Radio";
     } catch (error) {
         console.error("Could not refresh radio status:", error);
+        if (lastRadioPlaybackError !== error.message) {
+            showPopup(error.message || "Could not check radio playback status.");
+        }
+        lastRadioPlaybackError = error.message || "Could not check radio playback status.";
     }
 }
 
@@ -555,9 +598,37 @@ window.skipTrack = function() {
     showPopup("Live radio streams do not support skipping tracks.");
 };
 
+let radioStatusInterval = null;
+function startRadioStatusPolling() {
+    if (!radioStatusInterval) {
+        refreshRadioStatus();
+        radioStatusInterval = setInterval(refreshRadioStatus, 20000);
+    }
+}
+
+function stopRadioStatusPolling() {
+    if (radioStatusInterval) {
+        clearInterval(radioStatusInterval);
+        radioStatusInterval = null;
+    }
+    if (radioStatusRetryTimeout) {
+        clearTimeout(radioStatusRetryTimeout);
+        radioStatusRetryTimeout = null;
+    }
+}
+
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopRadioStatusPolling();
+    else startRadioStatusPolling();
+});
+
+window.addEventListener("blur", stopRadioStatusPolling);
+window.addEventListener("focus", () => {
+    if (!document.hidden) startRadioStatusPolling();
+});
+
 renderRadioStations(initialRadioStations);
-refreshRadioStatus();
-setInterval(refreshRadioStatus, 20000);
+if (!document.hidden) startRadioStatusPolling();
 </script>
 </body>
 </html>

@@ -45,13 +45,21 @@ def stats():
     volume = bose.get("volume", 0) if bose else 0
         
     player_status = current_app.player.status()
-    is_playing = player_status.get("playing", False) or current_app.playback.owner == "radio"
+    radio_is_active = (
+        current_app.playback.owner == "radio"
+        or getattr(current_app, "radio_is_playing", False)
+    )
+    is_playing = (
+        getattr(current_app, "radio_is_playing", False)
+        if radio_is_active
+        else player_status.get("playing", False)
+    )
     
     current_song = player_status.get("current_song")
-    if current_app.playback.owner == "radio":
+    if radio_is_active:
         current_song = getattr(current_app, "radio_now_playing", None)
     current_title = current_song.get("title") if current_song else None
-    lyrics_title = current_title if current_app.playback.owner != "radio" else None
+    lyrics_title = current_title if not radio_is_active else None
     
     # Reference the service tied directly to current_app context
     lyrics_svc = current_app.lyrics_service
@@ -70,6 +78,8 @@ def stats():
         "cpu": int(round(psutil.cpu_percent())),
         "volume": volume,
         "owner": current_app.playback.owner,
+        "is_radio": radio_is_active,
+        "radio_playback_error": getattr(current_app, "radio_playback_error", None),
         "bose_is_on": bose.get("is_on", False) if bose else False,
         "bose_power_state": bose.get("power_state", "disconnected") if bose else "disconnected",
         "queue": list(player_status.get("queue", [])),

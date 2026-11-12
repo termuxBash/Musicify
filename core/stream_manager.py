@@ -105,12 +105,15 @@ class QueuePlayer:
     def suppress_autoplay(self):
         with self.lock:
             self._autoplay_suppressed = True
-            logger.info("Autoplay temporarily suppressed while an AI queue is being built")
+            if self.autoplay_enabled:
+                logger.info("Autoplay temporarily suppressed during a queue operation")
 
     def resume_autoplay(self):
         with self.lock:
+            was_suppressed = self._autoplay_suppressed
             self._autoplay_suppressed = False
-            logger.info("Autoplay suppression released")
+            if was_suppressed and self.autoplay_enabled:
+                logger.info("Autoplay suppression released")
 
     def status(self):
         with self.lock:

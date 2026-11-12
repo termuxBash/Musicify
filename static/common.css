@@ -512,6 +512,14 @@ nav {
     margin: -4px 0 16px;
 }
 
+.radio-filter-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
 .radio-genre-filters {
     display: flex;
     flex-wrap: wrap;
@@ -520,7 +528,7 @@ nav {
 
 .radio-genre-filter,
 .radio-clear-filter {
-    padding: 6px 11px;
+    padding: 3px 9px;
     border: 1px solid #3a3a3a;
     border-radius: 999px;
     background: #202020;
@@ -545,10 +553,9 @@ nav {
 }
 
 .radio-clear-filter {
-    display: block;
-    margin: 8px 0 0 auto;
     border-color: rgba(239, 68, 68, 0.5);
     color: #fca5a5;
+    white-space: nowrap;
 }
 
 .radio-clear-filter:hover:not(:disabled) {
@@ -602,8 +609,6 @@ nav {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    grid-column: 1 / -1;
-    justify-self: end;
     min-height: 42px;
     padding: 0 18px;
     border: 1px solid rgba(239, 68, 68, 0.5);
@@ -614,6 +619,18 @@ nav {
     font: inherit;
     font-weight: 700;
     transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.radio-filter-actions .radio-delete-presets-btn,
+.radio-filter-actions .radio-clear-filter {
+    min-height: 28px;
+    padding: 2px 9px;
+    font-size: 0.74rem;
+}
+
+.radio-filter-actions .radio-delete-presets-btn {
+    gap: 5px;
+    white-space: nowrap;
 }
 
 .radio-delete-presets-btn img {
@@ -1791,8 +1808,9 @@ input:checked + .slider:before {
     }
 
     .radio-genre-filter,
-    .radio-clear-filter {
-        min-height: 34px;
+    .radio-filter-actions .radio-clear-filter,
+    .radio-filter-actions .radio-delete-presets-btn {
+        min-height: 28px;
     }
 
     .radio-presets {

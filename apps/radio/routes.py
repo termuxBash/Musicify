@@ -18,6 +18,37 @@ _radio_browser = RadioBrowser(session=httpx.Client(verify=False))
 _radio_browser.base_url = "https://de1.api.radio-browser.info/"
 _status_lock = threading.Lock()
 _METADATA_CACHE_SECONDS = 20
+_PLAYBACK_START_GRACE_SECONDS = 8
+
+
+def _same_stream_url(first, second):
+    if not first or not second:
+        return False
+    try:
+        first_url = urlparse(first)
+        second_url = urlparse(second)
+        first_scheme = first_url.scheme.lower()
+        second_scheme = second_url.scheme.lower()
+        first_port = first_url.port
+        second_port = second_url.port
+    except ValueError:
+        return False
+    if first_scheme not in {"http", "https"} or second_scheme not in {"http", "https"}:
+        return False
+    same_port = (
+        first_port == second_port
+        if first_scheme != second_scheme
+        else (first_port or (443 if first_scheme == "https" else 80))
+        == (second_port or (443 if second_scheme == "https" else 80))
+    )
+    return (
+        first_url.hostname is not None
+        and second_url.hostname is not None
+        and (first_url.hostname or "").lower() == (second_url.hostname or "").lower()
+        and same_port
+        and first_url.path.rstrip("/") == second_url.path.rstrip("/")
+        and first_url.query == second_url.query
+    )
 
 
 def _station_payload(station):
@@ -89,13 +120,9 @@ def _play_station(station):
     if not granted:
         return None, (jsonify({"error": "Could not acquire radio playback."}), 409)
 
-    bose = getattr(current_app.player, "bose", None)
-    if bose is None:
-        return None, (jsonify({"error": "SoundTouch playback is unavailable."}), 503)
-    if not bose.play_direct(payload["url"]):
-        return None, (jsonify({"error": "The SoundTouch speaker could not play this station."}), 502)
-
     current_app.radio_station = payload
+    current_app.radio_is_playing = False
+    current_app.radio_playback_error = None
     current_app.radio_now_playing = {
         "title": payload["name"],
         "thumbnail": payload["favicon"],
@@ -103,6 +130,20 @@ def _play_station(station):
         "song": "",
         "artist": "",
     }
+
+    bose = getattr(current_app.player, "bose", None)
+    if bose is None:
+        error = "SoundTouch playback is unavailable."
+        current_app.radio_playback_error = error
+        current_app.radio_playback_started_at = time.monotonic() - _PLAYBACK_START_GRACE_SECONDS
+        return None, (jsonify({"error": error}), 503)
+    if not bose.play_direct(payload["url"]):
+        error = "The SoundTouch speaker could not play this station."
+        current_app.radio_playback_error = error
+        current_app.radio_playback_started_at = time.monotonic() - _PLAYBACK_START_GRACE_SECONDS
+        return None, (jsonify({"error": error}), 502)
+
+    current_app.radio_playback_started_at = time.monotonic()
     current_app.radio_metadata_updated_at = 0
 
     if payload["stationuuid"]:
@@ -290,29 +331,99 @@ def delete_favorite():
 
 @radio_bp.route("/status")
 def status():
-    if current_app.playback.owner != "radio":
-        return jsonify({"is_radio": False})
-
+    radio_owned = current_app.playback.owner == "radio"
     bose = getattr(current_app.player, "bose", None)
     if bose is None:
+        if not radio_owned:
+            return jsonify({"is_radio": False})
         return jsonify({"error": "SoundTouch playback is unavailable."}), 503
 
     with _status_lock:
         try:
-            playing = bose.get_playing_url()
-            stream_url = playing.get("url") if playing.get("success") else None
+            station = getattr(current_app, "radio_station", {}) or {}
+            metadata = None
+            if radio_owned:
+                playing = bose.get_playing_url()
+                stream_url = playing.get("url") if playing.get("success") else None
+            else:
+                metadata = bose.get_stream_metadata()
+                stream_url = (
+                    metadata.get("url")
+                    if metadata.get("success") and isinstance(metadata.get("url"), str)
+                    else None
+                )
+                if not stream_url:
+                    current_app.radio_is_playing = False
+                    current_app.radio_now_playing = None
+                    current_app.radio_playback_error = None
+                    return jsonify({"is_radio": False})
+                current_app.playback.acquire("radio")
+                current_app.radio_playback_started_at = time.monotonic()
+                radio_owned = True
+                station = {}
+
             now = time.monotonic()
+            if not _same_stream_url(stream_url, station.get("url")):
+                if metadata is None:
+                    metadata = bose.get_stream_metadata()
+                metadata_url = (
+                    metadata.get("url")
+                    if metadata.get("success") and isinstance(metadata.get("url"), str)
+                    else None
+                )
+                if metadata_url:
+                    stream_url = metadata_url
+                else:
+                    metadata = None
+
+            if (
+                not _same_stream_url(stream_url, station.get("url"))
+                and metadata is None
+            ):
+                if not radio_owned:
+                    current_app.radio_is_playing = False
+                    current_app.radio_now_playing = None
+                    current_app.radio_playback_error = None
+                    return jsonify({"is_radio": False})
+                current_app.radio_is_playing = False
+                pending = (
+                    now - getattr(current_app, "radio_playback_started_at", 0)
+                    < _PLAYBACK_START_GRACE_SECONDS
+                )
+                error = None if pending else "The SoundTouch speaker did not start the selected radio station."
+                current_app.radio_playback_error = error
+                current_app.radio_now_playing = {
+                    "title": station.get("name") or "Radio station",
+                    "thumbnail": station.get("favicon") or "",
+                    "station": station.get("name") or "Radio station",
+                    "song": "",
+                    "artist": "",
+                }
+                return jsonify({
+                    "is_radio": True,
+                    "is_playing": False,
+                    "pending": pending,
+                    "error": error,
+                    "station": station,
+                })
+
+            current_app.radio_is_playing = True
+            current_app.radio_playback_error = None
             updated_at = getattr(current_app, "radio_metadata_updated_at", 0)
             cached = getattr(current_app, "radio_now_playing", None)
-            if stream_url and (
-                cached is None
-                or cached.get("url") != stream_url
-                or now - updated_at >= _METADATA_CACHE_SECONDS
+            if metadata is not None or (
+                stream_url
+                and (
+                    cached is None
+                    or cached.get("url") != stream_url
+                    or now - updated_at >= _METADATA_CACHE_SECONDS
+                )
             ):
-                metadata = bose.get_stream_metadata(stream_url)
+                if metadata is None:
+                    metadata = bose.get_stream_metadata(stream_url)
                 station = getattr(current_app, "radio_station", {}) or {}
                 station_name = metadata.get("station") or station.get("name") or "Internet Radio"
-                song = metadata.get("song") or ""
+                song = metadata.get("song") or metadata.get("stream_title") or ""
                 artist = metadata.get("artist") or ""
                 title = f"{artist} - {song}" if artist and song else song or station_name
                 cached = {
@@ -322,11 +433,16 @@ def status():
                     "song": song,
                     "artist": artist,
                     "url": stream_url,
+                    "genre": metadata.get("genre") or "",
+                    "bitrate": metadata.get("bitrate") or "",
+                    "stream_title": metadata.get("stream_title") or "",
+                    "metadata_available": metadata.get("metadata_available", False),
                 }
                 current_app.radio_now_playing = cached
                 current_app.radio_metadata_updated_at = now
             return jsonify({
                 "is_radio": True,
+                "is_playing": True,
                 "station": cached or getattr(current_app, "radio_station", {}),
             })
         except Exception:

@@ -1,14 +1,22 @@
 import threading
+import time
 
 from flask import Flask
+from flask import jsonify
 
 from apps.radio import routes
+from core import stats
 from core.playback_controller import PlaybackController
 
 
 class FakeBose:
-    def __init__(self, play_result=True):
+    def __init__(self, play_result=True, playing_url=None, fallback_metadata=None):
         self.play_result = play_result
+        self.playing_url = playing_url or {
+            "success": True,
+            "url": "https://stream.example/radio",
+        }
+        self.fallback_metadata = fallback_metadata
         self.played_urls = []
         self.metadata_calls = []
 
@@ -17,12 +25,15 @@ class FakeBose:
         return self.play_result
 
     def get_playing_url(self):
-        return {"success": True, "url": "https://stream.example/radio"}
+        return self.playing_url
 
-    def get_stream_metadata(self, stream_url):
+    def get_stream_metadata(self, stream_url=None):
         self.metadata_calls.append(stream_url)
+        if stream_url is None and self.fallback_metadata is not None:
+            return self.fallback_metadata
         return {
             "success": True,
+            "url": stream_url,
             "station": "Example FM",
             "song": "Test Song",
             "artist": "Test Artist",
@@ -405,4 +416,236 @@ def test_status_reads_current_stream_metadata():
     assert response.status_code == 200
     assert response.json["station"]["title"] == "Test Artist - Test Song"
     assert response.json["station"]["station"] == "Example FM"
+    assert response.json["is_playing"] is True
     assert bose.metadata_calls == ["https://stream.example/radio"]
+
+
+def test_status_reports_failed_playback_when_speaker_has_no_stream_url():
+    bose = FakeBose(playing_url={"success": False, "url": None})
+    app = create_radio_app(bose)
+    app.playback.acquire("radio")
+    app.radio_station = {
+        "name": "Selected FM",
+        "url": "https://stream.example/selected",
+        "favicon": "",
+    }
+    app.radio_playback_started_at = time.monotonic() - routes._PLAYBACK_START_GRACE_SECONDS - 1
+    app.radio_now_playing = {"title": "Old station"}
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json["is_playing"] is False
+    assert response.json["pending"] is False
+    assert response.json["error"]
+    assert response.json["station"]["name"] == "Selected FM"
+    assert app.radio_is_playing is False
+    assert app.radio_playback_error == response.json["error"]
+
+
+def test_status_accepts_http_retry_of_https_station():
+    bose = FakeBose(playing_url={
+        "success": True,
+        "url": "http://stream.example/radio",
+    })
+    app = create_radio_app(bose)
+    app.playback.acquire("radio")
+    app.radio_station = {
+        "name": "Example FM",
+        "url": "https://stream.example/radio",
+        "favicon": "",
+    }
+    app.radio_now_playing = None
+    app.radio_metadata_updated_at = 0
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json["is_playing"] is True
+
+
+def test_status_uses_metadata_when_playing_url_is_unavailable():
+    bose = FakeBose(
+        playing_url={"success": False, "url": None},
+        fallback_metadata={
+            "success": True,
+            "url": "http://stream.example/radio",
+            "station": "Example FM",
+            "genre": "Dance",
+            "song": "All about Dance from 2000 till today!",
+            "artist": None,
+            "stream_title": "All about Dance from 2000 till today!",
+            "metadata_available": True,
+        },
+    )
+    app = create_radio_app(bose)
+    app.playback.acquire("radio")
+    app.radio_station = {
+        "name": "Example FM",
+        "url": "https://stream.example/radio",
+        "favicon": "",
+    }
+    app.radio_now_playing = None
+    app.radio_metadata_updated_at = 0
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json["is_playing"] is True
+    assert response.json["station"]["station"] == "Example FM"
+    assert response.json["station"]["title"] == "All about Dance from 2000 till today!"
+    assert bose.metadata_calls == [None]
+
+
+def test_status_shows_bose_metadata_when_stream_url_differs_from_selected_station():
+    bose = FakeBose(
+        playing_url={"success": False, "url": None},
+        fallback_metadata={
+            "success": True,
+            "url": "http://mangoradio.stream.laut.fm/mangoradio",
+            "station": "mangoradio",
+            "genre": "Electro",
+            "bitrate": "128",
+            "song": "If I Can't Have You",
+            "artist": "Shawn Mendes",
+            "stream_title": "Shawn Mendes - If I Can't Have You",
+            "metadata_available": True,
+        },
+    )
+    app = create_radio_app(bose)
+    app.playback.acquire("radio")
+    app.radio_station = {
+        "name": "Selected FM",
+        "url": "https://selected.example/radio",
+        "favicon": "",
+    }
+    app.radio_now_playing = None
+    app.radio_metadata_updated_at = 0
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json["is_playing"] is True
+    assert response.json["station"]["station"] == "mangoradio"
+    assert response.json["station"]["title"] == "Shawn Mendes - If I Can't Have You"
+    assert response.json["station"]["song"] == "If I Can't Have You"
+    assert response.json["station"]["artist"] == "Shawn Mendes"
+    assert response.json["station"]["genre"] == "Electro"
+    assert response.json["station"]["bitrate"] == "128"
+    assert response.json["station"]["stream_title"] == "Shawn Mendes - If I Can't Have You"
+    assert response.json["station"]["url"] == "http://mangoradio.stream.laut.fm/mangoradio"
+    assert bose.metadata_calls == [None]
+
+
+def test_status_assigns_radio_owner_when_bose_radio_is_detected_at_startup():
+    bose = FakeBose(
+        playing_url={"success": False, "url": None},
+        fallback_metadata={
+            "success": True,
+            "url": "http://mangoradio.stream.laut.fm/mangoradio",
+            "station": "mangoradio",
+            "genre": "Electro",
+            "bitrate": "128",
+            "song": "Fading",
+            "artist": "Alle Farben & Ilira",
+            "stream_title": "Alle Farben & Ilira - Fading",
+            "metadata_available": True,
+        },
+    )
+    app = create_radio_app(bose)
+    app.player.queue = [{"title": "Queued song"}]
+    app.player.current_song = {"title": "Current song"}
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json["is_radio"] is True
+    assert response.json["is_playing"] is True
+    assert response.json["station"]["station"] == "mangoradio"
+    assert response.json["station"]["title"] == "Alle Farben & Ilira - Fading"
+    assert response.json["station"]["song"] == "Fading"
+    assert response.json["station"]["artist"] == "Alle Farben & Ilira"
+    assert response.json["station"]["genre"] == "Electro"
+    assert response.json["station"]["bitrate"] == "128"
+    assert app.playback.owner == "radio"
+    assert app.player.queue == [{"title": "Queued song"}]
+    assert app.player.current_song == {"title": "Current song"}
+    assert app.player.autoplay_suppressed
+    assert bose.metadata_calls == [None]
+
+
+def test_stats_keeps_confirmed_bose_radio_metadata_in_player_bar(monkeypatch):
+    bose = FakeBose(
+        playing_url={"success": False, "url": None},
+        fallback_metadata={
+            "success": True,
+            "url": "http://mangoradio.stream.laut.fm/mangoradio",
+            "station": "mangoradio",
+            "genre": "Electro",
+            "bitrate": "128",
+            "song": "Fading",
+            "artist": "Alle Farben & Ilira",
+            "stream_title": "Alle Farben & Ilira - Fading",
+            "metadata_available": True,
+        },
+    )
+    app = create_radio_app(bose)
+    app.lyrics_service = type(
+        "FakeLyricsService",
+        (),
+        {
+            "enabled": False,
+            "song_start_time": None,
+            "reset": lambda self, title: None,
+            "get_lyrics_state": lambda self: {},
+        },
+    )()
+    app.incogni_mode = False
+    app.last_known_title = None
+    app.player.status = lambda: {
+        "current_song": {"title": "Youtube song"},
+        "playing": True,
+        "queue": [],
+        "autoplay_enabled": False,
+    }
+    monkeypatch.setattr(stats, "get_status", lambda: jsonify({"volume": 30}))
+    app.register_blueprint(stats.stats_bp)
+    client = app.test_client()
+
+    radio_response = client.get("/radio/status")
+    stats_response = client.get("/stats")
+
+    assert radio_response.json["is_radio"] is True
+    assert stats_response.json["owner"] == "radio"
+    assert stats_response.json["is_radio"] is True
+    assert stats_response.json["is_playing"] is True
+    assert stats_response.json["now_playing"]["title"] == "Alle Farben & Ilira - Fading"
+
+
+def test_status_remains_non_radio_for_other_playback_without_bose_metadata():
+    bose = FakeBose(
+        playing_url={"success": False, "url": None},
+        fallback_metadata={"success": False, "url": None},
+    )
+    app = create_radio_app(bose)
+    app.playback.acquire("youtube")
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json == {"is_radio": False}
+    assert app.playback.owner == "youtube"
+
+
+def test_failed_direct_play_is_reported_in_response_and_radio_state():
+    app = create_radio_app(FakeBose(play_result=False))
+
+    response = app.test_client().post(
+        "/radio/play",
+        json={"name": "Unavailable FM", "url": "https://stream.example/unavailable"},
+    )
+
+    assert response.status_code == 502
+    assert response.json["error"]
+    assert app.radio_is_playing is False
+    assert app.radio_playback_error == response.json["error"]

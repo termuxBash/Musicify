@@ -167,22 +167,13 @@ class BoseSoundTouchWorker:
         
     def play_direct(self, stream_url):
         """
-        Try the original URL first.
-        If HTTPS fails, retry using HTTP.
+        Play HTTPS station URLs over HTTP because SoundTouch does not
+        reliably support HTTPS streams.
         """
-        success = self.trigger_upnp_stream(stream_url)
-
-        if success:
-            return True
-
         if stream_url.lower().startswith("https://"):
-            http_url = "http://" + stream_url[8:]
+            stream_url = "http://" + stream_url[8:]
 
-            print(f"[Bose Worker] Retrying with HTTP: {http_url}")
-
-            return self.trigger_upnp_stream(http_url)
-
-        return False
+        return self.trigger_upnp_stream(stream_url)
     
     def get_playing_url(self):
         """
