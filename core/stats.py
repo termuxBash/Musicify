@@ -181,7 +181,8 @@ def toggle_incogni():
 
 @stats_bp.route("/shutdown", methods=["POST"])
 def shutdown():
-    power(power_off_only=True)
+    if current_app.playback.owner != "radio":
+        power(power_off_only=True)
 
     player = getattr(current_app, "player", None)
     pid = os.getpid()

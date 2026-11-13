@@ -16,8 +16,8 @@ def _safe_path(base_dir, relative_path):
     if os.path.isabs(relative_path):
         raise ValueError("absolute paths are not allowed")
 
-    base_path = os.path.realpath(os.path.abspath(base_dir))
-    candidate_path = os.path.realpath(os.path.abspath(os.path.join(base_path, relative_path)))
+    base_path = os.path.abspath(base_dir)
+    candidate_path = os.path.abspath(os.path.join(base_path, relative_path))
 
     try:
         is_within_base = os.path.commonpath([base_path, candidate_path]) == base_path

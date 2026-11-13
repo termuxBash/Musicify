@@ -57,6 +57,17 @@ def create_power_app():
     return app
 
 
+def suppress_shutdown_thread(monkeypatch):
+    class FakeThread:
+        def __init__(self, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(stats.threading, "Thread", FakeThread)
+
+
 def test_power_button_stops_playback_and_sets_volume_to_zero(monkeypatch):
     fake_bose = FakeBose()
     monkeypatch.setattr(bose_routes, "bose", fake_bose)
@@ -106,3 +117,29 @@ def test_powering_on_does_not_clear_playback_or_zero_volume(monkeypatch):
     assert app.playback.owner == "radio"
     assert fake_bose.volume_levels == []
     assert fake_bose.power_toggles == 1
+
+
+def test_shutdown_does_not_power_off_bose_when_radio_owns_playback(monkeypatch):
+    app = create_power_app()
+    power_off_calls = []
+    monkeypatch.setattr(stats, "_power_off_bose", lambda: power_off_calls.append(True))
+    suppress_shutdown_thread(monkeypatch)
+
+    response = app.test_client().post("/shutdown")
+
+    assert response.status_code == 200
+    assert power_off_calls == []
+
+
+def test_shutdown_still_powers_off_bose_for_other_owners(monkeypatch):
+    app = create_power_app()
+    app.playback.release("radio")
+    app.playback.acquire("youtube")
+    power_off_calls = []
+    monkeypatch.setattr(stats, "_power_off_bose", lambda: power_off_calls.append(True))
+    suppress_shutdown_thread(monkeypatch)
+
+    response = app.test_client().post("/shutdown")
+
+    assert response.status_code == 200
+    assert power_off_calls == [True]
