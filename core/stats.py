@@ -5,7 +5,6 @@ It also includes routes for managing playlists and removing songs from the queue
 from time import sleep, time
 import threading
 import signal
-import re
 
 from flask import Blueprint, jsonify, request ,current_app, url_for
 import psutil
@@ -39,17 +38,6 @@ def _safe_path(base_dir, relative_path):
         raise ValueError("path escapes its base directory")
 
     return candidate_path
-
-
-def _validated_playlist_name(playlist):
-    if not isinstance(playlist, str):
-        raise ValueError("invalid playlist name")
-    name = playlist.strip()
-    if not name:
-        raise ValueError("invalid playlist name")
-    if not re.fullmatch(r"[A-Za-z0-9 _-]+", name):
-        raise ValueError("invalid playlist name")
-    return name
 
 
 @stats_bp.route("/stats")
@@ -299,8 +287,7 @@ def add_to_playlist():
 
 def _append_to_playlist(playlist, title, source=""):
     os.makedirs(PLAYLIST_DIR, exist_ok=True)
-    safe_playlist = _validated_playlist_name(playlist)
-    path = _safe_path(PLAYLIST_DIR, f"{safe_playlist}.txt")
+    path = _safe_path(PLAYLIST_DIR, f"{playlist}.txt")
 
     with open(path, "a", encoding="utf8") as playlist_file:
         playlist_file.write(f"{title}>{source}\n" if source else f"{title}\n")
@@ -308,8 +295,7 @@ def _append_to_playlist(playlist, title, source=""):
 
 def _set_radio_playlist_entry(playlist, stream_url):
     os.makedirs(PLAYLIST_DIR, exist_ok=True)
-    safe_playlist = _validated_playlist_name(playlist)
-    path = _safe_path(PLAYLIST_DIR, f"{safe_playlist}.txt")
+    path = _safe_path(PLAYLIST_DIR, f"{playlist}.txt")
 
     existing_lines = []
     if os.path.exists(path):
