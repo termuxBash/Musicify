@@ -752,7 +752,6 @@ nav {
 }
 
 .radio-play-btn,
-.radio-playlist-btn,
 .radio-star-btn,
 .radio-heart-btn {
     min-width: 38px;
@@ -767,11 +766,6 @@ nav {
 .radio-play-btn {
     padding: 0 10px;
     background: var(--search-gradient);
-}
-
-.radio-playlist-btn {
-    background: #333;
-    font-size: 1.1rem;
 }
 
 .radio-star-btn {
@@ -1633,6 +1627,53 @@ nav {
     border-radius: 20px; 
 }
 
+.now-playing-modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 14px;
+}
+
+.now-playing-modal-reconnect {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid #333;
+    border-radius: 12px;
+    background: #222;
+    cursor: pointer;
+}
+
+.now-playing-modal-reconnect:hover {
+    background: #333;
+}
+
+.now-playing-modal-reconnect:focus-visible {
+    outline: 2px solid var(--spotify-green);
+    outline-offset: 2px;
+}
+
+.now-playing-modal-reconnect img {
+    width: 18px;
+    height: 18px;
+    filter: brightness(0) invert(1);
+}
+
+.now-playing-modal-volume {
+    flex: 1;
+    min-width: 0;
+}
+
+.now-playing-modal-volume input[type="range"] {
+    flex: 1;
+    min-width: 0;
+}
+
 .vol-btn { 
     background: #333; 
     border: none; 
@@ -1643,13 +1684,13 @@ nav {
     cursor: pointer; 
 }
 
-#vol-slider { 
+.volume-cluster input[type="range"] {
     accent-color: var(--spotify-green); 
     width: 80px; 
     cursor: pointer; 
 }
 
-#vol-val { 
+.vol-val {
     font-family: monospace; 
     font-size: 0.75rem; 
     min-width: 35px; 

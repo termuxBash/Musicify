@@ -5,7 +5,7 @@ from core.bose_routes import bose_control_bp
 from core.stats import stats_bp
 from apps.local.routes import local_bp
 from apps.yt.routes import youtube_bp
-from apps.radio.routes import radio_bp
+from apps.radio.routes import initialize_radio_playback, radio_bp
 from collections import deque
 from core.bose_worker import BoseSoundTouchWorker
 from core.playback_controller import PlaybackController
@@ -13,9 +13,11 @@ from core.stream_manager import QueuePlayer
 from services.ffmpeg_service import FFmpegService
 from services.lyrics_service import LyricsService
 from core.settings import APP_HOST, APP_PORT, BOSE_IP, DEFAULT_AUTOPLAY_ENABLED, DEFAULT_INCOGNI_MODE, DEFAULT_LYRICS_ENABLED
+from core.logging_config import setup_logging
 
 
 def create_app():
+    setup_logging()
     app = Flask(__name__)
     app.config['song_queue'] = deque()
     app.config['current_song'] = None
@@ -28,6 +30,7 @@ def create_app():
     app.player = QueuePlayer(
         ffmpeg_service=FFmpegService(),
         autoplay_enabled=DEFAULT_AUTOPLAY_ENABLED,
+        flask_app=app,
         bose_worker=BoseSoundTouchWorker(
             ip_address=BOSE_IP
         )
@@ -46,6 +49,7 @@ def create_app():
     app.register_blueprint(youtube_bp, url_prefix='/youtube')
     app.register_blueprint(radio_bp, url_prefix='/radio')
     app.register_blueprint(stats_bp)
+    initialize_radio_playback(app)
     return app
 
 if __name__ == "__main__":

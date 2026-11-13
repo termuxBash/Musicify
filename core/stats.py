@@ -46,7 +46,9 @@ def stats():
     volume = bose.get("volume", 0) if bose else 0
         
     player_status = current_app.player.status()
-    radio_is_active = current_app.playback.owner == "radio"
+    playback_owner = current_app.playback.owner
+    radio_is_active = playback_owner == "radio"
+    local_is_active = playback_owner == "local"
     is_playing = (
         getattr(current_app, "radio_is_playing", False)
         if radio_is_active
@@ -63,14 +65,27 @@ def stats():
     lyrics_svc = current_app.lyrics_service
 
     # Check if a new track started playing
-    if getattr(current_app, 'last_known_title', None) != lyrics_title:
+    lyrics_context = (playback_owner, lyrics_title)
+    if getattr(current_app, "last_known_lyrics_context", None) != lyrics_context:
+        current_app.last_known_lyrics_context = lyrics_context
         current_app.last_known_title = lyrics_title
-        lyrics_svc.reset(lyrics_title)
+        if local_is_active:
+            lyrics_svc.reset(lyrics_title, max_effort="LRCLIB")
+        else:
+            lyrics_svc.reset(lyrics_title)
     # If paused, shift back the clock baseline so lyrics don't keep running ahead
     if not is_playing and lyrics_svc.song_start_time is not None:
         lyrics_svc.shift_timeline(2)  # Match front-end poll loop interval
 
     lyrics_state = lyrics_svc.get_lyrics_state()
+    show_lyrics = lyrics_svc.enabled and not radio_is_active
+    if radio_is_active:
+        lyrics_state.update({
+            "lyrics": [],
+            "current_lyric_index": None,
+            "current_lyric": "",
+            "lyrics_source": None,
+        })
 
     return jsonify({
         "cpu": int(round(psutil.cpu_percent())),
@@ -85,7 +100,7 @@ def stats():
         "is_playing": is_playing,
         "autoplay_enabled": player_status.get("autoplay_enabled", False),
         "incogni_mode": current_app.incogni_mode,
-        "show_lyrics": lyrics_svc.enabled,
+        "show_lyrics": show_lyrics,
         **lyrics_state,
     })
 @stats_bp.route("/toggle_lyrics", methods=["POST"])
@@ -99,7 +114,7 @@ def toggle_lyrics():
         lyrics_svc.reset(current_title)
     return jsonify({
         "status": "success",
-        "show_lyrics": lyrics_svc.enabled
+        "show_lyrics": lyrics_svc.enabled and current_app.playback.owner != "radio"
     })
 
 

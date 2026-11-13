@@ -361,6 +361,9 @@ class BoseSoundTouchWorker:
                 if match:
                     title = match.group(1).strip()
 
+                    if not title or "tracklist" in title.casefold() or "://" in title:
+                        continue
+
                     result["stream_title"] = title
                     result["metadata_available"] = True
 

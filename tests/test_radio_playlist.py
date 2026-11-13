@@ -99,17 +99,17 @@ def test_station_lookup_matches_resolved_stream_url(monkeypatch):
             assert kwargs == {"name": "example", "limit": 25}
             return [{
                 "name": "Example FM",
-                "url": "http://stream.example/live",
-                "url_resolved": "https://stream.example/live",
+                "url": "http://stream.example/example",
+                "url_resolved": "https://stream.example/example",
                 "favicon": "https://images.example/example-fm.png",
             }]
 
     monkeypatch.setattr(routes, "_radio_browser", FakeRadioBrowser())
 
-    station = routes._station_for_stream_url("https://stream.example/live")
+    station = routes._station_for_stream_url("https://stream.example/example")
 
     assert station["name"] == "Example FM"
-    assert station["url"] == "https://stream.example/live"
+    assert station["url"] == "https://stream.example/example"
     assert station["favicon"] == "https://images.example/example-fm.png"
 
 
@@ -132,6 +132,29 @@ def test_station_lookup_uses_station_slug(monkeypatch):
 
     assert station["name"] == "MANGORADIO"
     assert station["favicon"] == "https://images.example/mangoradio.png"
+
+
+def test_station_lookup_skips_mpv_stream_search(monkeypatch):
+    class FakeRadioBrowser:
+        def search(self, **kwargs):
+            raise AssertionError(f"Unexpected Radio Browser search: {kwargs}")
+
+    monkeypatch.setattr(routes, "_radio_browser", FakeRadioBrowser())
+
+    station = routes._station_for_stream_url("http://192.168.29.157:8000/mpv.ogg")
+
+    assert station["name"] == "Mpv"
+    assert station["url"] == "http://192.168.29.157:8000/mpv.ogg"
+
+
+def test_stream_station_skips_mpv_search(monkeypatch):
+    class FakeRadioBrowser:
+        def search(self, **kwargs):
+            raise AssertionError(f"Unexpected Radio Browser search: {kwargs}")
+
+    monkeypatch.setattr(routes, "_radio_browser", FakeRadioBrowser())
+
+    assert routes._stream_station("mpv", "http://192.168.29.157:8000/mpv.ogg") is None
 
 
 def test_station_lookup_uses_radio_thumbnail_when_art_is_unavailable(monkeypatch):

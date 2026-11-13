@@ -22,7 +22,7 @@
             <button class="vol-btn" onclick="sendControl('vol_down')">-</button>
             <input type="range" id="vol-slider" min="0" max="100" value="0" oninput="setVolume(this.value)">
             <button class="vol-btn" onclick="sendControl('vol_up')">+</button>
-            <span id="vol-val">0%</span>
+            <span class="vol-val" id="vol-val">0%</span>
         </div>
         <div style="font-size:10px;color:#555;">SYSTEM CONTROL</div>
     </div>
@@ -38,5 +38,16 @@
             <span class="now-playing-lyrics-source" id="nowPlayingModalLyricsSource" hidden></span>
         </h2>
         <div class="now-playing-modal-lyrics" id="nowPlayingModalLyrics">No lyrics available</div>
+        <div class="now-playing-modal-controls">
+            <button class="now-playing-modal-reconnect" type="button" onclick="reconnectStream()" aria-label="Reconnect stream" title="Reconnect stream">
+                <img src="/static/repeat-solid-full.svg" alt="">
+            </button>
+            <div class="volume-cluster now-playing-modal-volume">
+                <button class="vol-btn" type="button" onclick="sendControl('vol_down')" aria-label="Decrease volume">-</button>
+                <input type="range" min="0" max="100" value="0" oninput="setVolume(this.value)" aria-label="Volume">
+                <button class="vol-btn" type="button" onclick="sendControl('vol_up')" aria-label="Increase volume">+</button>
+                <span class="vol-val">0%</span>
+            </div>
+        </div>
     </div>
 </div>

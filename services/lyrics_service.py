@@ -158,7 +158,7 @@ class LyricsService:
         self._lock = threading.Lock()
         self._generation = 0
 
-    def reset(self, song_title):
+    def reset(self, song_title, max_effort=None):
         """Reset the timeline and fetch lyrics asynchronously for a new track."""
         with self._lock:
             self._generation += 1
@@ -173,7 +173,7 @@ class LyricsService:
 
         threading.Thread(
             target=self._load_lyrics,
-            args=(song_title, generation),
+            args=(song_title, generation, max_effort),
             daemon=True,
         ).start()
 
@@ -198,10 +198,12 @@ class LyricsService:
                 self.current_lyrics = lyrics
                 self.lyrics_source = source
 
-    def _load_lyrics(self, song_title, generation):
+    def _load_lyrics(self, song_title, generation, max_effort=None):
         with self._lock:
             lyrics_effort = self.lyrics_effort
         max_step = LYRICS_EFFORT_LEVELS.index(lyrics_effort)
+        if max_effort is not None:
+            max_step = min(max_step, LYRICS_EFFORT_LEVELS.index(max_effort))
 
         clean_query = re.sub(r"\(.*?\)|\[.*?\]", "", song_title)
         clean_query = re.sub(

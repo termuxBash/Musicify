@@ -763,15 +763,15 @@ function filterTable() {
     document.getElementById("recordCount").textContent = `${visible} records found`;
     requestAnimationFrame(autoScrollSongContainers);
 }
-let sortColumn = 'id';
-let sortAsc = true;
+let sortColumn = 'datetime';
+let sortAsc = false;
 
 function setSort(column) {
     if (sortColumn === column) {
         sortAsc = !sortAsc;
     } else {
         sortColumn = column;
-        sortAsc = true;
+        sortAsc = column !== 'datetime';
     }
     renderTable();
     updateHeaderIndicators();

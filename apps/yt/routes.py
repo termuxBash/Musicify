@@ -22,7 +22,6 @@ import random
 import requests # type: ignore
 
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Allowlist pattern: only alphanumeric + underscores, must not be empty

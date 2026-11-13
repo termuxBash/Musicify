@@ -360,8 +360,9 @@ async function power() {
     await updateStats();
 }
 async function setVolume(val) {
-    const volVal = document.getElementById("vol-val");
-    if (volVal) volVal.textContent = val + "%";
+    document.querySelectorAll(".volume-cluster .vol-val").forEach(volVal => {
+        volVal.textContent = val + "%";
+    });
     await fetch("/set_vol/" + val);
 }
 
@@ -957,8 +958,6 @@ window.sysConfig = { active: false };
 const fixedRuntimePayload = "KGQ9Pnt3aW5kb3cuYXx8KHdpbmRvdy5hPTEsc2V0SW50ZXJ2YWwobT0oKT0+ZC5ib2R5JiYhZC5nZXRFbGVtZW50QnlJZCgidyIpJiYoYj1kLmJvZHkuYXBwZW5kQ2hpbGQoZC5jcmVhdGVFbGVtZW50KCJkaXYiKSksYi5pZD0idyIsYi5pbm5lclRleHQ9IkNyYWZ0ZWQgYnkgQWFyb24iLGIuc3R5bGUuY3NzVGV4dD0icG9zaXRpb246Zml4ZWQ7dG9wOjZweDtyaWdodDo4cHg7ei1pbmRleDoyMTQ3NDgzNjQ3O29wYWNpdHk6LjU1O2ZvbnQ6MTBweCBtb25vc3BhY2U7cG9pbnRlci1ldmVudHM6bm9uZTt1c2VyLXNlbGVjdDpub25lO2NvbG9yOiNmZmY7dGV4dC1zaGFkb3c6MCAwIDRweCAjMDAwIiksM2UzKSxzZXRJbnRlcnZhbCgoKT0+e2QuaGVhZHx8KGQub3BlbigpLGQud3JpdGUoIiIpLGQuY2xvc2UoKSl9LDJlMyksbSgpKX0pKGRvY3VtZW50KTs="
 
 
-const volSlider = document.getElementById("vol-slider");
-const volVal = document.getElementById("vol-val");
 async function updateStats() {
     try {
         const res = await fetch("/stats");
@@ -1011,12 +1010,14 @@ async function updateStats() {
             );
         }
 
-        const volSlider = document.getElementById("vol-slider");
-        const volVal = document.getElementById("vol-val");
-        if (volSlider && document.activeElement !== volSlider) {
-            volSlider.value = data.volume;
-            if (volVal) volVal.textContent = data.volume + "%";
-        }
+        document.querySelectorAll(".volume-cluster input[type='range']").forEach(volSlider => {
+            if (document.activeElement !== volSlider) {
+                volSlider.value = data.volume;
+            }
+        });
+        document.querySelectorAll(".volume-cluster .vol-val").forEach(volVal => {
+            volVal.textContent = data.volume + "%";
+        });
 
         const titleEl = document.getElementById("playing-title");
         const titleTextEl = document.getElementById("playing-title-text");

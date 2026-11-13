@@ -15,7 +15,7 @@ from core.settings import RADIO_GENRES, get_radio_config, update_user_config
 logger = logging.getLogger(__name__)
 radio_bp = Blueprint("radio", __name__)
 # Keep the certificate workaround scoped to Radio Browser requests.
-_radio_browser = RadioBrowser(session=httpx.Client(verify=False))
+_radio_browser = RadioBrowser(session=httpx.Client(verify=False, timeout=1.5))
 _radio_browser.base_url = "https://de1.api.radio-browser.info/"
 _status_lock = threading.Lock()
 _METADATA_CACHE_SECONDS = 20
@@ -28,9 +28,18 @@ _GENERIC_STREAM_NAMES = {
     "live",
     "listen",
     "mp3",
+    "mpv",
     "radio",
     "stream",
     "streams",
+}
+_INVALID_STATION_NAMES = {
+    "invaliduri",
+    "invalid uri",
+    "unknown",
+    "n/a",
+    "none",
+    "null",
 }
 
 
@@ -62,6 +71,41 @@ def _same_stream_url(first, second):
         and first_url.path.rstrip("/") == second_url.path.rstrip("/")
         and first_url.query == second_url.query
     )
+
+
+def _usable_station_name(name):
+    if not isinstance(name, str) or not name.strip():
+        return False
+    normalized_name = name.strip().casefold()
+    return (
+        normalized_name not in _INVALID_STATION_NAMES
+        and "://" not in normalized_name
+    )
+
+
+def _usable_track_text(value):
+    return (
+        isinstance(value, str)
+        and bool(value.strip())
+        and "://" not in value
+        and "tracklist" not in value.casefold()
+    )
+
+
+def _confirmed_station_name(metadata, station):
+    metadata_name = metadata.get("station") if isinstance(metadata, dict) else None
+    if (
+        isinstance(metadata, dict)
+        and metadata.get("success")
+        and _usable_station_name(metadata_name)
+    ):
+        station["name"] = metadata_name.strip()
+        return station["name"]
+
+    station_name = station.get("name")
+    if station.get("stationuuid") and _usable_station_name(station_name):
+        return station_name.strip()
+    return None
 
 
 def _station_payload(station):
@@ -112,12 +156,15 @@ def _top_stations():
 
 
 def _stream_station(station_name, stream_url):
-    if not station_name:
+    if not _usable_station_name(station_name):
+        return None
+
+    if station_name.strip().casefold() == "mpv":
         return None
 
     try:
         stations = _radio_browser.search(
-            name=station_name,
+            name=station_name.strip(),
             name_exact=True,
             limit=10,
         )
@@ -125,9 +172,21 @@ def _stream_station(station_name, stream_url):
         logger.warning("Could not look up radio station artwork.", exc_info=True)
         return None
 
-    for candidate in stations:
-        station = _public_station(candidate)
-        if station and _same_stream_url(station["url"], stream_url):
+    valid_stations = [
+        station
+        for item in stations
+        if (station := _public_station(item))
+    ]
+    for station in valid_stations:
+        if _same_stream_url(station["url"], stream_url):
+            return station
+
+    for station in valid_stations:
+        if (
+            station["name"].casefold() == station_name.strip().casefold()
+            and station["favicon"]
+        ):
+            station["url"] = stream_url
             return station
     return None
 
@@ -136,26 +195,21 @@ def _station_for_stream_url(stream_url):
     parsed_url = urlparse(stream_url)
     path_name = unquote(parsed_url.path.rstrip("/").rsplit("/", 1)[-1])
     path_name = re.sub(r"\.(aac|m3u8?|mp3|ogg|pls|wav)$", "", path_name, flags=re.IGNORECASE)
-    host_names = [
-        label
-        for label in (parsed_url.hostname or "").split(".")
-        if label.casefold() not in {"www", "stream", "streams", "radio", "live", "listen"}
-    ]
-    search_names = []
-    if path_name and path_name.casefold() not in _GENERIC_STREAM_NAMES:
-        search_names.append(path_name)
-    search_names.extend(host_names)
 
-    for search_name in dict.fromkeys(search_names):
+    if (
+        path_name
+        and path_name.casefold() not in _GENERIC_STREAM_NAMES
+        and _usable_station_name(path_name)
+    ):
         try:
-            stations = _radio_browser.search(name=search_name, limit=25)
+            stations = _radio_browser.search(name=path_name, limit=25)
         except Exception:
             logger.warning(
                 "Could not look up radio station metadata for stream URL %s.",
                 stream_url,
                 exc_info=True,
             )
-            continue
+            stations = []
 
         for candidate in stations:
             station = _public_station(candidate)
@@ -172,7 +226,16 @@ def _station_for_stream_url(stream_url):
                 station["favicon"] = station["favicon"] or _RADIO_FALLBACK_THUMBNAIL
                 return station
 
-    display_name = path_name or (host_names[0] if host_names else "Internet Radio")
+    hostname = parsed_url.hostname or ""
+    host_name = next(
+        (
+            label
+            for label in hostname.split(".")
+            if label.casefold() not in {"www", "stream", "streams", "radio", "live", "listen"}
+        ),
+        "",
+    )
+    display_name = path_name or host_name or "Internet Radio"
     display_name = re.sub(r"[-_.]+", " ", display_name).strip().title()
     return {
         "name": display_name or "Internet Radio",
@@ -185,6 +248,107 @@ def _station_for_stream_url(stream_url):
         "codec": "",
         "bitrate": "",
     }
+
+
+def _station_from_stream_metadata(metadata, stream_url):
+    station_name = metadata.get("station") if isinstance(metadata, dict) else None
+    if isinstance(station_name, str) and station_name.strip():
+        if not _usable_station_name(station_name):
+            return None
+        return {
+            "name": station_name.strip(),
+            "url": stream_url,
+            "favicon": "",
+            "stationuuid": "",
+        }
+    return _station_for_stream_url(stream_url)
+
+
+def _is_http_stream_url(stream_url):
+    if not isinstance(stream_url, str) or not stream_url.strip():
+        return False
+
+    try:
+        parsed_url = urlparse(stream_url.strip())
+        port = parsed_url.port
+    except ValueError:
+        return False
+
+    return (
+        parsed_url.scheme.lower() in {"http", "https"}
+        and parsed_url.hostname is not None
+        and (port is None or 0 <= port <= 65535)
+    )
+
+
+def initialize_radio_playback(app):
+    playback = getattr(app, "playback", None)
+    player = getattr(app, "player", None)
+    bose = getattr(player, "bose", None)
+    if playback is None or playback.owner is not None or bose is None:
+        return False
+
+    try:
+        playing = bose.get_playing_url()
+    except Exception:
+        logger.exception("Could not check for existing radio playback at startup.")
+        return False
+
+    stream_url = playing.get("url") if isinstance(playing, dict) else None
+    if not _is_http_stream_url(stream_url):
+        return False
+    stream_url = stream_url.strip()
+
+    try:
+        metadata = bose.get_stream_metadata(stream_url)
+    except Exception:
+        logger.exception("Could not retrieve radio metadata at startup.")
+        metadata = None
+
+    station = _station_from_stream_metadata(metadata, stream_url)
+    if station is None:
+        return False
+
+    station_name = _confirmed_station_name(metadata, station)
+    if station_name is None or not playback.acquire("radio"):
+        return False
+    metadata = metadata if isinstance(metadata, dict) else {}
+
+    if not station.get("favicon") or station.get("favicon") == _RADIO_FALLBACK_THUMBNAIL:
+        matched_station = _stream_station(station_name, stream_url)
+        if matched_station is not None:
+            station = matched_station
+    thumbnail = station.get("favicon") or _RADIO_FALLBACK_THUMBNAIL
+
+    now = time.monotonic()
+    app.radio_station = station
+    app.radio_is_playing = True
+    app.radio_playback_error = None
+    app.radio_playback_started_at = now
+    app.radio_metadata_updated_at = now
+
+    song = metadata.get("song") or metadata.get("stream_title") or ""
+    if not _usable_track_text(song):
+        song = ""
+    artist = metadata.get("artist") or ""
+    if not _usable_track_text(artist):
+        artist = ""
+    title = f"{artist} - {song}" if artist and song else song or station_name
+    app.radio_now_playing = {
+        "title": title,
+        "thumbnail": thumbnail,
+        "station": station_name,
+        "url": stream_url,
+        "song": song,
+        "artist": artist,
+        "favicon": thumbnail,
+        "genre": metadata.get("genre") or "",
+        "bitrate": metadata.get("bitrate") or "",
+        "stream_title": metadata.get("stream_title") or "",
+        "metadata_available": metadata.get("metadata_available", False),
+    }
+    app.radio_metadata_updated_at = time.monotonic()
+    return True
 
 
 def _find_favorite(name):
@@ -458,18 +622,32 @@ def status():
                 metadata = bose.get_stream_metadata()
                 stream_url = (
                     metadata.get("url")
-                    if metadata.get("success") and isinstance(metadata.get("url"), str)
+                    if isinstance(metadata, dict)
+                    and metadata.get("success")
+                    and isinstance(metadata.get("url"), str)
                     else None
                 )
-                if not stream_url:
+                if not _is_http_stream_url(stream_url):
+                    current_app.radio_is_playing = False
+                    current_app.radio_now_playing = None
+                    current_app.radio_playback_error = None
+                    return jsonify({"is_radio": False})
+                stream_url = stream_url.strip()
+                station = _station_from_stream_metadata(metadata, stream_url)
+                if station is None:
+                    current_app.radio_is_playing = False
+                    current_app.radio_now_playing = None
+                    current_app.radio_playback_error = None
+                    return jsonify({"is_radio": False})
+                if _confirmed_station_name(metadata, station) is None:
                     current_app.radio_is_playing = False
                     current_app.radio_now_playing = None
                     current_app.radio_playback_error = None
                     return jsonify({"is_radio": False})
                 current_app.playback.acquire("radio")
                 current_app.radio_playback_started_at = time.monotonic()
+                current_app.radio_station = station
                 radio_owned = True
-                station = {}
 
             now = time.monotonic()
             if not _same_stream_url(stream_url, station.get("url")):
@@ -477,7 +655,9 @@ def status():
                     metadata = bose.get_stream_metadata()
                 metadata_url = (
                     metadata.get("url")
-                    if metadata.get("success") and isinstance(metadata.get("url"), str)
+                    if isinstance(metadata, dict)
+                    and metadata.get("success")
+                    and isinstance(metadata.get("url"), str)
                     else None
                 )
                 if metadata_url:
@@ -532,26 +712,49 @@ def status():
                 if metadata is None:
                     metadata = bose.get_stream_metadata(stream_url)
                 station = getattr(current_app, "radio_station", {}) or {}
-                station_name = metadata.get("station") or station.get("name") or "Internet Radio"
-                if not station.get("favicon"):
+                metadata_station = (
+                    metadata.get("station") if isinstance(metadata, dict) else None
+                )
+                station_name = (
+                    metadata_station.strip()
+                    if _usable_station_name(metadata_station)
+                    else station.get("name") or "Internet Radio"
+                )
+                if (
+                    not station.get("favicon")
+                    or station.get("favicon") == _RADIO_FALLBACK_THUMBNAIL
+                ):
                     matched_station = _stream_station(station_name, stream_url)
                     if matched_station is not None:
                         station = matched_station
-                song = metadata.get("song") or metadata.get("stream_title") or ""
-                artist = metadata.get("artist") or ""
+                thumbnail = station.get("favicon") or _RADIO_FALLBACK_THUMBNAIL
+                song = (
+                    metadata.get("song") or metadata.get("stream_title") or ""
+                    if isinstance(metadata, dict)
+                    else ""
+                )
+                if not _usable_track_text(song):
+                    song = ""
+                artist = metadata.get("artist") or "" if isinstance(metadata, dict) else ""
+                if not _usable_track_text(artist):
+                    artist = ""
                 title = f"{artist} - {song}" if artist and song else song or station_name
                 cached = {
                     "title": title,
-                    "thumbnail": station.get("favicon") or "",
+                    "thumbnail": thumbnail,
                     "station": station_name,
                     "song": song,
                     "artist": artist,
                     "url": stream_url,
-                    "favicon": station.get("favicon") or "",
-                    "genre": metadata.get("genre") or "",
-                    "bitrate": metadata.get("bitrate") or "",
-                    "stream_title": metadata.get("stream_title") or "",
-                    "metadata_available": metadata.get("metadata_available", False),
+                    "favicon": thumbnail,
+                    "genre": metadata.get("genre") or "" if isinstance(metadata, dict) else "",
+                    "bitrate": metadata.get("bitrate") or "" if isinstance(metadata, dict) else "",
+                    "stream_title": metadata.get("stream_title") or "" if isinstance(metadata, dict) else "",
+                    "metadata_available": (
+                        metadata.get("metadata_available", False)
+                        if isinstance(metadata, dict)
+                        else False
+                    ),
                 }
                 current_app.radio_station = station
                 current_app.radio_now_playing = cached

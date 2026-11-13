@@ -186,8 +186,8 @@ function renderRadioStations(stations) {
         play.addEventListener("click", () => playRadioStation(station, play));
         const addToPlaylist = document.createElement("button");
         addToPlaylist.type = "button";
-        addToPlaylist.className = "radio-playlist-btn";
-        addToPlaylist.textContent = "♫";
+        addToPlaylist.className = "playlist-btn";
+        addToPlaylist.textContent = "🎶️";
         addToPlaylist.title = "Add to playlist";
         addToPlaylist.setAttribute("aria-label", `Add ${station.name} to a playlist`);
         addToPlaylist.addEventListener("click", () => openPlaylistMenu({

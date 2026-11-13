@@ -90,6 +90,193 @@ def test_play_forces_radio_ownership_and_uses_direct_play():
     assert not app.player.autoplay_suppressed
 
 
+def test_startup_detects_radio_and_populates_shared_player_state(monkeypatch):
+    stream_url = "http://mangoradio.stream.laut.fm/mangoradio"
+    bose = FakeBose(
+        playing_url={"success": False, "url": stream_url},
+    )
+    app = create_radio_app(bose)
+    monkeypatch.setattr(
+        routes,
+        "_stream_station",
+        lambda name, url: {
+            "name": name,
+            "url": url,
+            "favicon": "https://images.example/mango-radio.png",
+        },
+    )
+
+    assert routes.initialize_radio_playback(app)
+
+    assert app.playback.owner == "radio"
+    assert app.player.autoplay_suppressed
+    assert bose.metadata_calls == [stream_url]
+    assert app.radio_is_playing is True
+    assert app.radio_now_playing == {
+        "title": "Test Artist - Test Song",
+        "thumbnail": "https://images.example/mango-radio.png",
+        "station": "Example FM",
+        "url": stream_url,
+        "song": "Test Song",
+        "artist": "Test Artist",
+        "favicon": "https://images.example/mango-radio.png",
+        "genre": "",
+        "bitrate": "",
+        "stream_title": "",
+        "metadata_available": False,
+    }
+
+    app.lyrics_service = type(
+        "FakeLyricsService",
+        (),
+        {
+            "enabled": False,
+            "song_start_time": None,
+            "reset": lambda self, title: None,
+            "get_lyrics_state": lambda self: {},
+        },
+    )()
+    app.incogni_mode = False
+    app.last_known_title = None
+    app.player.status = lambda: {
+        "current_song": {"title": "Youtube song"},
+        "playing": True,
+        "queue": [],
+        "autoplay_enabled": False,
+    }
+    monkeypatch.setattr(stats, "get_status", lambda: jsonify({"volume": 30}))
+    app.register_blueprint(stats.stats_bp)
+    stats_response = app.test_client().get("/stats")
+
+    assert stats_response.json["owner"] == "radio"
+    assert stats_response.json["is_radio"] is True
+    assert stats_response.json["now_playing"]["thumbnail"] == "https://images.example/mango-radio.png"
+    assert stats_response.json["now_playing"]["station"] == "Example FM"
+    assert stats_response.json["now_playing"]["song"] == "Test Song"
+
+
+def test_startup_ignores_invalid_stream_urls_and_existing_owner(monkeypatch):
+    invalid_urls = (
+        "ftp://stream.example/radio",
+        "http:///radio",
+        "http://stream.example:invalid/radio",
+    )
+    for stream_url in invalid_urls:
+        bose = FakeBose(playing_url={"success": True, "url": stream_url})
+        app = create_radio_app(bose)
+
+        assert not routes.initialize_radio_playback(app)
+        assert app.playback.owner is None
+        assert bose.metadata_calls == []
+
+    bose = FakeBose()
+    app = create_radio_app(bose)
+    app.playback.acquire("youtube")
+    monkeypatch.setattr(
+        routes,
+        "_station_for_stream_url",
+        lambda url: {"name": "Example FM", "url": url, "favicon": ""},
+    )
+
+    assert not routes.initialize_radio_playback(app)
+    assert app.playback.owner == "youtube"
+    assert bose.metadata_calls == []
+
+
+def test_startup_leaves_unrecognized_invalid_uri_stream_idle(monkeypatch):
+    stream_url = "https://stream.example/live"
+    bose = FakeBose(
+        playing_url={"success": True, "url": stream_url},
+    )
+    bose.get_stream_metadata = lambda url=None: {
+        "success": True,
+        "url": url,
+        "station": "Invaliduri",
+        "song": None,
+        "artist": None,
+        "stream_title": "Tracklist: https://example.com/",
+    }
+    app = create_radio_app(bose)
+    searches = []
+    monkeypatch.setattr(routes._radio_browser, "search", lambda **kwargs: searches.append(kwargs))
+
+    assert not routes.initialize_radio_playback(app)
+
+    assert app.playback.owner is None
+    assert not app.player.autoplay_suppressed
+    assert not hasattr(app, "radio_now_playing")
+    assert searches == []
+
+
+def test_status_does_not_claim_invaliduri_as_radio(monkeypatch):
+    stream_url = "http://invalidHost.com/invalidUri.mp3"
+    bose = FakeBose(
+        playing_url={"success": True, "url": stream_url},
+        fallback_metadata={
+            "success": True,
+            "url": stream_url,
+            "station": "Invaliduri",
+            "song": None,
+            "artist": None,
+            "stream_title": "Invaliduri",
+        },
+    )
+    app = create_radio_app(bose)
+    searches = []
+    monkeypatch.setattr(routes._radio_browser, "search", lambda **kwargs: searches.append(kwargs))
+    monkeypatch.setattr(stats, "get_status", lambda: jsonify({"volume": 30}))
+    app.register_blueprint(stats.stats_bp)
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json == {"is_radio": False}
+    assert app.playback.owner is None
+    assert app.radio_now_playing is None
+    assert searches == []
+
+    app.player.status = lambda: {
+        "current_song": None,
+        "playing": False,
+        "queue": [],
+        "autoplay_enabled": False,
+    }
+    app.lyrics_service = type(
+        "FakeLyricsService",
+        (),
+        {
+            "enabled": False,
+            "song_start_time": None,
+            "reset": lambda self, title: None,
+            "get_lyrics_state": lambda self: {},
+        },
+    )()
+    app.incogni_mode = False
+    app.last_known_title = None
+
+    stats_response = app.test_client().get("/stats")
+
+    assert stats_response.json["owner"] is None
+    assert stats_response.json["is_radio"] is False
+    assert stats_response.json["now_playing"] is None
+
+
+def test_invalid_url_segments_are_not_used_as_station_search_terms(monkeypatch):
+    searches = []
+    monkeypatch.setattr(
+        routes._radio_browser,
+        "search",
+        lambda **kwargs: searches.append(kwargs),
+    )
+
+    station = routes._station_for_stream_url(
+        "http://invalidHost.com/invalidUri.mp3"
+    )
+
+    assert station["stationuuid"] == ""
+    assert searches == []
+
+
 def test_numbered_route_plays_saved_station_and_returns_to_radio_page(monkeypatch):
     bose = FakeBose()
     app = create_radio_app(bose)
@@ -632,6 +819,55 @@ def test_status_uses_stream_url_lookup_for_detected_station_thumbnail(monkeypatc
         "name_exact": True,
         "limit": 10,
     }]
+
+
+def test_status_retries_station_artwork_when_cached_favicon_is_fallback(monkeypatch):
+    stream_url = "https://stream.example/radio"
+    bose = FakeBose(playing_url={"success": True, "url": stream_url})
+    app = create_radio_app(bose)
+    app.playback.acquire("radio")
+    app.radio_station = {
+        "name": "Example FM",
+        "url": stream_url,
+        "favicon": routes._RADIO_FALLBACK_THUMBNAIL,
+    }
+    app.radio_now_playing = None
+    app.radio_metadata_updated_at = 0
+    monkeypatch.setattr(
+        routes,
+        "_stream_station",
+        lambda name, url: {
+            "name": name,
+            "url": url,
+            "favicon": "https://images.example/example-fm.png",
+        },
+    )
+
+    response = app.test_client().get("/radio/status")
+
+    assert response.status_code == 200
+    assert response.json["station"]["thumbnail"] == "https://images.example/example-fm.png"
+
+
+def test_stream_station_reuses_card_artwork_when_stream_url_redirects(monkeypatch):
+    monkeypatch.setattr(
+        routes._radio_browser,
+        "search",
+        lambda **kwargs: [{
+            "name": "Example FM",
+            "url": "https://origin.example/stream",
+            "favicon": "https://images.example/example-fm.png",
+        }],
+    )
+
+    station = routes._stream_station(
+        "Example FM",
+        "https://redirect.example/live",
+    )
+
+    assert station["name"] == "Example FM"
+    assert station["url"] == "https://redirect.example/live"
+    assert station["favicon"] == "https://images.example/example-fm.png"
 
 
 def test_stats_keeps_confirmed_bose_radio_metadata_in_player_bar(monkeypatch):

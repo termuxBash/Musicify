@@ -17,9 +17,16 @@ logger = logging.getLogger(__name__)
 
 class QueuePlayer:
 
-    def __init__(self, ffmpeg_service, bose_worker=None, autoplay_enabled=DEFAULT_AUTOPLAY_ENABLED):
+    def __init__(
+        self,
+        ffmpeg_service,
+        bose_worker=None,
+        autoplay_enabled=DEFAULT_AUTOPLAY_ENABLED,
+        flask_app=None,
+    ):
         self.ffmpeg = ffmpeg_service
         self.bose = bose_worker
+        self.flask_app = flask_app
 
         self.queue = []
         self.lock = threading.Lock()
@@ -185,25 +192,29 @@ class QueuePlayer:
         # ---- PATH A: LOCAL OWNER RANDOM PICK ----
         if current_owner == "local":
             try:
-                # Import from your blueprint context directly 
                 from apps.local.routes import get_random_local_track_payload
                 autoplays_to_append = []
-                
-                # Fetch up to 3 unique random local tracks
-                for _ in range(15):  # Give extra cycles to avoid duplicates
-                    track_payload = get_random_local_track_payload()
-                    if track_payload:
-                        # Ensure we do not immediately queue the track that just started playing
-                        if track_payload["url"] == song_url:
-                            continue
-                        if any(t["url"] == track_payload["url"] for t in autoplays_to_append):
-                            continue
-                            
-                        autoplays_to_append.append(track_payload)
-                        logger.info(f"📦 Local Autoplay picked random track: {track_payload.get('title')}")
-                        
-                        if len(autoplays_to_append) >= 3:
-                            break
+
+                if self.flask_app is None:
+                    raise RuntimeError("Local autoplay requires the Flask application instance.")
+
+                # url_for needs a request context when SERVER_NAME is unset.
+                with self.flask_app.test_request_context():
+                    # Fetch up to 3 unique random local tracks
+                    for _ in range(15):  # Give extra cycles to avoid duplicates
+                        track_payload = get_random_local_track_payload()
+                        if track_payload:
+                            # Ensure we do not immediately queue the track that just started playing
+                            if track_payload["url"] == song_url:
+                                continue
+                            if any(t["url"] == track_payload["url"] for t in autoplays_to_append):
+                                continue
+
+                            autoplays_to_append.append(track_payload)
+                            logger.info(f"📦 Local Autoplay picked random track: {track_payload.get('title')}")
+
+                            if len(autoplays_to_append) >= 3:
+                                break
                             
                 if autoplays_to_append:
                     if self._enqueue_autoplay(autoplays_to_append):

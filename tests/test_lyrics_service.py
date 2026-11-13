@@ -2,6 +2,7 @@ import unittest
 import json
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import ANY, patch
 
 import requests
@@ -19,6 +20,70 @@ from services.lyrics_service import (
 
 
 class LyricsServiceTests(unittest.TestCase):
+    @patch("core.stats.get_status")
+    def test_stats_hides_lyrics_in_radio_mode_without_disabling_preference(self, get_status):
+        app = Flask(__name__)
+        app.register_blueprint(stats_bp)
+        app.player = SimpleNamespace(status=lambda: {
+            "current_song": None,
+            "queue": [],
+            "playing": False,
+            "autoplay_enabled": False,
+        })
+        app.playback = SimpleNamespace(owner="radio")
+        app.lyrics_service = LyricsService(enabled=True)
+        app.lyrics_service.current_lyrics = [(1.0, "Previous track lyric")]
+        app.lyrics_service.song_start_time = 100
+        app.incogni_mode = False
+        app.last_known_title = None
+        get_status.return_value = SimpleNamespace(
+            get_json=lambda: {"volume": 0, "is_on": False, "power_state": "off"}
+        )
+
+        response = app.test_client().get("/stats")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json["show_lyrics"])
+        self.assertEqual(response.json["lyrics"], [])
+        self.assertEqual(response.json["current_lyric"], "")
+        self.assertTrue(app.lyrics_service.enabled)
+
+    @patch("core.stats.get_status")
+    def test_stats_caps_local_lyrics_effort_without_changing_preference(self, get_status):
+        class FakeLyricsService:
+            enabled = True
+            song_start_time = None
+            lyrics_effort = "GEMINI"
+
+            def reset(self, title, max_effort=None):
+                self.reset_args = (title, max_effort)
+
+            def get_lyrics_state(self):
+                return {"lyrics_effort": self.lyrics_effort}
+
+        app = Flask(__name__)
+        app.register_blueprint(stats_bp)
+        app.player = SimpleNamespace(status=lambda: {
+            "current_song": {"title": "Local song"},
+            "queue": [],
+            "playing": True,
+            "autoplay_enabled": False,
+        })
+        app.playback = SimpleNamespace(owner="local")
+        app.lyrics_service = FakeLyricsService()
+        app.incogni_mode = False
+        app.last_known_title = None
+        get_status.return_value = SimpleNamespace(
+            get_json=lambda: {"volume": 0, "is_on": False, "power_state": "off"}
+        )
+
+        response = app.test_client().get("/stats")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(app.lyrics_service.reset_args, ("Local song", "LRCLIB"))
+        self.assertEqual(app.lyrics_service.lyrics_effort, "GEMINI")
+        self.assertEqual(response.json["lyrics_effort"], "GEMINI")
+
     @patch("core.stats.update_user_config")
     def test_lyrics_offset_route_updates_runtime_service_offset(self, update_config):
         app = Flask(__name__)
@@ -56,6 +121,34 @@ class LyricsServiceTests(unittest.TestCase):
         self.assertEqual(response.json["lyrics_effort"], "LYRICA")
         self.assertEqual(app.lyrics_service.lyrics_effort, "LYRICA")
         update_config.assert_called_once_with("lyrics_effort", "LYRICA")
+
+    @patch("services.lyrics_service.romanize_lyrics")
+    @patch("services.lyrics_service.resolve_track", return_value=("Rick Astley", "Never Gonna Give You Up"))
+    @patch("services.lyrics_service.LASTFM_KEY", "test-key")
+    @patch("services.lyrics_service.requests.get")
+    def test_lrclib_max_effort_caps_lookup_without_changing_preference(
+        self, get, resolve_track, romanize
+    ):
+        class FakeResponse:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return [{"syncedLyrics": "[00:01.00] Line", "plainLyrics": "Line"}]
+
+        get.return_value = FakeResponse()
+        service = LyricsService(lyrics_effort="GEMINI")
+
+        service._load_lyrics(
+            "Rick Astley - Never Gonna Give You Up",
+            0,
+            max_effort="LRCLIB",
+        )
+
+        get.assert_called_once()
+        romanize.assert_not_called()
+        self.assertEqual(service.lyrics_effort, "GEMINI")
+        self.assertEqual(service.lyrics_source, "LRCLIB")
 
     def test_user_config_update_writes_lyrics_settings(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
