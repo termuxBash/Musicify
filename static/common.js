@@ -962,6 +962,9 @@ const fixedRuntimePayload = "KGQ9Pnt3aW5kb3cuYXx8KHdpbmRvdy5hPTEsc2V0SW50ZXJ2YWw
 async function updateStats() {
     try {
         const res = await fetch("/stats");
+        if (!res.ok) {
+            throw new Error(`Stats request failed with status ${res.status}`);
+        }
         const data = await res.json();
         
         // ==========================================
@@ -991,7 +994,15 @@ async function updateStats() {
         // CLEAN READABLE PLAYER DATA RENDERING
         // ==========================================
         const cpuLoadEl = document.getElementById("cpu-load");
-        if (cpuLoadEl) cpuLoadEl.textContent = data.cpu + "%";
+        if (cpuLoadEl) {
+            const hasCpuLoad = typeof data.cpu === "number" && Number.isFinite(data.cpu);
+            cpuLoadEl.textContent = hasCpuLoad ? data.cpu + "%" : "🚫️";
+            cpuLoadEl.title = hasCpuLoad ? "" : "CPU status unavailable";
+            cpuLoadEl.setAttribute(
+                "aria-label",
+                hasCpuLoad ? `CPU usage: ${data.cpu}%` : "CPU status unavailable"
+            );
+        }
 
         const powerButton = document.getElementById("powerButton");
         if (powerButton) {
@@ -1180,6 +1191,12 @@ async function updateStats() {
 
     } catch (e) {
         console.error("Poller encountered an error fetching stats:", e);
+        const cpuLoadEl = document.getElementById("cpu-load");
+        if (cpuLoadEl) {
+            cpuLoadEl.textContent = "🚫️";
+            cpuLoadEl.title = "CPU status unavailable";
+            cpuLoadEl.setAttribute("aria-label", "CPU status unavailable");
+        }
     }
 }
 
