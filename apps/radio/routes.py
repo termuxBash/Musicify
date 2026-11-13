@@ -414,7 +414,7 @@ def _play_station(station):
     return payload, None
 
 
-def _play_queued_radio(app, station):
+def _play_queued_radio(app, station):  # pydead: keep
     with app.app_context():
         _, error = _play_station(station)
         if error:
@@ -422,7 +422,7 @@ def _play_queued_radio(app, station):
 
 
 @radio_bp.record
-def _configure_radio_playback(state):
+def _configure_radio_playback(state):  # pydead: keep
     app = state.app
     app.player.radio_handler = lambda station: _play_queued_radio(app, station)
 

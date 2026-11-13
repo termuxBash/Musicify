@@ -69,7 +69,7 @@ Set these in your `.env` file to override runtime defaults:
 
 `userconfig.json` stores app-managed settings and is created or migrated by setup. It contains:
 
-- `lyrics_offset_ms`: synced lyric timing adjustment in milliseconds. Defaults to `-13000`; negative values delay lyrics and positive values advance them.
+- `lyrics_offset_online_ms` and `lyrics_offset_local_ms`: independent synced lyric timing adjustments in milliseconds. Both default to `-13000`; negative values delay lyrics and positive values advance them. Existing `lyrics_offset_ms` values are used to initialize both offsets when migrating older settings.
 - `lyrics_effort`: maximum lyrics lookup stage, one of `LRCLIB`, `LYRICA`, or `GEMINI`. These stages allow the app to use LRCLIB lyrics, then Lyrica transformations, then Gemini romanization, respectively. The default is `GEMINI`.
 - `radio`: numbered station presets (`1` through `6`), a `favorites` list populated when a station is starred, and the supported genre filters.
 

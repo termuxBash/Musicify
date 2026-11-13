@@ -58,7 +58,8 @@ class LyricsServiceTests(unittest.TestCase):
             def reset(self, title, max_effort=None):
                 self.reset_args = (title, max_effort)
 
-            def get_lyrics_state(self):
+            def get_lyrics_state(self, source="online"):
+                self.offset_source = source
                 return {"lyrics_effort": self.lyrics_effort}
 
         app = Flask(__name__)
@@ -81,21 +82,38 @@ class LyricsServiceTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(app.lyrics_service.reset_args, ("Local song", "LRCLIB"))
+        self.assertEqual(app.lyrics_service.offset_source, "local")
         self.assertEqual(app.lyrics_service.lyrics_effort, "GEMINI")
         self.assertEqual(response.json["lyrics_effort"], "GEMINI")
 
     @patch("core.stats.update_user_config")
-    def test_lyrics_offset_route_updates_runtime_service_offset(self, update_config):
+    def test_lyrics_offset_route_updates_independent_runtime_offsets(self, update_config):
         app = Flask(__name__)
         app.register_blueprint(stats_bp)
-        app.lyrics_service = LyricsService(enabled=True, offset_ms=-3000)
+        app.lyrics_service = LyricsService(
+            enabled=True,
+            offset_ms=-3000,
+            local_offset_ms=-5000,
+        )
 
         response = app.test_client().post("/lyrics_offset", json={"offset_ms": 1250})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["lyrics_offset_ms"], 1250)
+        self.assertEqual(response.json["lyrics_offset_online_ms"], 1250)
         self.assertEqual(app.lyrics_service.offset_ms, 1250)
-        update_config.assert_called_once_with("lyrics_offset_ms", 1250)
+        self.assertEqual(app.lyrics_service.get_lyrics_state("local")["lyrics_offset_ms"], -5000)
+        update_config.assert_called_once_with("lyrics_offset_online_ms", 1250)
+
+        local_response = app.test_client().post(
+            "/lyrics_offset",
+            json={"offset_ms": 900, "source": "local"},
+        )
+
+        self.assertEqual(local_response.status_code, 200)
+        self.assertEqual(app.lyrics_service.get_lyrics_state("online")["lyrics_offset_ms"], 1250)
+        self.assertEqual(app.lyrics_service.get_lyrics_state("local")["lyrics_offset_ms"], 900)
+        update_config.assert_called_with("lyrics_offset_local_ms", 900)
 
     def test_lyrics_offset_route_rejects_non_integer_values(self):
         app = Flask(__name__)
@@ -156,19 +174,37 @@ class LyricsServiceTests(unittest.TestCase):
             original_config = settings._user_config
             try:
                 settings._user_config = {
-                    "lyrics_offset_ms": -13000,
+                    "lyrics_offset_online_ms": -13000,
+                    "lyrics_offset_local_ms": -10000,
                     "lyrics_effort": "GEMINI",
                 }
                 with patch.object(settings, "USER_CONFIG_PATH", config_path):
-                    settings.update_user_config("lyrics_offset_ms", 1250)
+                    settings.update_user_config("lyrics_offset_local_ms", 1250)
                     settings.update_user_config("lyrics_effort", "LYRICA")
 
                 self.assertEqual(
                     json.loads(config_path.read_text(encoding="utf-8")),
-                    {"lyrics_offset_ms": 1250, "lyrics_effort": "LYRICA"},
+                    {
+                        "lyrics_offset_online_ms": -13000,
+                        "lyrics_offset_local_ms": 1250,
+                        "lyrics_effort": "LYRICA",
+                    },
                 )
             finally:
                 settings._user_config = original_config
+
+    def test_legacy_config_migrates_offset_to_online_and_local(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            config_path = Path(temporary_directory) / "userconfig.json"
+            config_path.write_text(
+                json.dumps({"lyrics_offset_ms": -2400}),
+                encoding="utf-8",
+            )
+            with patch.object(settings, "USER_CONFIG_PATH", config_path):
+                config = settings._read_user_config()
+
+        self.assertEqual(config["lyrics_offset_online_ms"], -2400)
+        self.assertEqual(config["lyrics_offset_local_ms"], -2400)
 
     def test_parse_synced_lyrics_reads_lrc_timestamps(self):
         parsed = parse_synced_lyrics(
@@ -215,6 +251,20 @@ class LyricsServiceTests(unittest.TestCase):
             ],
         )
         self.assertEqual(state["lyrics_offset_ms"], 0)
+
+    def test_online_and_local_lyric_offsets_are_applied_independently(self):
+        service = LyricsService(enabled=True, offset_ms=0, local_offset_ms=-3000)
+        service.current_lyrics = [(1.0, "First line")]
+        service.song_start_time = 100
+
+        with patch("services.lyrics_service.time.time", return_value=102):
+            online_state = service.get_lyrics_state("online")
+            local_state = service.get_lyrics_state("local")
+
+        self.assertEqual(online_state["current_lyric"], "First line")
+        self.assertEqual(online_state["lyrics_offset_ms"], 0)
+        self.assertEqual(local_state["current_lyric"], "")
+        self.assertEqual(local_state["lyrics_offset_ms"], -3000)
 
     def test_negative_lyrics_offset_delays_highlighting(self):
         service = LyricsService(enabled=True, offset_ms=-3000)

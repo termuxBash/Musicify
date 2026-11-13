@@ -77,10 +77,15 @@
                 </div>
 
                 <div class="settings-popup-offset">
-                    <label class="settings-popup-label" for="lyricsOffsetMs">Lyrics offset (ms)</label>
-                    <input id="lyricsOffsetMs" class="settings-popup-number" type="number" step="100" value="-13000" onchange="setLyricsOffset(this.value)">
-                    <p class="settings-popup-help">Negative delays lyrics that appear too fast; positive advances lyrics that appear too slow.</p>
+                    <label class="settings-popup-label" for="lyricsOffsetOnlineMs">Online lyrics offset (ms)</label>
+                    <input id="lyricsOffsetOnlineMs" class="settings-popup-number" type="number" step="100" value="-13000" onchange="setLyricsOffset(this.value, 'online')">
                 </div>
+
+                <div class="settings-popup-offset">
+                    <label class="settings-popup-label" for="lyricsOffsetLocalMs">Local lyrics offset (ms)</label>
+                    <input id="lyricsOffsetLocalMs" class="settings-popup-number" type="number" step="100" value="-13000" onchange="setLyricsOffset(this.value, 'local')">
+                </div>
+                <p class="settings-popup-help">Negative delays lyrics that appear too fast; positive advances lyrics that appear too slow.</p>
 
                 <div class="settings-popup-effort">
                     <label class="settings-popup-label" for="lyricsEffort">Lyrics effort: <output id="lyricsEffortValue">GEMINI</output></label>

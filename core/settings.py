@@ -81,10 +81,26 @@ def _read_user_config():
     except (OSError, json.JSONDecodeError) as error:
         _logger.warning("Could not read userconfig.json: %s", error)
 
-    offset_ms = config.get("lyrics_offset_ms", DEFAULT_LYRICS_OFFSET_MS)
-    if type(offset_ms) is not int:
-        _logger.warning("Invalid lyrics_offset_ms in userconfig.json; using %d.", DEFAULT_LYRICS_OFFSET_MS)
-        offset_ms = DEFAULT_LYRICS_OFFSET_MS
+    legacy_offset_ms = config.pop("lyrics_offset_ms", DEFAULT_LYRICS_OFFSET_MS)
+    if type(legacy_offset_ms) is not int:
+        _logger.warning(
+            "Invalid lyrics_offset_ms in userconfig.json; using %d.",
+            DEFAULT_LYRICS_OFFSET_MS,
+        )
+        legacy_offset_ms = DEFAULT_LYRICS_OFFSET_MS
+
+    offsets = {}
+    for source in ("online", "local"):
+        key = f"lyrics_offset_{source}_ms"
+        offset_ms = config.get(key, legacy_offset_ms)
+        if type(offset_ms) is not int:
+            _logger.warning(
+                "Invalid %s in userconfig.json; using %d.",
+                key,
+                legacy_offset_ms,
+            )
+            offset_ms = legacy_offset_ms
+        offsets[key] = offset_ms
 
     effort = config.get("lyrics_effort", "GEMINI")
     if not isinstance(effort, str) or effort.upper() not in LYRICS_EFFORT_LEVELS:
@@ -93,20 +109,31 @@ def _read_user_config():
     else:
         effort = effort.upper()
 
-    return {**config, "lyrics_offset_ms": offset_ms, "lyrics_effort": effort}
+    return {**config, **offsets, "lyrics_effort": effort}
 
 
 _user_config = _read_user_config()
-LYRICS_OFFSET_MS = _user_config["lyrics_offset_ms"]
+LYRICS_OFFSET_ONLINE_MS = _user_config["lyrics_offset_online_ms"]
+LYRICS_OFFSET_LOCAL_MS = _user_config["lyrics_offset_local_ms"]
+# Keep the legacy constant as an alias for callers that still expect one offset.
+LYRICS_OFFSET_MS = LYRICS_OFFSET_ONLINE_MS
 LYRICS_EFFORT = _user_config["lyrics_effort"]
 
 
 def update_user_config(key, value):
     """Persist an app-managed setting and update the in-memory config."""
     global _user_config
-    if key == "lyrics_offset_ms":
+    update_values = {key: value}
+    if key in {"lyrics_offset_online_ms", "lyrics_offset_local_ms"}:
+        if type(value) is not int:
+            raise ValueError(f"{key} must be an integer")
+    elif key == "lyrics_offset_ms":
         if type(value) is not int:
             raise ValueError("lyrics_offset_ms must be an integer")
+        update_values = {
+            "lyrics_offset_online_ms": value,
+            "lyrics_offset_local_ms": value,
+        }
     elif key == "lyrics_effort":
         if not isinstance(value, str) or value not in LYRICS_EFFORT_LEVELS:
             raise ValueError("lyrics_effort must be LRCLIB, LYRICA, or GEMINI")
@@ -139,7 +166,7 @@ def update_user_config(key, value):
         raise ValueError(f"Unsupported userconfig setting: {key}")
 
     with _user_config_lock:
-        updated_config = {**_user_config, key: value}
+        updated_config = {**_user_config, **update_values}
         temporary_path = None
         try:
             with tempfile.NamedTemporaryFile(

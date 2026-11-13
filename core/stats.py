@@ -13,7 +13,7 @@ import os
 import logging
 from urllib.parse import urlparse
 from services.yt_service import YTService
-from core.bose_routes import check_power, ctrl
+from core.bose_routes import ctrl, power_off_bose
 from flask import current_app
 from core.settings import LYRICS_EFFORT_LEVELS, PLAYLIST_DIR, ROOT_DIR, update_user_config
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
@@ -87,7 +87,8 @@ def stats():
     if not is_playing and lyrics_svc.song_start_time is not None:
         lyrics_svc.shift_timeline(2)  # Match front-end poll loop interval
 
-    lyrics_state = lyrics_svc.get_lyrics_state()
+    lyrics_source = "local" if local_is_active else "online"
+    lyrics_state = lyrics_svc.get_lyrics_state(lyrics_source)
     show_lyrics = lyrics_svc.enabled and not radio_is_active
     if radio_is_active:
         lyrics_state.update({
@@ -132,19 +133,25 @@ def toggle_lyrics():
 def set_lyrics_offset():
     data = request.get_json()
     offset_ms = data.get("offset_ms") if isinstance(data, dict) else None
+    source = data.get("source", "online") if isinstance(data, dict) else "online"
     if type(offset_ms) is not int:
         return jsonify({"status": "error", "message": "offset_ms must be an integer"}), 400
+    if not isinstance(source, str) or source not in {"online", "local"}:
+        return jsonify({"status": "error", "message": "source must be online or local"}), 400
 
     lyrics_svc = current_app.lyrics_service
+    setting_key = f"lyrics_offset_{source}_ms"
     try:
-        update_user_config("lyrics_offset_ms", offset_ms)
+        update_user_config(setting_key, offset_ms)
     except OSError:
         logger.exception("Could not persist the lyrics offset.")
         return jsonify({"status": "error", "message": "Could not save lyrics offset."}), 500
-    lyrics_svc.set_offset(offset_ms)
+    lyrics_svc.set_offset(offset_ms, source)
     return jsonify({
         "status": "success",
+        "source": source,
         "lyrics_offset_ms": offset_ms,
+        setting_key: offset_ms,
     })
 
 
@@ -210,9 +217,7 @@ def shutdown():
     return jsonify({"status": "success", "message": "Server is shutting down..."})
 
 def _power_off_bose():
-    bose_power = check_power().get_json() if check_power else None
-    if bose_power and bose_power.get("is_on"):
-        ctrl("bose_power")
+    return power_off_bose()
 
 @stats_bp.route("/playlists")
 def playlists():
@@ -366,6 +371,22 @@ def power(power_off_only=False):
         return jsonify({"status": "success"})
 
     return ctrl("bose_power")
+
+@stats_bp.route("/poweroff", methods=["GET"])
+def poweroff():
+    current_app.player.toggle_autoplay(False)
+    owner = current_app.playback.owner
+    if owner is None:
+        current_app.playback.stop()
+    else:
+        current_app.playback.release(owner)
+
+    current_app.radio_is_playing = False
+    current_app.radio_now_playing = None
+    current_app.radio_playback_error = None
+
+    status = _power_off_bose()
+    return jsonify({"status": "success" if status else "failed"})
 
 @stats_bp.route("/stop", methods=["POST"])
 def stop():

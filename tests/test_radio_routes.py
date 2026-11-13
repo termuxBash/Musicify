@@ -133,7 +133,7 @@ def test_startup_detects_radio_and_populates_shared_player_state(monkeypatch):
             "enabled": False,
             "song_start_time": None,
             "reset": lambda self, title: None,
-            "get_lyrics_state": lambda self: {},
+            "get_lyrics_state": lambda self, source="online": {},
         },
     )()
     app.incogni_mode = False
@@ -248,7 +248,7 @@ def test_status_does_not_claim_invaliduri_as_radio(monkeypatch):
             "enabled": False,
             "song_start_time": None,
             "reset": lambda self, title: None,
-            "get_lyrics_state": lambda self: {},
+            "get_lyrics_state": lambda self, source="online": {},
         },
     )()
     app.incogni_mode = False
@@ -893,7 +893,7 @@ def test_stats_keeps_confirmed_bose_radio_metadata_in_player_bar(monkeypatch):
             "enabled": False,
             "song_start_time": None,
             "reset": lambda self, title: None,
-            "get_lyrics_state": lambda self: {},
+            "get_lyrics_state": lambda self, source="online": {},
         },
     )()
     app.incogni_mode = False

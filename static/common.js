@@ -249,8 +249,9 @@ async function toggleLyrics(){
     });
 }
 
-async function setLyricsOffset(value) {
-    const input = document.getElementById("lyricsOffsetMs");
+async function setLyricsOffset(value, source = "online") {
+    const inputId = source === "local" ? "lyricsOffsetLocalMs" : "lyricsOffsetOnlineMs";
+    const input = document.getElementById(inputId);
     const offsetMs = Number(value);
     if (!Number.isSafeInteger(offsetMs)) {
         showPopup("Lyrics offset must be a whole number of milliseconds.");
@@ -261,13 +262,13 @@ async function setLyricsOffset(value) {
         const response = await fetch("/lyrics_offset", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ offset_ms: offsetMs })
+            body: JSON.stringify({ offset_ms: offsetMs, source })
         });
         const data = await response.json();
         if (!response.ok) {
             throw new Error(data.message || "Failed to update lyrics offset.");
         }
-        if (input) input.value = data.lyrics_offset_ms;
+        if (input) input.value = data[`lyrics_offset_${source}_ms`];
         await updateStats();
     } catch (error) {
         console.error("Failed to update lyrics offset:", error);
@@ -1154,9 +1155,14 @@ async function updateStats() {
         const lyricsToggle = document.getElementById("lyricsToggle");
         if (lyricsToggle) lyricsToggle.checked = data.show_lyrics;
 
-        const lyricsOffsetInput = document.getElementById("lyricsOffsetMs");
-        if (lyricsOffsetInput && document.activeElement !== lyricsOffsetInput) {
-            lyricsOffsetInput.value = data.lyrics_offset_ms;
+        const lyricsOffsetOnlineInput = document.getElementById("lyricsOffsetOnlineMs");
+        if (lyricsOffsetOnlineInput && document.activeElement !== lyricsOffsetOnlineInput) {
+            lyricsOffsetOnlineInput.value = data.lyrics_offset_online_ms;
+        }
+
+        const lyricsOffsetLocalInput = document.getElementById("lyricsOffsetLocalMs");
+        if (lyricsOffsetLocalInput && document.activeElement !== lyricsOffsetLocalInput) {
+            lyricsOffsetLocalInput.value = data.lyrics_offset_local_ms;
         }
 
         const lyricsEffortInput = document.getElementById("lyricsEffort");

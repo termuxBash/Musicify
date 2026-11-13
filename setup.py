@@ -229,7 +229,8 @@ def write_env() -> None:
 
 def ensure_user_config() -> None:
     defaults = {
-        "lyrics_offset_ms": -13000,
+        "lyrics_offset_online_ms": -13000,
+        "lyrics_offset_local_ms": -13000,
         "lyrics_effort": "GEMINI",
         "radio": {
             **{str(number): None for number in range(1, 7)},
@@ -241,9 +242,13 @@ def ensure_user_config() -> None:
             config = json.load(config_file)
         if not isinstance(config, dict):
             raise ValueError("userconfig.json must contain a JSON object")
-        if "radio" in config:
-            return
-        config["radio"] = defaults["radio"]
+        legacy_offset = config.pop("lyrics_offset_ms", -13000)
+        if type(legacy_offset) is not int:
+            legacy_offset = -13000
+        config.setdefault("lyrics_offset_online_ms", legacy_offset)
+        config.setdefault("lyrics_offset_local_ms", legacy_offset)
+        config.setdefault("lyrics_effort", defaults["lyrics_effort"])
+        config.setdefault("radio", defaults["radio"])
     else:
         config = defaults
 

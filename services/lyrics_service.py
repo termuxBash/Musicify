@@ -16,6 +16,7 @@ from core.settings import (
     LYRICS_EFFORT,
     LYRICS_EFFORT_LEVELS,
     LYRICS_OFFSET_MS,
+    LYRICS_OFFSET_LOCAL_MS,
 )
 from services.lastfm_service import resolve_track
 
@@ -146,12 +147,16 @@ class LyricsService:
         self,
         enabled=DEFAULT_LYRICS_ENABLED,
         offset_ms=LYRICS_OFFSET_MS,
+        local_offset_ms=LYRICS_OFFSET_LOCAL_MS,
         lyrics_effort=LYRICS_EFFORT,
     ):
         self.current_lyrics = []
         self.song_start_time = None
         self.enabled = enabled
-        self.offset_ms = offset_ms
+        self.offsets_ms = {
+            "online": offset_ms,
+            "local": local_offset_ms,
+        }
         self.lyrics_effort = lyrics_effort
         self.last_sent_lyric = None
         self.lyrics_source = None
@@ -182,9 +187,11 @@ class LyricsService:
             if self.song_start_time is not None:
                 self.song_start_time += seconds
 
-    def set_offset(self, offset_ms):
+    def set_offset(self, offset_ms, source="online"):
+        if source not in self.offsets_ms:
+            raise ValueError("source must be online or local")
         with self._lock:
-            self.offset_ms = offset_ms
+            self.offsets_ms[source] = offset_ms
 
     def set_effort(self, lyrics_effort):
         with self._lock:
@@ -305,13 +312,21 @@ class LyricsService:
             return fallback_artist.strip(), fallback_track.strip()
         return None, query
 
-    def get_lyrics_state(self):
+    @property
+    def offset_ms(self):
+        """Return the online offset for compatibility with older callers."""
+        with self._lock:
+            return self.offsets_ms["online"]
+
+    def get_lyrics_state(self, source="online"):
         """Return all display lines and the line active at the current playback time."""
+        if source not in self.offsets_ms:
+            raise ValueError("source must be online or local")
         with self._lock:
             lyrics = list(self.current_lyrics)
             start_time = self.song_start_time
             enabled = self.enabled
-            offset_ms = self.offset_ms
+            offset_ms = self.offsets_ms[source]
             elapsed = (
                 time.time() - start_time + offset_ms / 1000
                 if start_time is not None
@@ -337,6 +352,8 @@ class LyricsService:
                 "current_lyric": current_lyric,
                 "lyrics_source": self.lyrics_source if enabled and lyrics else None,
                 "lyrics_offset_ms": offset_ms,
+                "lyrics_offset_online_ms": self.offsets_ms["online"],
+                "lyrics_offset_local_ms": self.offsets_ms["local"],
                 "lyrics_effort": self.lyrics_effort,
             }
 

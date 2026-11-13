@@ -16,6 +16,15 @@ bose_control_bp = Blueprint('bose_control', __name__)
 # Instantiate the single shared worker instance
 bose = BoseSoundTouchWorker(ip_address=BOSE_IP)
 
+def power_off_bose():
+    """Power off the speaker only when its current state is on."""
+    if not bose.get_status().get("is_on"):
+        return True
+
+    volume_set = bose.set_volume(0)
+    power_toggled = bose.toggle_power()
+    return volume_set and power_toggled
+
 @bose_control_bp.route("/ctrl/<cmd>")
 def ctrl(cmd):
     """Handles standard button triggers and input sources."""

@@ -969,6 +969,14 @@ nav {
     transition: margin-left 0.3s ease;
 }
 
+body.center-player-page .main-content,
+body.center-player-page .main,
+body.center-player-page .main-content.shift,
+body.center-player-page .main.shift {
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .main-content.shift, .main.shift {
     margin-left: 280px;
 }

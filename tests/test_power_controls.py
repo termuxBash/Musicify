@@ -119,6 +119,52 @@ def test_powering_on_does_not_clear_playback_or_zero_volume(monkeypatch):
     assert fake_bose.power_toggles == 1
 
 
+def test_poweroff_stops_playback_and_checks_bose_after_clearing_queue(monkeypatch):
+    fake_bose = FakeBose()
+    monkeypatch.setattr(bose_routes, "bose", fake_bose)
+    app = create_power_app()
+    observed_playback_state = []
+    get_status = fake_bose.get_status
+
+    def get_status_after_playback_stops():
+        observed_playback_state.append((
+            list(app.player.queue),
+            app.player.current_song,
+            app.player.autoplay_enabled,
+            app.playback.owner,
+        ))
+        return get_status()
+
+    fake_bose.get_status = get_status_after_playback_stops
+
+    response = app.test_client().get("/poweroff")
+
+    assert response.status_code == 200
+    assert response.json["status"] == "success"
+    assert observed_playback_state == [([], None, False, None)]
+    assert app.player.skip_count == 1
+    assert fake_bose.volume_levels == [0]
+    assert fake_bose.power_toggles == 1
+
+
+def test_poweroff_does_not_toggle_bose_when_already_off(monkeypatch):
+    fake_bose = FakeBose()
+    fake_bose.is_on = False
+    monkeypatch.setattr(bose_routes, "bose", fake_bose)
+    app = create_power_app()
+
+    response = app.test_client().get("/poweroff")
+
+    assert response.status_code == 200
+    assert response.json["status"] == "success"
+    assert app.player.queue == []
+    assert app.player.current_song is None
+    assert app.player.autoplay_enabled is False
+    assert app.playback.owner is None
+    assert fake_bose.volume_levels == []
+    assert fake_bose.power_toggles == 0
+
+
 def test_shutdown_does_not_power_off_bose_when_radio_owns_playback(monkeypatch):
     app = create_power_app()
     power_off_calls = []
