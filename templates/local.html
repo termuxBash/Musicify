@@ -7,118 +7,122 @@
 {% set switch_player_label = "Online Player" %}
 {% set playlist_modal_message = "Select a playlist" %}
 {% include "_head.html" %}
+
 <body class="center-player-page">
-{% include "_nav.html" %}
-{% include "_side_panel.html" %}
+    {% include "_nav.html" %}
+    {% include "_side_panel.html" %}
 
-<div class="main" id="main">
+    <div class="main" id="main">
 
-    <div class="search-container">
-        <input type="text" id="searchInput" class="search-input" placeholder="Search files and music...">
-        <button class="search-btn" onclick="performSearch()">Search</button>
-    </div>
-
-    <div id="navigationControls">
-        <div class="path" id="explorerPath">
-            Explorer: /{{ current_path }}
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input" placeholder="Search files and music...">
+            <button class="search-btn" onclick="performSearch()">Search</button>
         </div>
 
-        <div style="display: flex; gap: 10px; margin-bottom:10px;">
-            {% if current_path != "" %}
-            <button class="btn" style="margin-top:0;" onclick="window.location.href='{{ api_prefix }}/{{ parent or '' }}'">⬅ Back</button>
-            {% endif %}
-            <button id="searchBackButton" class="btn" style="margin-top:0; display:none; background:#555;" onclick="clearSearchState()">⬅ Back to Folders</button>
-            
-            <button id="playFolderBtn" class="btn" style="margin-top:0; background:var(--spotify-green)" onclick="playCurrentFolder('{{ current_path }}')">
-                ▶ Play Folder
-            </button>
+        <div id="navigationControls">
+            <div class="path" id="explorerPath">
+                Explorer: /{{ current_path }}
+            </div>
 
-            <button id="randomSongBtn" class="btn" style="margin-top:0; background: linear-gradient(135deg, #ff8c42, #ff3c00);" onclick="queueRandomSong(this)">
-                🎲 Random Song
-            </button>
-        </div>
-    </div>
+            <div style="display: flex; gap: 10px; margin-bottom:10px;">
+                {% if current_path != "" %}
+                <button class="btn" style="margin-top:0;"
+                    onclick="window.location.href='{{ api_prefix }}/{{ parent or '' }}'">⬅ Back</button>
+                {% endif %}
+                <button id="searchBackButton" class="btn" style="margin-top:0; display:none; background:#555;"
+                    onclick="clearSearchState()">⬅ Back to Folders</button>
 
-    <div class="file-grid" id="fileGridContainer">
-        {% for item in items %}
-        <div class="file-card">
-            {% if item.is_dir %}
-            <a href="{{ api_prefix }}/{{ item.rel_path }}"
-            class="folder-link"
-            style="color:white;text-decoration:none;">
-                <img class="file-icon" src="/static/folder.svg" alt="Folder">
-                <div class="file-name">{{ item.name }}</div>
-            </a>
-            {% else %}
-            <img class="file-icon" src="/static/local-audio.svg" alt="Local Audio">
-            <div class="file-name">{{ item.name }}</div>
-            {% endif %}
-
-            {% if not item.is_dir %}
-            <div class="card-actions">
-                <button class="queue-icon-btn"
-                        onclick='addToQueue({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'
-                        title="Queue song">
+                <button id="playFolderBtn" class="btn" style="margin-top:0; background:var(--spotify-green)"
+                    onclick="playCurrentFolder('{{ current_path }}')">
+                    ▶ Play Folder
                 </button>
-                <button class="playlist-btn"
-                        type="button"
-                        onclick='openPlaylistMenu({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'
-                        title="Add to playlist">
-                    🎶️
+
+                <button id="randomSongBtn" class="btn"
+                    style="margin-top:0; background: linear-gradient(135deg, #ff8c42, #ff3c00);"
+                    onclick="queueRandomSong(this)">
+                    🎲 Random Song
                 </button>
             </div>
-            {% endif %}
         </div>
-        {% endfor %}
+
+        <div class="file-grid" id="fileGridContainer">
+            {% for item in items %}
+            <div class="file-card">
+                {% if item.is_dir %}
+                <a href="{{ api_prefix }}/{{ item.rel_path }}" class="folder-link"
+                    style="color:white;text-decoration:none;">
+                    <img class="file-icon" src="/static/folder.svg" alt="Folder">
+                    <div class="file-name">{{ item.name }}</div>
+                </a>
+                {% else %}
+                <img class="file-icon" src="/static/local-audio.svg" alt="Local Audio">
+                <div class="file-name">{{ item.name }}</div>
+                {% endif %}
+
+                {% if not item.is_dir %}
+                <div class="card-actions">
+                    <button class="queue-icon-btn"
+                        onclick='addToQueue({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'
+                        title="Queue song">
+                    </button>
+                    <button class="playlist-btn" type="button"
+                        onclick='openPlaylistMenu({url: {{ item.rel_path|tojson }}, title: {{ item.name|tojson }}}, this)'
+                        title="Add to playlist">
+                        🎶️
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
     </div>
 
-</div>
+    {% include "_player_bar.html" %}
+    {% include "_playlist_modal.html" %}
 
-{% include "_player_bar.html" %}
-{% include "_playlist_modal.html" %}
+    <script>
+        window.API_PREFIX = "{{ api_prefix }}";
+        window.CURRENT_OWNER = "local";
+        window.CURRENT_PATH = {{ current_path | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='common.js') }}"></script>
 
-<script>
-    window.API_PREFIX = "{{ api_prefix }}";
-    window.CURRENT_OWNER = "local";
-    window.CURRENT_PATH = {{ current_path|tojson }};
-</script>
-<script src="{{ url_for('static', filename='common.js') }}"></script>
+    <script>
 
-<script>
+        /* Base DOM Nodes cached for folder recovery lookup toggling */
+        const backupOriginalGridContent = document.getElementById("fileGridContainer").innerHTML;
+        let searchRequestId = 0;
+        let searchDebounceTimer = null;
 
-/* Base DOM Nodes cached for folder recovery lookup toggling */
-const backupOriginalGridContent = document.getElementById("fileGridContainer").innerHTML;
-let searchRequestId = 0;
-let searchDebounceTimer = null;
+        async function performSearch() {
+            clearTimeout(searchDebounceTimer);
+            const QueryStr = document.getElementById("searchInput").value.trim();
+            if (!QueryStr) return;
 
-async function performSearch() {
-    clearTimeout(searchDebounceTimer);
-    const QueryStr = document.getElementById("searchInput").value.trim();
-    if(!QueryStr) return;
+            const thisRequestId = ++searchRequestId;
 
-    const thisRequestId = ++searchRequestId;
+            try {
+                const response = await fetch(`/local/search?q=${encodeURIComponent(QueryStr)}`);
+                const items = await response.json();
 
-    try {
-        const response = await fetch(`/local/search?q=${encodeURIComponent(QueryStr)}`);
-        const items = await response.json();
-        
-        if (thisRequestId !== searchRequestId) return;
+                if (thisRequestId !== searchRequestId) return;
 
-        const gridContainer = document.getElementById("fileGridContainer");
-        gridContainer.innerHTML = ""; // Clear active viewport elements
+                const gridContainer = document.getElementById("fileGridContainer");
+                gridContainer.innerHTML = ""; // Clear active viewport elements
 
-        if(items.length === 0) {
-            gridContainer.innerHTML = '<p style="color:#666; grid-column: 1/-1; text-align:center; margin-top:20px;">No matching items found.</p>';
-        } else {
-            items.forEach(item => {
-                const card = document.createElement("div");
-                card.className = "file-card";
-                
-                // Keep identical structure with structural escaping logic for safety strings
-                let escapingTitle = item.name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-                let escapingPath = item.rel_path.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+                if (items.length === 0) {
+                    gridContainer.innerHTML = '<p style="color:#666; grid-column: 1/-1; text-align:center; margin-top:20px;">No matching items found.</p>';
+                } else {
+                    items.forEach(item => {
+                        const card = document.createElement("div");
+                        card.className = "file-card";
 
-                card.innerHTML = `
+                        // Keep identical structure with structural escaping logic for safety strings
+                        let escapingTitle = item.name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+                        let escapingPath = item.rel_path.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+                        card.innerHTML = `
                     <img class="file-icon" src="${item.is_dir ? "/static/folder.svg" : "/static/local-audio.svg"}" alt="${item.is_dir ? "Folder" : "Audio"}">
                     <div class="file-name">
                         ${item.is_dir ? `<a href="${window.API_PREFIX}/${item.rel_path}" style="color:white;text-decoration:none">${item.name}</a>` : item.name}
@@ -132,158 +136,158 @@ async function performSearch() {
                     </div>
                     ` : ''}
                 `;
-                gridContainer.appendChild(card);
-            });
-        }
-
-        // Adjust interactive Navigation states
-        document.getElementById("explorerPath").textContent = `Search Results for: "${QueryStr}"`;
-        document.getElementById("searchBackButton").style.display = "inline-block";
-        document.getElementById("playFolderBtn").style.display = "none";
-    } catch (e) {
-        console.error("Search failure encountered:", e);
-    }
-}
-
-function clearSearchState() {
-    clearTimeout(searchDebounceTimer);
-    searchRequestId++;
-    document.getElementById("searchInput").value = "";
-    document.getElementById("fileGridContainer").innerHTML = backupOriginalGridContent;
-    document.getElementById("explorerPath").textContent = "Explorer: /{{ current_path }}";
-    document.getElementById("searchBackButton").style.display = "none";
-    document.getElementById("playFolderBtn").style.display = "inline-block";
-}
-
-// Automatically start searching as soon as more than 3 characters are typed
-document.getElementById("searchInput").addEventListener("input", function() {
-    const query = this.value.trim();
-    clearTimeout(searchDebounceTimer);
-
-    if (query.length === 0) {
-        clearSearchState();
-        return;
-    }
-
-    if (query.length >= 3) {
-        searchDebounceTimer = setTimeout(() => {
-            performSearch();
-        }, 250);
-    }
-});
-
-// Support hitting 'Enter' key directly inside inputs to run operations
-document.getElementById("searchInput").addEventListener("keypress", function(event) {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        clearTimeout(searchDebounceTimer);
-        performSearch();
-    }
-});
-
-async function queueRandomSong(btn, folderPath = window.CURRENT_PATH) {
-    const originalText = btn.innerHTML;
-    btn.innerHTML = "Queueing... 🎲";
-    btn.disabled = true;
-
-    try {
-        let res = await fetch("/local/enqueue_random", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path: folderPath || "" })
-        });
-
-        if (res.status === 403) {
-            const data = await res.json();
-            const takeOver = confirm(`${data.owner} player is currently controlling playback.\n\nTaking ownership will clear its queue and stop playback.\n\nContinue?`);
-            
-            if (takeOver) {
-                const acquire = await fetch("/local/acquire", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ force: true })
-                });
-
-                if (acquire.ok) {
-                    res = await fetch("/local/enqueue_random", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ path: folderPath || "" })
+                        gridContainer.appendChild(card);
                     });
                 }
+
+                // Adjust interactive Navigation states
+                document.getElementById("explorerPath").textContent = `Search Results for: "${QueryStr}"`;
+                document.getElementById("searchBackButton").style.display = "inline-block";
+                document.getElementById("playFolderBtn").style.display = "none";
+            } catch (e) {
+                console.error("Search failure encountered:", e);
             }
         }
 
-        if (res.ok) {
-            const data = await res.json();
-            console.log("Successfully queued random track:", data.song.title);
-            if (typeof showPopup === "function") {
-                showPopup(`🎲 Queued: ${data.song.title}`);
-            }
-        } else {
-            const errData = await res.json().catch(() => ({}));
-            const msg = errData.error || "Failed to queue random song.";
-            if (typeof showPopup === "function") {
-                showPopup(msg);
-            } else {
-                alert(msg);
-            }
+        function clearSearchState() {
+            clearTimeout(searchDebounceTimer);
+            searchRequestId++;
+            document.getElementById("searchInput").value = "";
+            document.getElementById("fileGridContainer").innerHTML = backupOriginalGridContent;
+            document.getElementById("explorerPath").textContent = "Explorer: /{{ current_path }}";
+            document.getElementById("searchBackButton").style.display = "none";
+            document.getElementById("playFolderBtn").style.display = "inline-block";
         }
-    } catch (e) {
-        console.error("Error queueing random track:", e);
-    } finally {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
-}
 
-function addToQueue(song, btn) {
-    return enqueueSong(song, btn, {
-        enqueueUrl: "/local/enqueue",
-        acquireUrl: "/local/acquire",
-        payload: track => ({ rel_path: track.url, title: track.title }),
-        takeoverOwners: ["youtube", "playlist", "radio"]
-    });
-}
+        // Automatically start searching as soon as more than 3 characters are typed
+        document.getElementById("searchInput").addEventListener("input", function () {
+            const query = this.value.trim();
+            clearTimeout(searchDebounceTimer);
 
-async function playCurrentFolder(p){
-    const request = () => fetch('/local/play_folder',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({path:p})
-    });
-
-    try {
-        let response = await request();
-        if (response.status === 403) {
-            const data = await response.json();
-            const takeOver = confirm(`${data.owner} player is currently controlling playback.\n\nTaking ownership will clear its queue and stop playback.\n\nContinue?`);
-            if (!takeOver) return;
-
-            const acquire = await fetch("/local/acquire", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ force: true })
-            });
-            if (!acquire.ok) {
-                showPopup("Failed to acquire ownership.");
+            if (query.length === 0) {
+                clearSearchState();
                 return;
             }
-            response = await request();
+
+            if (query.length >= 3) {
+                searchDebounceTimer = setTimeout(() => {
+                    performSearch();
+                }, 250);
+            }
+        });
+
+        // Support hitting 'Enter' key directly inside inputs to run operations
+        document.getElementById("searchInput").addEventListener("keypress", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                clearTimeout(searchDebounceTimer);
+                performSearch();
+            }
+        });
+
+        async function queueRandomSong(btn, folderPath = window.CURRENT_PATH) {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "Queueing... 🎲";
+            btn.disabled = true;
+
+            try {
+                let res = await fetch("/local/enqueue_random", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ path: folderPath || "" })
+                });
+
+                if (res.status === 403) {
+                    const data = await res.json();
+                    const takeOver = confirm(`${data.owner} player is currently controlling playback.\n\nTaking ownership will clear its queue and stop playback.\n\nContinue?`);
+
+                    if (takeOver) {
+                        const acquire = await fetch("/local/acquire", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ force: true })
+                        });
+
+                        if (acquire.ok) {
+                            res = await fetch("/local/enqueue_random", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ path: folderPath || "" })
+                            });
+                        }
+                    }
+                }
+
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log("Successfully queued random track:", data.song.title);
+                    if (typeof showPopup === "function") {
+                        showPopup(`🎲 Queued: ${data.song.title}`);
+                    }
+                } else {
+                    const errData = await res.json().catch(() => ({}));
+                    const msg = errData.error || "Failed to queue random song.";
+                    if (typeof showPopup === "function") {
+                        showPopup(msg);
+                    } else {
+                        alert(msg);
+                    }
+                }
+            } catch (e) {
+                console.error("Error queueing random track:", e);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         }
 
-        const data = await response.json();
-        if (!response.ok) {
-            showPopup(data.error || "Failed to play folder.");
-        } else if (data.queued === 0) {
-            showPopup("No playable music files found in this folder.");
+        function addToQueue(song, btn) {
+            return enqueueSong(song, btn, {
+                enqueueUrl: "/local/enqueue",
+                acquireUrl: "/local/acquire",
+                payload: track => ({ rel_path: track.url, title: track.title }),
+                takeoverOwners: ["youtube", "playlist", "radio"]
+            });
         }
-    } catch (error) {
-        console.error("Could not play local folder:", error);
-        showPopup("Could not play this folder.");
-    }
-}
 
-</script>
+        async function playCurrentFolder(p) {
+            const request = () => fetch('/local/play_folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: p })
+            });
+
+            try {
+                let response = await request();
+                if (response.status === 403) {
+                    const data = await response.json();
+                    const takeOver = confirm(`${data.owner} player is currently controlling playback.\n\nTaking ownership will clear its queue and stop playback.\n\nContinue?`);
+                    if (!takeOver) return;
+
+                    const acquire = await fetch("/local/acquire", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ force: true })
+                    });
+                    if (!acquire.ok) {
+                        showPopup("Failed to acquire ownership.");
+                        return;
+                    }
+                    response = await request();
+                }
+
+                const data = await response.json();
+                if (!response.ok) {
+                    showPopup(data.error || "Failed to play folder.");
+                } else if (data.queued === 0) {
+                    showPopup("No playable music files found in this folder.");
+                }
+            } catch (error) {
+                console.error("Could not play local folder:", error);
+                showPopup("Could not play this folder.");
+            }
+        }
+
+    </script>
 </body>
 </html>

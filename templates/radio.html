@@ -43,9 +43,6 @@
         {% endfor %}
     </div>
 
-    {% if load_error %}
-    <p class="radio-error" role="alert">{{ load_error }}</p>
-    {% endif %}
     <div class="radio-results-heading">
         <h2 id="radioResultsTitle">Top 18 stations</h2>
         <span id="radioSearchStatus" role="status"></span>
@@ -495,6 +492,24 @@ async function searchRadioStations(query, genres = [...activeRadioGenres]) {
     status.textContent = "";
 }
 
+async function loadTopRadioStations() {
+    const status = document.getElementById("radioSearchStatus");
+    status.textContent = "Loading top stations...";
+    try {
+        const response = await fetch(`${API_PREFIX}/top`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Radio stations are temporarily unavailable.");
+        initialRadioStations.splice(0, initialRadioStations.length, ...data);
+        if (!document.getElementById("radioQuery").value.trim() && activeRadioGenres.size === 0) {
+            renderRadioStations(initialRadioStations);
+        }
+        status.textContent = "";
+    } catch (error) {
+        console.error("Could not load top radio stations:", error);
+        status.textContent = error.message || "Radio stations are temporarily unavailable.";
+    }
+}
+
 document.getElementById("radioSearchForm").addEventListener("submit", event => {
     event.preventDefault();
     clearTimeout(radioSearchTimer);
@@ -639,6 +654,7 @@ window.addEventListener("focus", () => {
 });
 
 renderRadioStations(initialRadioStations);
+loadTopRadioStations();
 if (!document.hidden) startRadioStatusPolling();
 </script>
 </body>

@@ -507,6 +507,44 @@ def test_radio_browser_uses_official_api_host():
     assert routes._radio_browser.base_url == "https://de1.api.radio-browser.info/"
 
 
+def test_radio_page_remains_available_when_radio_browser_is_offline(monkeypatch):
+    browser = routes._LazyRadioBrowser()
+    constructor_calls = []
+
+    def fail_to_connect(**kwargs):
+        constructor_calls.append(kwargs)
+        raise OSError("network unavailable")
+
+    monkeypatch.setattr(routes, "render_template", lambda *args, **kwargs: "Radio page")
+    monkeypatch.setattr(routes, "_radio_browser", browser)
+    monkeypatch.setattr(routes, "RadioBrowser", fail_to_connect)
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().get("/radio/")
+
+    assert response.status_code == 200
+    assert browser._client is None
+    assert constructor_calls == []
+
+
+def test_top_stations_route_reports_unavailable_radio_browser(monkeypatch):
+    browser = routes._LazyRadioBrowser()
+    monkeypatch.setattr(routes, "_radio_browser", browser)
+    monkeypatch.setattr(
+        routes,
+        "RadioBrowser",
+        lambda **kwargs: (_ for _ in ()).throw(OSError("network unavailable")),
+    )
+    app = create_radio_app(FakeBose())
+
+    response = app.test_client().get("/radio/top")
+
+    assert response.status_code == 502
+    assert response.json == {
+        "error": "Radio stations are temporarily unavailable."
+    }
+
+
 def test_search_route_filters_by_supported_genre(monkeypatch):
     results = [{"name": "Example Hip Hop", "url": "https://stream.example/hip-hop"}]
     calls = []

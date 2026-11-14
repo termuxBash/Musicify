@@ -2,25 +2,22 @@
 This module defines the Flask routes that provide real-time system statistics and player status information to the front.
 It has endpoints for retrieving CPU usage, current volume, queue status, now playing details, autoplay and lyrics settings, as well as toggling autoplay and lyrics display.
 It also includes routes for managing playlists and removing songs from the queue."""
-from time import sleep, time
-import threading
-import signal
-import re
-from flask import Blueprint, jsonify, request ,current_app, url_for
-import psutil
-import os
-
 import logging
-from urllib.parse import urlparse
-from services.yt_service import YTService
-from core.bose_routes import ctrl, power_off_bose
-from flask import current_app
-from core.settings import LYRICS_EFFORT_LEVELS, PLAYLIST_DIR, ROOT_DIR, update_user_config
-from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
-from dotenv import load_dotenv
+import os
 import random
-load_dotenv()
-from core.bose_routes import get_status
+import re
+import signal
+import threading
+from time import sleep
+from urllib.parse import urlparse
+
+from flask import Blueprint, current_app, jsonify, request, url_for
+import psutil
+
+from core.bose_routes import ctrl, get_status, power_off_bose
+from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
+from core.settings import LYRICS_EFFORT_LEVELS, PLAYLIST_DIR, ROOT_DIR, update_user_config
+from services.yt_service import YTService
 
 logger = logging.getLogger(__name__)
 stats_bp = Blueprint("stats", __name__)

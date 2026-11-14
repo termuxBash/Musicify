@@ -14,9 +14,36 @@ from core.settings import RADIO_GENRES, get_radio_config, update_user_config
 
 logger = logging.getLogger(__name__)
 radio_bp = Blueprint("radio", __name__)
-# Keep the certificate workaround scoped to Radio Browser requests.
-_radio_browser = RadioBrowser(session=httpx.Client(verify=False, timeout=1.5))
-_radio_browser.base_url = "https://de1.api.radio-browser.info/"
+
+
+class _LazyRadioBrowser:
+    def __init__(self):
+        self.base_url = "https://de1.api.radio-browser.info/"
+        self._client = None
+        self._lock = threading.Lock()
+
+    def _get_client(self):
+        if self._client is None:
+            with self._lock:
+                if self._client is None:
+                    session = httpx.Client(verify=False, timeout=1.5)
+                    try:
+                        client = RadioBrowser(session=session)
+                    except Exception:
+                        session.close()
+                        raise
+                    client.base_url = self.base_url
+                    self._client = client
+        return self._client
+
+    def search(self, **kwargs):
+        return self._get_client().search(**kwargs)
+
+    def click_counter(self, stationuuid):
+        return self._get_client().click_counter(stationuuid)
+
+
+_radio_browser = _LazyRadioBrowser()
 _status_lock = threading.Lock()
 _METADATA_CACHE_SECONDS = 20
 _PLAYBACK_START_GRACE_SECONDS = 8
@@ -429,25 +456,25 @@ def _configure_radio_playback(state):  # pydead: keep
 
 @radio_bp.route("/")
 def index():
-    load_error = None
-    try:
-        stations = _top_stations()
-    except Exception:
-        logger.exception("Could not load top-voted radio stations.")
-        stations = []
-        load_error = "Radio stations are temporarily unavailable."
-
     config = get_radio_config()
     return render_template(
         "radio.html",
         page_title="Musicify Radio",
         api_prefix=url_for("radio.index").rstrip("/"),
-        stations=stations,
+        stations=[],
         radio_presets=config,
         radio_favorites=config["favorites"],
         radio_genres=config["genres"],
-        load_error=load_error,
     )
+
+
+@radio_bp.route("/top")
+def top_stations():
+    try:
+        return jsonify(_top_stations())
+    except Exception:
+        logger.exception("Could not load top-voted radio stations.")
+        return jsonify({"error": "Radio stations are temporarily unavailable."}), 502
 
 
 @radio_bp.route("/search")

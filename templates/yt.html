@@ -7,51 +7,53 @@
 {% set switch_player_label = "Local Player" %}
 {% set playlist_modal_message = "Enter any combination of digits 1 through 6." %}
 {% include "_head.html" %}
+
 <body class="center-player-page">
-{% include "_nav.html" %}
-{% include "_side_panel.html" %}
+    {% include "_nav.html" %}
+    {% include "_side_panel.html" %}
 
-<div class="main-content">
-    <form class="search-form" id="searchForm">
-        <input type="text" name="query" placeholder="Search Online Music..." required>
-        <button type="submit">🔍</button>
-        <button type="button" class="auto-pick-btn" id="autoPickBtn" title="Auto-pick and queue">✨️</button>
-    </form>
-    <div class="results-grid" id="results"></div>
-</div>
+    <div class="main-content">
+        <form class="search-form" id="searchForm">
+            <input type="text" name="query" placeholder="Search Online Music..." required>
+            <button type="submit">🔍</button>
+            <button type="button" class="auto-pick-btn" id="autoPickBtn" title="Auto-pick and queue">✨️</button>
+        </form>
+        <div class="results-grid" id="results"></div>
+    </div>
 
-{% include "_player_bar.html" %}
-{% include "_playlist_modal.html" %}
+    {% include "_player_bar.html" %}
+    {% include "_playlist_modal.html" %}
 
-<div class="playlist-modal" id="aiPromptModal" onclick="if(event.target === this) closeAiPrompt()">
-    <form class="playlist-modal-card ai-prompt-card" id="aiPromptForm">
-        <h4>Ask Ai to recommend a song based on your query</h4>
-        <textarea id="aiPromptInput" class="ai-prompt-input" placeholder="Tell AI what you want to hear..." required></textarea>
-        <div id="aiRecommendations" class="ai-recommendations"></div>
-        <div class="playlist-modal-actions">
-            <button class="playlist-cancel" type="button" onclick="closeAiPrompt()">Cancel</button>
-            <button class="queue-playlist-btn" type="submit" id="aiSendBtn">Send ✨</button>
-        </div>
-    </form>
-</div>
+    <div class="playlist-modal" id="aiPromptModal" onclick="if(event.target === this) closeAiPrompt()">
+        <form class="playlist-modal-card ai-prompt-card" id="aiPromptForm">
+            <h4>Ask Ai to recommend a song based on your query</h4>
+            <textarea id="aiPromptInput" class="ai-prompt-input" placeholder="Tell AI what you want to hear..."
+                required></textarea>
+            <div id="aiRecommendations" class="ai-recommendations"></div>
+            <div class="playlist-modal-actions">
+                <button class="playlist-cancel" type="button" onclick="closeAiPrompt()">Cancel</button>
+                <button class="queue-playlist-btn" type="submit" id="aiSendBtn">Send ✨</button>
+            </div>
+        </form>
+    </div>
 
-<script>
-    // 1. Setup Blueprint-specific properties globally
-    window.API_PREFIX = "{{ api_prefix }}";
-    window.CURRENT_OWNER = "youtube"; // for queue logic handling
-</script>
-<script src="{{ url_for('static', filename='common.js') }}"></script>
-<script>
-const API_PREFIX = "{{ api_prefix }}";
-const resultsGrid = document.getElementById("results");
+    <script>
+        // 1. Setup Blueprint-specific properties globally
+        window.API_PREFIX = "{{ api_prefix }}";
+        window.CURRENT_OWNER = "youtube"; // for queue logic handling
+    </script>
+    <script src="{{ url_for('static', filename='common.js') }}"></script>
+    <script>
+        const API_PREFIX = "{{ api_prefix }}";
+        const resultsGrid = document.getElementById("results");
 
-/* SEARCH */
-document.getElementById("searchForm").onsubmit = async (e)=>{
-    e.preventDefault();
-    resultsGrid.innerHTML = "Searching...";
-    const res = await fetch(API_PREFIX+"/search",{method:"POST",body:new FormData(e.target)});
-    const songs = await res.json();
-    resultsGrid.innerHTML = songs.map(s=>`
+        /* SEARCH */
+        document.getElementById("searchForm").onsubmit = async (e) => {
+            e.preventDefault();
+            resultsGrid.innerHTML = "Searching...";
+            const res = await fetch(API_PREFIX + "/search", { method: "POST", body: new FormData(e.target) });
+            const songs = await res.json();
+            resultsGrid.innerHTML = songs.map(s => `
         <div class="song-card">
             <img src="${s.thumbnail}">
             <p>${s.title}</p>
@@ -63,78 +65,78 @@ document.getElementById("searchForm").onsubmit = async (e)=>{
             </div>
         </div>
     `).join("");
-}
+        }
 
-async function autoPickSong(btn){
-    const form = document.getElementById("searchForm");
-    const queryInput = form.querySelector("input[name='query']");
-    const query = queryInput.value.trim();
+        async function autoPickSong(btn) {
+            const form = document.getElementById("searchForm");
+            const queryInput = form.querySelector("input[name='query']");
+            const query = queryInput.value.trim();
 
-    if(!query){
-        queryInput.focus();
-        return;
-    }
+            if (!query) {
+                queryInput.focus();
+                return;
+            }
 
-    const previousLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "⌛";
+            const previousLabel = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = "⌛";
 
-    try{
-        let res = await fetch(API_PREFIX+"/auto_pick", {
-            method: "POST",
-            body: new FormData(form)
-        });
-
-        if(res.status === 403){
-            const data = await res.json();
-            if(data.owner === "local" || data.owner === "playlist" || data.owner === "radio"){
-                const takeOver = confirm(
-                    data.owner + " player is currently controlling playback.\n\n" +
-                    "Taking ownership will clear its queue and stop playback.\n\n" +
-                    "Continue?"
-                );
-
-                if(!takeOver){
-                    return;
-                }
-
-                const acquire = await fetch(API_PREFIX + "/acquire", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ force: true })
-                });
-
-                if(!acquire.ok){
-                    showPopup("Failed to acquire ownership.");
-                    return;
-                }
-
-                res = await fetch(API_PREFIX+"/auto_pick", {
+            try {
+                let res = await fetch(API_PREFIX + "/auto_pick", {
                     method: "POST",
                     body: new FormData(form)
                 });
 
-                if(!res.ok){
-                    const retryData = await res.json();
-                    showPopup(retryData.error || "Auto-pick failed after takeover.");
+                if (res.status === 403) {
+                    const data = await res.json();
+                    if (data.owner === "local" || data.owner === "playlist" || data.owner === "radio") {
+                        const takeOver = confirm(
+                            data.owner + " player is currently controlling playback.\n\n" +
+                            "Taking ownership will clear its queue and stop playback.\n\n" +
+                            "Continue?"
+                        );
+
+                        if (!takeOver) {
+                            return;
+                        }
+
+                        const acquire = await fetch(API_PREFIX + "/acquire", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({ force: true })
+                        });
+
+                        if (!acquire.ok) {
+                            showPopup("Failed to acquire ownership.");
+                            return;
+                        }
+
+                        res = await fetch(API_PREFIX + "/auto_pick", {
+                            method: "POST",
+                            body: new FormData(form)
+                        });
+
+                        if (!res.ok) {
+                            const retryData = await res.json();
+                            showPopup(retryData.error || "Auto-pick failed after takeover.");
+                            return;
+                        }
+                    } else {
+                        showPopup(`Playback is controlled by '${data.owner}'.`);
+                        return;
+                    }
+                }
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showPopup(data.error || "Auto-pick failed.");
                     return;
                 }
-            } else {
-                showPopup(`Playback is controlled by '${data.owner}'.`);
-                return;
-            }
-        }
 
-        const data = await res.json();
-
-        if(!res.ok){
-            showPopup(data.error || "Auto-pick failed.");
-            return;
-        }
-
-        resultsGrid.innerHTML = `
+                resultsGrid.innerHTML = `
             <div class="song-card">
                 <img src="${data.song.thumbnail}">
                 <p>${data.song.title}</p>
@@ -145,86 +147,86 @@ async function autoPickSong(btn){
                 </div>
             </div>
         `;
-    } finally {
-        btn.disabled = false;
-        btn.textContent = previousLabel;
-    }
-}
-
-document.getElementById("autoPickBtn").onclick = async (e)=>{
-    await autoPickSong(e.target);
-}
-
-function addToQueue(song, btn) {
-    const enqueueRoute = window.incogniMode
-        ? "/enqueue_incognito"
-        : "/enqueue";
-    return enqueueSong(song, btn, {
-        enqueueUrl: API_PREFIX + enqueueRoute,
-        acquireUrl: API_PREFIX + "/acquire",
-        payload: track => track,
-        takeoverOwners: ["local", "playlist", "radio"]
-    });
-}
-
-const playlistState = {
-    song: null,
-    button: null
-};
-
-function openAiPrompt() {
-    document.getElementById("aiPromptModal")?.classList.add("open");
-    document.getElementById("aiPromptInput")?.focus();
-}
-
-function closeAiPrompt() {
-    document.getElementById("aiPromptModal")?.classList.remove("open");
-}
-
-document.getElementById("aiPromptForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const input = document.getElementById("aiPromptInput");
-    const sendButton = document.getElementById("aiSendBtn");
-    const results = document.getElementById("aiRecommendations");
-    const prompt = input.value.trim();
-    if (!prompt) return;
-
-    sendButton.disabled = true;
-    sendButton.textContent = "Thinking...";
-    results.textContent = "Finding recommendations...";
-
-    try {
-        const response = await fetch(API_PREFIX + "/ai_recommendations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_prompt: prompt })
-        });
-        const data = await response.json();
-
-        if (!response.ok) {
-            results.textContent = data.error || "AI recommendations unavailable.";
-            return;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = previousLabel;
+            }
         }
 
-        closeAiPrompt();
-        input.value = "";
-        results.textContent = "";
-        showPopup(`${data.count} AI recommendation${data.count === 1 ? "" : "s"} will be added to the queue.`);
-    } catch (error) {
-        results.textContent = "Could not contact AI recommendations.";
-    } finally {
-        sendButton.disabled = false;
-        sendButton.textContent = "Send ✨";
-    }
-});
+        document.getElementById("autoPickBtn").onclick = async (e) => {
+            await autoPickSong(e.target);
+        }
 
-document.getElementById("aiPromptInput").addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        document.getElementById("aiPromptForm").requestSubmit();
-    }
-});
-</script>
+        function addToQueue(song, btn) {
+            const enqueueRoute = window.incogniMode
+                ? "/enqueue_incognito"
+                : "/enqueue";
+            return enqueueSong(song, btn, {
+                enqueueUrl: API_PREFIX + enqueueRoute,
+                acquireUrl: API_PREFIX + "/acquire",
+                payload: track => track,
+                takeoverOwners: ["local", "playlist", "radio"]
+            });
+        }
+
+        const playlistState = {
+            song: null,
+            button: null
+        };
+
+        function openAiPrompt() {
+            document.getElementById("aiPromptModal")?.classList.add("open");
+            document.getElementById("aiPromptInput")?.focus();
+        }
+
+        function closeAiPrompt() {
+            document.getElementById("aiPromptModal")?.classList.remove("open");
+        }
+
+        document.getElementById("aiPromptForm").addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const input = document.getElementById("aiPromptInput");
+            const sendButton = document.getElementById("aiSendBtn");
+            const results = document.getElementById("aiRecommendations");
+            const prompt = input.value.trim();
+            if (!prompt) return;
+
+            sendButton.disabled = true;
+            sendButton.textContent = "Thinking...";
+            results.textContent = "Finding recommendations...";
+
+            try {
+                const response = await fetch(API_PREFIX + "/ai_recommendations", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ user_prompt: prompt })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    results.textContent = data.error || "AI recommendations unavailable.";
+                    return;
+                }
+
+                closeAiPrompt();
+                input.value = "";
+                results.textContent = "";
+                showPopup(`${data.count} AI recommendation${data.count === 1 ? "" : "s"} will be added to the queue.`);
+            } catch (error) {
+                results.textContent = "Could not contact AI recommendations.";
+            } finally {
+                sendButton.disabled = false;
+                sendButton.textContent = "Send ✨";
+            }
+        });
+
+        document.getElementById("aiPromptInput").addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                document.getElementById("aiPromptForm").requestSubmit();
+            }
+        });
+    </script>
 </body>
 </html>
