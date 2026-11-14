@@ -158,7 +158,8 @@ async function enqueueSong(song, btn, options) {
 
         response = await request();
         if (!response.ok) {
-          showPopup("Failed to queue song after takeover.");
+          const data = await response.json().catch(() => ({}));
+          showPopup(data.error || "Failed to queue song after takeover.");
           return;
         }
 
@@ -170,7 +171,8 @@ async function enqueueSong(song, btn, options) {
       return;
     }
 
-    showPopup("Failed to queue song.");
+    const data = await response.json().catch(() => ({}));
+    showPopup(data.error || "Failed to queue song.");
   } catch (error) {
     console.error("Failed to add song to queue:", error);
     showPopup("Failed to queue song.");

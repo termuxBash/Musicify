@@ -10,6 +10,8 @@ from flask import current_app
 import requests
 from yt_dlp import YoutubeDL
 import logging
+import re
+from urllib.parse import parse_qs, urlparse
 from core.settings import YOUTUBE_API_KEY, BACKUP_YOUTUBE_API_KEY
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
@@ -19,6 +21,40 @@ YOUTUBE_API_KEYS = [
     YOUTUBE_API_KEY,
     BACKUP_YOUTUBE_API_KEY
 ]
+
+_YOUTUBE_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _youtube_thumbnail(info):
+    thumbnail = info.get("thumbnail")
+    if isinstance(thumbnail, str) and thumbnail:
+        return thumbnail
+
+    thumbnails = info.get("thumbnails") or []
+    for candidate in reversed(thumbnails):
+        if isinstance(candidate, dict) and candidate.get("url"):
+            return candidate["url"]
+    return ""
+
+
+def _youtube_entry_video_id(entry):
+    for field in ("id", "url", "webpage_url", "original_url"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value:
+            continue
+        if _YOUTUBE_VIDEO_ID_RE.fullmatch(value):
+            return value
+
+        try:
+            parsed = urlparse(
+                value if "://" in value else f"https://www.youtube.com/{value.lstrip('/')}"
+            )
+        except ValueError:
+            continue
+        video_id = (parse_qs(parsed.query).get("v") or [""])[0]
+        if _YOUTUBE_VIDEO_ID_RE.fullmatch(video_id):
+            return video_id
+    return ""
 
 
 class YTService:
@@ -49,7 +85,55 @@ class YTService:
 
     def resolve_stream(youtube_url):
         return YTService.resolve_stream_info(youtube_url)["url"]
-    
+
+    def get_youtube_id_metadata(video_id="", playlist_id=""):
+        """Fetch display metadata for direct YouTube video and playlist IDs."""
+        results = []
+        with YoutubeDL({
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "extract_flat": "in_playlist",
+            "nocheckcertificate": True,
+            "remote_components": ["ejs:github"],
+            "extractor_args": {
+                "youtube": {"player_client": ["web_embedded"]}
+            },
+        }) as ydl:
+            if video_id:
+                info = ydl.extract_info(
+                    f"https://www.youtube.com/watch?v={video_id}",
+                    download=False,
+                )
+                results.append({
+                    "kind": "video",
+                    "title": info.get("title") or video_id,
+                    "thumbnail": _youtube_thumbnail(info)
+                    or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                    "videoId": video_id,
+                    "channel": info.get("channel") or info.get("uploader", ""),
+                })
+
+            if playlist_id:
+                info = ydl.extract_info(
+                    f"https://www.youtube.com/playlist?list={playlist_id}",
+                    download=False,
+                )
+                entries = info.get("entries") or []
+                first_entry = next(
+                    (entry for entry in entries if isinstance(entry, dict)),
+                    {},
+                )
+                results.append({
+                    "kind": "playlist",
+                    "title": info.get("title") or playlist_id,
+                    "thumbnail": _youtube_thumbnail(info)
+                    or _youtube_thumbnail(first_entry)
+                    or "/static/favicon.svg",
+                    "playlistId": playlist_id,
+                })
+        return results
+
     def enqueue_youtube_result(result, record_history=False):
         """
         Enqueue a YouTube search result into the playback queue.
@@ -96,6 +180,52 @@ class YTService:
                 "stream_headers": stream_info.get("http_headers", {})
             }
         )
+
+    def enqueue_youtube_playlist(playlist_id, record_history=False):
+        """Resolve a YouTube playlist with yt-dlp and enqueue its videos."""
+        if not isinstance(playlist_id, str) or not re.fullmatch(
+            r"[A-Za-z0-9_-]{10,}", playlist_id
+        ):
+            raise ValueError("Invalid YouTube playlist ID")
+
+        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+        with YoutubeDL({
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "extract_flat": "in_playlist",
+            "nocheckcertificate": True,
+            "remote_components": ["ejs:github"],
+            "extractor_args": {
+                "youtube": {"player_client": ["web_embedded"]}
+            },
+        }) as ydl:
+            playlist = ydl.extract_info(playlist_url, download=False)
+
+        entries = playlist.get("entries") if isinstance(playlist, dict) else None
+        if not entries:
+            raise ValueError("YouTube playlist contains no playable videos")
+
+        songs = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            video_id = _youtube_entry_video_id(entry)
+            if not video_id:
+                continue
+            songs.append({
+                "title": entry.get("title") or video_id,
+                "thumbnail": entry.get("thumbnail")
+                or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                "url": None,
+                "source_url": f"https://www.youtube.com/watch?v={video_id}",
+                "videoId": video_id,
+                "record_history": record_history,
+            })
+
+        if not songs:
+            raise ValueError("YouTube playlist contains no playable videos")
+        return current_app.playback.enqueue_many("youtube", songs)
 
     def check_for_quota_error(response_json):
         """

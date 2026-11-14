@@ -4,6 +4,7 @@ Music Routes - Stream audio via FFmpeg to Bose
 import threading
 import os
 import re
+from urllib.parse import parse_qs, urlparse
 from flask import Blueprint, jsonify, redirect, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
 from core.history_db import normalize_video_id, is_blacklisted_rick_roll, record_rick_roll_timestamp
@@ -26,6 +27,32 @@ logger = logging.getLogger(__name__)
 
 # Allowlist pattern: only alphanumeric + underscores, must not be empty
 _TABLE_NAME_RE = re.compile(r'^[A-Za-z0-9_]+$')
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_PLAYLIST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,}$")
+_BARE_PLAYLIST_ID_RE = re.compile(
+    r"^(?:PL|UU|LL|FL|RD|OLAK|UL|WL|LM|PU|EC|MC|TL)[A-Za-z0-9_-]{8,}$"
+)
+
+
+def _youtube_ids_from_query(query):
+    """Extract YouTube video and playlist IDs without relying on the URL host."""
+    try:
+        parsed = urlparse(query.strip())
+    except ValueError:
+        return "", ""
+    params = parse_qs(parsed.query)
+    video_id = (params.get("v") or [""])[0].strip()
+    playlist_id = (params.get("list") or [""])[0].strip()
+
+    if not video_id and _VIDEO_ID_RE.fullmatch(query.strip()):
+        video_id = query.strip()
+    if not playlist_id and _BARE_PLAYLIST_ID_RE.fullmatch(query.strip()):
+        playlist_id = query.strip()
+
+    return (
+        video_id if _VIDEO_ID_RE.fullmatch(video_id) else "",
+        playlist_id if _PLAYLIST_ID_RE.fullmatch(playlist_id) else "",
+    )
 
 
 def _validate_table_name(name):
@@ -634,9 +661,25 @@ def search():
     if status_code != 200:
         return jsonify(res if res else {"error": "Lookup failed"}), status_code
 
+    items = res.get("items", [])
+    if not items:
+        video_id, playlist_id = _youtube_ids_from_query(query)
+        if video_id or playlist_id:
+            try:
+                return jsonify(
+                    YTService.get_youtube_id_metadata(video_id, playlist_id)
+                )
+            except Exception as error:
+                logger.warning("Could not fetch direct YouTube result metadata: %s", error)
+                return jsonify({
+                    "error": "Could not load YouTube video or playlist details."
+                }), 502
+        return jsonify([])
+
     results = []
-    for item in res.get("items", []):
+    for item in items:
         results.append({
+            "kind": "video",
             "title": item["snippet"]["title"],
             "thumbnail": item["snippet"]["thumbnails"]["high"]["url"],
             "videoId": item["id"]["videoId"],
@@ -719,6 +762,42 @@ def _enqueue_song(add_to_history):
     })
 
 
+def _enqueue_playlist(add_to_history):
+    if current_app.playback.owner is None:
+        current_app.playback.acquire("youtube")
+    if current_app.playback.owner != "youtube":
+        return jsonify({
+            "error": "youtube blueprint does not own player",
+            "owner": current_app.playback.owner
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid YouTube playlist request"}), 400
+    playlist_id = data.get("playlistId", "")
+    if not isinstance(playlist_id, str) or not _PLAYLIST_ID_RE.fullmatch(playlist_id):
+        return jsonify({"error": "Invalid YouTube playlist ID"}), 400
+
+    try:
+        success = YTService.enqueue_youtube_playlist(
+            playlist_id,
+            record_history=add_to_history,
+        )
+    except Exception as error:
+        logger.warning("YouTube playlist could not be resolved during queueing: %s", error)
+        return jsonify({
+            "error": f"Could not load YouTube playlist: {str(error)[:250]}"
+        }), 422
+
+    if not success:
+        return jsonify({
+            "error": "youtube blueprint does not own player",
+            "owner": current_app.playback.owner
+        }), 403
+
+    return jsonify({"status": "queued"})
+
+
 @youtube_bp.route("/enqueue", methods=["POST"])
 def enqueue():
     return _enqueue_song(add_to_history=True)
@@ -727,3 +806,13 @@ def enqueue():
 @youtube_bp.route("/enqueue_incognito", methods=["POST"])
 def enqueue_without_history():
     return _enqueue_song(add_to_history=False)
+
+
+@youtube_bp.route("/enqueue_playlist", methods=["POST"])
+def enqueue_playlist():
+    return _enqueue_playlist(add_to_history=True)
+
+
+@youtube_bp.route("/enqueue_playlist_incognito", methods=["POST"])
+def enqueue_playlist_without_history():
+    return _enqueue_playlist(add_to_history=False)

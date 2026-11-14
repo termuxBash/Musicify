@@ -95,6 +95,8 @@ flowchart LR
 
 See the browser flow in [yt.html](templates/yt.html#L49), search route in [apps/yt/routes.py](apps/yt/routes.py#L625), and queue construction in [YTService.enqueue_youtube_result](services/yt_service.py#L53).
 
+If a YouTube search returns no results, the search route checks the submitted text for a video ID (`v`) and/or playlist ID (`list`), independent of the URL host. A video ID becomes a normal queueable video card; a playlist ID becomes a separate queueable playlist card. Queueing a playlist resolves its entries with yt-dlp and appends the tracks to the YouTube queue, where each track is streamed by yt-dlp like an ordinary YouTube item.
+
 ### Audio stream flow
 
 At enqueue time, the YouTube service resolves stream information and stores the original `source_url`. When playback starts, FFmpeg launches `yt-dlp` using that source URL, then encodes its output for Icecast.

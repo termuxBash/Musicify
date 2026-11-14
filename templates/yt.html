@@ -53,7 +53,25 @@
             resultsGrid.innerHTML = "Searching...";
             const res = await fetch(API_PREFIX + "/search", { method: "POST", body: new FormData(e.target) });
             const songs = await res.json();
-            resultsGrid.innerHTML = songs.map(s => `
+            if (!res.ok) {
+                resultsGrid.textContent = songs.error || "Search failed.";
+                return;
+            }
+            if (!songs.length) {
+                resultsGrid.textContent = "No results found.";
+                return;
+            }
+            resultsGrid.innerHTML = songs.map(s => s.kind === "playlist" ? `
+        <div class="song-card">
+            <img src="${s.thumbnail}">
+            <p>${s.title}</p>
+            <div class="card-actions">
+                <button class="queue-icon-btn" onclick='addToQueue(${JSON.stringify(s)}, this)' title="Queue playlist">
+                    ${queueButtonSvg()}
+                </button>
+            </div>
+        </div>
+    ` : `
         <div class="song-card">
             <img src="${s.thumbnail}">
             <p>${s.title}</p>
@@ -159,8 +177,8 @@
 
         function addToQueue(song, btn) {
             const enqueueRoute = window.incogniMode
-                ? "/enqueue_incognito"
-                : "/enqueue";
+                ? (song.kind === "playlist" ? "/enqueue_playlist_incognito" : "/enqueue_incognito")
+                : (song.kind === "playlist" ? "/enqueue_playlist" : "/enqueue");
             return enqueueSong(song, btn, {
                 enqueueUrl: API_PREFIX + enqueueRoute,
                 acquireUrl: API_PREFIX + "/acquire",
