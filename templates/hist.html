@@ -549,7 +549,7 @@ include "_head.html" %}
           <label for="tableSelect" style="color: #aaa; font-size: 0.9rem">Table:</label>
           <select id="tableSelect" class="hist-select" onchange="changeTable(this.value)">
             {% for t in tables %}
-            <option value="{{ t }}" {% if t=""="current_table" %}selected{% endif %}>
+            <option value="{{ t }}" {% if t == current_table %}selected{% endif %}>
               {{ t }}{% if t == active_table %} ★ (Active){% endif %}
             </option>
             {% endfor %}
