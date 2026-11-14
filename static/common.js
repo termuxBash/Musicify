@@ -364,11 +364,37 @@ async function power() {
   }
   await updateStats();
 }
-async function setVolume(val) {
+let volumeDebounceTimer = null;
+
+function setVolume(val) {
   document.querySelectorAll(".volume-cluster .vol-val").forEach((volVal) => {
     volVal.textContent = val + "%";
   });
-  await fetch("/set_vol/" + val);
+  clearTimeout(volumeDebounceTimer);
+  volumeDebounceTimer = setTimeout(async () => {
+    try {
+      const res = await fetch("/set_vol/" + val);
+      if (res.ok) {
+        const data = await res.json();
+        const actualVol =
+          data && typeof data.volume === "number" ? data.volume : val;
+        document
+          .querySelectorAll(".volume-cluster input[type='range']")
+          .forEach((volSlider) => {
+            volSlider.value = actualVol;
+          });
+        document
+          .querySelectorAll(".volume-cluster .vol-val")
+          .forEach((volVal) => {
+            volVal.textContent = actualVol + "%";
+          });
+      }
+    } catch (err) {
+      console.error("Failed to set volume:", err);
+    } finally {
+      volumeDebounceTimer = null;
+    }
+  }, 150);
 }
 
 function openNowPlaying() {
@@ -1080,16 +1106,20 @@ async function updateStats() {
       );
     }
 
-    document
-      .querySelectorAll(".volume-cluster input[type='range']")
-      .forEach((volSlider) => {
-        if (document.activeElement !== volSlider) {
-          volSlider.value = data.volume;
-        }
-      });
-    document.querySelectorAll(".volume-cluster .vol-val").forEach((volVal) => {
-      volVal.textContent = data.volume + "%";
-    });
+    if (!volumeDebounceTimer) {
+      document
+        .querySelectorAll(".volume-cluster input[type='range']")
+        .forEach((volSlider) => {
+          if (document.activeElement !== volSlider) {
+            volSlider.value = data.volume;
+          }
+        });
+      document
+        .querySelectorAll(".volume-cluster .vol-val")
+        .forEach((volVal) => {
+          volVal.textContent = data.volume + "%";
+        });
+    }
 
     const titleEl = document.getElementById("playing-title");
     const titleTextEl = document.getElementById("playing-title-text");

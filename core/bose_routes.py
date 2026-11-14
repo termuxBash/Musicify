@@ -6,6 +6,7 @@ The routes return JSON responses that indicate the success of the operations and
 **This file is focused solely on the Flask route definitions and their interactions with the BoseSoundTouchWorker. The actual implementation of the worker, including how it communicates with the Bose hardware, is contained in the bose_worker module. This separation allows for cleaner code organization and easier maintenance.**
 """
 
+import math
 from flask import Blueprint, current_app, jsonify
 from core.bose_worker import BoseSoundTouchWorker
 from core.settings import BOSE_IP, STREAM_URL
@@ -63,10 +64,27 @@ def ctrl(cmd):
     return jsonify({"status": status})
 
 @bose_control_bp.route("/set_vol/<int:level>")
+@bose_control_bp.route("/set_volume/<int:level>")
 def set_volume(level):
-    """Directly sets volume level (0-100)."""
+    """Directly sets volume level (0-100) with anti-spike dampening."""
+    level = max(0, min(100, level))
+    current_vol = bose.get_volume() if hasattr(bose, "get_volume") else 0
+    if not isinstance(current_vol, int):
+        current_vol = 0
+    current_vol = max(0, min(100, current_vol))
+
+    delta = level - current_vol
+    # Apply anti-spike dampening if increasing volume by > 10% and exceeding safe range (> 15%)
+    if delta > 10 and (current_vol > 15 or level > 15):
+        # Exponential decreasing scaling factor:
+        # e.g. delta = 14 (16 -> 30) applies 50% -> new volume 23
+        # e.g. delta = 40 (0 -> 40) applies ~37.5% -> new volume 15
+        factor = 0.5 * math.exp(-0.01 * (delta - 14))
+        applied_delta = max(1, int(round(delta * factor)))
+        level = max(0, min(100, current_vol + applied_delta))
+
     success = bose.set_volume(level)
-    return jsonify({"status": "success" if success else "failed"})
+    return jsonify({"status": "success" if success else "failed", "volume": level})
 
 @bose_control_bp.route("/get_status")
 def get_status():
