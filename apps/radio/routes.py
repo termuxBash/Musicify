@@ -262,6 +262,8 @@ def _station_for_stream_url(stream_url):
         ),
         "",
     )
+    if path_name and path_name.casefold() in _GENERIC_STREAM_NAMES:
+        path_name = ""
     display_name = path_name or host_name or "Internet Radio"
     display_name = re.sub(r"[-_.]+", " ", display_name).strip().title()
     return {

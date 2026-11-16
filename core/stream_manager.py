@@ -15,6 +15,9 @@ from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
 logger = logging.getLogger(__name__)
 
+CHUNK_SIZE = 4096
+SILENCE_CHUNK = b"\x00" * CHUNK_SIZE
+
 class QueuePlayer:
 
     def __init__(
@@ -52,6 +55,11 @@ class QueuePlayer:
         if self.running:
             return
         self.running = True
+        if hasattr(self.ffmpeg, "ensure_publisher"):
+            try:
+                self.ffmpeg.ensure_publisher()
+            except Exception as e:
+                logger.error(f"Failed to start FFmpeg publisher: {e}")
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
 
@@ -62,6 +70,11 @@ class QueuePlayer:
         with self.lock:
             self.queue.clear()
             self.current_song = None
+        if hasattr(self.ffmpeg, "stop_publisher"):
+            try:
+                self.ffmpeg.stop_publisher()
+            except Exception as e:
+                logger.error(f"Failed to stop FFmpeg publisher: {e}")
 
     def enqueue(self, song):
         with self.lock:
@@ -127,12 +140,13 @@ class QueuePlayer:
         with self.lock:
             queue_copy = list(self.queue)
             autoplay_status = self.autoplay_enabled
+            is_playing = self.current_song is not None
 
         return {
             "queue": queue_copy,
             "current_song": self.current_song,
             "queue_size": len(queue_copy),
-            "playing": self.current_process is not None,
+            "playing": is_playing,
             "autoplay_enabled": autoplay_status  
         }
 
@@ -326,11 +340,25 @@ class QueuePlayer:
             logger.error(f"YouTube autoplay engine exception: {general_err}", exc_info=True)
 
     def _worker(self):
+        if hasattr(self.ffmpeg, "ensure_publisher"):
+            try:
+                self.ffmpeg.ensure_publisher()
+            except Exception as pub_err:
+                logger.error(f"Failed to ensure FFmpeg publisher in worker: {pub_err}")
+
         while self.running:
             song = self._get_next_song()
 
             if song is None:
-                time.sleep(1)
+                # Idle: stream continuous digital silence to Icecast to keep connection alive
+                try:
+                    if hasattr(self.ffmpeg, "write_pcm"):
+                        self.ffmpeg.write_pcm(SILENCE_CHUNK)
+                    else:
+                        time.sleep(0.05)
+                except Exception as silence_err:
+                    logger.debug(f"Error writing silence: {silence_err}")
+                    time.sleep(0.05)
                 continue
 
             # Detect blacklisted Rick Roll attempt each time it tries to play
@@ -367,11 +395,14 @@ class QueuePlayer:
                 song_generation = self._playback_generation
 
             title = song.get("title")
+            has_radio_url = isinstance(song.get("url"), str) or (
+                isinstance(song.get("station"), dict) and bool(song["station"].get("url"))
+            )
             if (
                 isinstance(title, str)
                 and title.startswith("Radio:(")
                 and title.endswith(")")
-                and isinstance(song.get("url"), str)
+                and has_radio_url
             ):
                 try:
                     if self.radio_handler is None:
@@ -411,28 +442,48 @@ class QueuePlayer:
                 )
 
             if should_trigger_now:
-                logger.info(f"Queue dropped to 0 while launching track. Generating proactive recommendations...")
+                logger.info("Queue dropped to 0 while launching track. Generating proactive recommendations...")
                 threading.Thread(target=self._trigger_autoplay, args=(song,), daemon=True).start()
 
+            decoder = None
             try:
                 logger.info(f"Playing: {song.get('title', 'Unknown')}")
                 target = song
                 
-                self.current_process = self.ffmpeg.start_stream(target)
+                if hasattr(self.ffmpeg, "start_decoder"):
+                    decoder = self.ffmpeg.start_decoder(target)
+                elif hasattr(self.ffmpeg, "start_stream"):
+                    decoder = self.ffmpeg.start_stream(target)
+                else:
+                    raise RuntimeError("No start_decoder or start_stream method on ffmpeg service.")
 
-                if self.bose:
-                    time.sleep(2)
-                    with self.lock:
-                        still_current = (
-                            self.running
-                            and self.current_song == song
-                            and self._playback_generation == song_generation
-                        )
+                with self.lock:
+                    self.current_process = decoder
 
-                    if still_current and self.bose.get_status()["is_on"]:
+                if self.bose and self.bose.get_status()["is_on"]:
+                    try:
+                        playing_info = self.bose.get_playing_url()
+                        # Only re-initiate stream on Bose if it's not already playing our mount
+                        if not (playing_info and playing_info.get("url") == STREAM_URL):
+                            self.bose.trigger_upnp_stream(STREAM_URL)
+                    except Exception as bose_err:
+                        logger.warning(f"Bose check error: {bose_err}")
                         self.bose.trigger_upnp_stream(STREAM_URL)
 
-                self.current_process.wait()
+                # Feed decoded PCM from decoder to the persistent Icecast publisher
+                while self.running:
+                    with self.lock:
+                        if self._playback_generation != song_generation:
+                            logger.info("Playback generation shifted (skipped/stopped).")
+                            break
+
+                    chunk = decoder.stdout.read(CHUNK_SIZE) if decoder and decoder.stdout else None
+                    if not chunk:
+                        # Reached EOF of song
+                        break
+
+                    if hasattr(self.ffmpeg, "write_pcm"):
+                        self.ffmpeg.write_pcm(chunk)
 
             except Exception as loop_error:
                 logger.warning(f"Playback runtime event: {loop_error}")
@@ -441,3 +492,8 @@ class QueuePlayer:
                 with self.lock:
                     self.current_process = None
                     self.current_song = None
+                if decoder:
+                    try:
+                        self.ffmpeg.kill_process(decoder)
+                    except Exception:
+                        pass
