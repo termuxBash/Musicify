@@ -2,6 +2,8 @@
 This module provides a clean interface for managing a persistent FFmpeg publisher
 that streams audio continuously to an Icecast server, as well as decoder processes
 that feed audio from local files or YouTube streams into the publisher.
+An independent audio pump thread guarantees a continuous, unbroken stream of audio
+(or digital silence when idle) to prevent Icecast socket timeouts and client disconnects.
 """
 
 import subprocess
@@ -10,11 +12,17 @@ import signal
 import sys
 import threading
 import time
+import queue
 import logging
 
 logger = logging.getLogger(__name__)
 
 ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
+CHUNK_SIZE = 4096
+# 44100 Hz * 2 channels * 2 bytes = 176,400 bytes/sec
+# 4096 bytes / 176400 bytes/sec = ~0.02322 seconds per chunk
+CHUNK_DURATION = CHUNK_SIZE / (44100 * 4)
+SILENCE_CHUNK = b"\x00" * CHUNK_SIZE
 
 
 class FFmpegService:
@@ -24,18 +32,20 @@ class FFmpegService:
         self._publisher_lock = threading.RLock()
         self._last_publisher_start = 0.0
 
+        # Dedicated audio buffer queue for decoupled, continuous real-time pumping
+        self._audio_queue = queue.Queue(maxsize=30)  # holds ~0.7s of audio buffer
+        self._pump_thread = None
+        self._pump_stop_event = threading.Event()
+
     def start_publisher(self):
-        """Starts a persistent FFmpeg publisher process streaming to Icecast."""
+        """Starts a persistent FFmpeg publisher process streaming to Icecast and ensures the pump is running."""
         with self._publisher_lock:
-            if self.publisher_process:
-                self.kill_process(self.publisher_process)
-                self.publisher_process = None
+            self._stop_publisher_process()
 
             cmd = [
                 "ffmpeg",
                 "-hide_banner",
                 "-loglevel", "error",
-                "-re",
                 "-f", "s16le",
                 "-ar", "44100",
                 "-ac", "2",
@@ -60,48 +70,104 @@ class FFmpegService:
                 preexec_fn=os.setsid
             )
             self._last_publisher_start = time.monotonic()
+
+            self._ensure_pump_thread()
             return self.publisher_process
 
+    def _stop_publisher_process(self):
+        if self.publisher_process:
+            self.kill_process(self.publisher_process)
+            self.publisher_process = None
+
+    def _ensure_pump_thread(self):
+        if self._pump_thread is None or not self._pump_thread.is_alive():
+            self._pump_stop_event.clear()
+            self._pump_thread = threading.Thread(target=self._audio_pump_worker, daemon=True)
+            self._pump_thread.start()
+
+    def _audio_pump_worker(self):
+        """
+        Independent audio pump thread.
+        Guarantees that audio data (or digital silence if buffer is empty)
+        is fed to the FFmpeg publisher at a continuous 1.0x real-time pace.
+        This prevents Icecast from ever encountering a socket timeout.
+        """
+        logger.info("Audio pump thread started.")
+        next_time = time.monotonic()
+
+        while not self._pump_stop_event.is_set():
+            # Get next audio chunk from queue or fall back to pure silence
+            try:
+                chunk = self._audio_queue.get_nowait()
+            except queue.Empty:
+                chunk = SILENCE_CHUNK
+
+            with self._publisher_lock:
+                if self.publisher_process is None or self.publisher_process.poll() is not None:
+                    # Publisher died (e.g. Icecast restart), attempt recovery after cooldown
+                    if time.monotonic() - self._last_publisher_start >= 1.0:
+                        try:
+                            self.start_publisher()
+                        except Exception as e:
+                            logger.error("Failed to restart publisher in pump: %s", e)
+
+                if self.publisher_process and self.publisher_process.stdin:
+                    try:
+                        self.publisher_process.stdin.write(chunk)
+                        self.publisher_process.stdin.flush()
+                    except (BrokenPipeError, OSError) as e:
+                        logger.warning("Pump write error: %s. Publisher will be reconnected.", e)
+                        self._stop_publisher_process()
+
+            # Pace to exact real-time duration
+            next_time += CHUNK_DURATION
+            now = time.monotonic()
+            sleep_time = next_time - now
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            elif sleep_time < -0.5:
+                # If fell behind by more than 0.5s, reset baseline to current clock
+                next_time = now
+
+        logger.info("Audio pump thread stopped.")
+
     def ensure_publisher(self):
-        """Ensures that the persistent FFmpeg publisher process is alive."""
+        """Ensures that the persistent FFmpeg publisher process and pump thread are alive."""
         with self._publisher_lock:
             if self.publisher_process is None or self.publisher_process.poll() is not None:
-                # 1 second cooldown to avoid tight restart loops if Icecast is down
                 if time.monotonic() - self._last_publisher_start >= 1.0:
                     return self.start_publisher()
+            self._ensure_pump_thread()
             return self.publisher_process
 
     def is_publisher_alive(self):
         with self._publisher_lock:
             return self.publisher_process is not None and self.publisher_process.poll() is None
 
-    def write_pcm(self, data: bytes) -> bool:
-        """Writes raw PCM audio bytes to the persistent publisher."""
+    def write_pcm(self, data: bytes, timeout: float = 2.0) -> bool:
+        """Pushes raw PCM audio bytes to the pump's audio queue."""
         self.ensure_publisher()
         try:
-            if self.publisher_process and self.publisher_process.stdin:
-                self.publisher_process.stdin.write(data)
-                self.publisher_process.stdin.flush()
-                return True
-        except (BrokenPipeError, OSError) as e:
-            logger.warning("Error writing to FFmpeg publisher: %s. Reconnecting...", e)
-            self.start_publisher()
+            self._audio_queue.put(data, timeout=timeout)
+            return True
+        except queue.Full:
+            logger.warning("Audio queue full; dropped PCM chunk.")
+            return False
+
+    def clear_buffer(self):
+        """Purges any buffered audio (e.g. when skipping tracks)."""
+        while not self._audio_queue.empty():
             try:
-                if self.publisher_process and self.publisher_process.stdin:
-                    self.publisher_process.stdin.write(data)
-                    self.publisher_process.stdin.flush()
-                    return True
-            except Exception as retry_err:
-                logger.error("Failed to write to restarted publisher: %s", retry_err)
-        return False
+                self._audio_queue.get_nowait()
+            except queue.Empty:
+                break
 
     def stop_publisher(self):
-        """Safely stops the persistent publisher process."""
+        """Safely stops the persistent publisher and pump thread."""
+        self._pump_stop_event.set()
+        self.clear_buffer()
         with self._publisher_lock:
-            if self.publisher_process:
-                logger.info("Stopping persistent FFmpeg publisher.")
-                self.kill_process(self.publisher_process)
-                self.publisher_process = None
+            self._stop_publisher_process()
 
     def start_decoder(self, target):
         """

@@ -111,8 +111,13 @@ class QueuePlayer:
 
     def skip(self):
         self._bump_playback_generation()
+        if hasattr(self.ffmpeg, "clear_buffer"):
+            try:
+                self.ffmpeg.clear_buffer()
+            except Exception:
+                pass
         if self.current_process:
-            logger.info("Skip button clicked. Terminating FFmpeg process.")
+            logger.info("Skip button clicked. Terminating decoder process.")
             try:
                 self.ffmpeg.kill_process(self.current_process)
             except Exception as e:
@@ -350,15 +355,8 @@ class QueuePlayer:
             song = self._get_next_song()
 
             if song is None:
-                # Idle: stream continuous digital silence to Icecast to keep connection alive
-                try:
-                    if hasattr(self.ffmpeg, "write_pcm"):
-                        self.ffmpeg.write_pcm(SILENCE_CHUNK)
-                    else:
-                        time.sleep(0.05)
-                except Exception as silence_err:
-                    logger.debug(f"Error writing silence: {silence_err}")
-                    time.sleep(0.05)
+                # Idle: audio pump automatically feeds continuous digital silence to Icecast
+                time.sleep(0.1)
                 continue
 
             # Detect blacklisted Rick Roll attempt each time it tries to play

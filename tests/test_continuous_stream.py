@@ -10,12 +10,25 @@ def test_ffmpeg_service_publisher_lifecycle():
     pub = service.ensure_publisher()
     try:
         assert service.is_publisher_alive()
-        # Test writing silence PCM
+        # Test writing audio chunk to pump queue
         res = service.write_pcm(b"\x00" * 4096)
         assert res is True
     finally:
         service.stop_publisher()
         assert not service.is_publisher_alive()
+
+
+def test_ffmpeg_service_pump_continuous_silence():
+    # Test that when no audio is sent, the pump continually feeds silence to the publisher
+    service = FFmpegService(icecast_url="icecast://source:hackme@127.0.0.1:8000/mpv.ogg")
+    service.ensure_publisher()
+    try:
+        assert service.is_publisher_alive()
+        # Wait 1.5 seconds with empty audio queue: pump must feed silence without dying
+        time.sleep(1.5)
+        assert service.is_publisher_alive()
+    finally:
+        service.stop_publisher()
 
 
 def test_queue_player_single_publisher_across_tracks():
@@ -77,8 +90,6 @@ def test_queue_player_single_publisher_across_tracks():
         assert publisher_start_count[0] == 1, "Publisher must be started only ONCE across multiple tracks"
         assert any(b"chunk1_Song A" in c for c in written_chunks)
         assert any(b"chunk1_Song B" in c for c in written_chunks)
-        # Verify silence is sent when idle
-        assert any(c == b"\x00" * 4096 for c in written_chunks)
 
     finally:
         player.stop()
@@ -104,6 +115,9 @@ def test_queue_player_skip_terminates_decoder_not_publisher():
 
         def write_pcm(self, data):
             return True
+
+        def clear_buffer(self):
+            pass
 
         def start_decoder(self, song):
             decoder = MagicMock()
