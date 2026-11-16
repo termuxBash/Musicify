@@ -467,7 +467,6 @@ def index():
 # ---------------- HISTORY ROUTES ----------------
 
 @youtube_bp.route('/hist')
-@youtube_bp.route('/hist/')
 def history_manager():
     from core.history_db import get_all_tables, get_active_table, get_history_rows, create_table
     tables = get_all_tables()

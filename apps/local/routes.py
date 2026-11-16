@@ -123,7 +123,6 @@ def get_random_local_track_payload(subpath=""):
     }
 
 @local_bp.route("/enqueue_random", methods=["POST"])
-@local_bp.route("/enque_random", methods=["POST"])
 def enqueue_random():
     """Route targeted by the UI button to queue one random track from current dir."""
     if current_app.playback.owner is None:

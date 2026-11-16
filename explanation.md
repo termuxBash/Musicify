@@ -218,10 +218,10 @@ Blueprint prefixes are registered in [create_app()](app.py#L47). Routes with no 
 | POST | `/shutdown` | — | Stops player/server and powers off Bose unless radio currently owns playback. [shutdown](core/stats.py#L199) |
 | GET | `/playlists` | — | Returns `.txt` playlist names from `PLAYLIST_DIR`. [playlists](core/stats.py#L222) |
 | POST | `/add_to_playlist` | JSON: `playlist` name and `song` object | Appends a title, title plus source, or special radio URL to a playlist file. A regular song object can provide `title` and `videoId` or `url`; radio items need a `Radio:(...)` title and HTTP(S) `url`. [add_to_playlist](core/stats.py#L238) |
-| POST | `/remove_from_queue/<index>` | Queue index path integer | Removes that queued item and returns its title. [remove_from_queue](core/stats.py#L334) |
-| POST | `/play_next/<index>` | Queue index path integer | Moves the chosen queued item to the front. [play_next](core/stats.py#L352) |
-| POST | `/reorder_queue/<source_index>/<target_index>` | Two queue index path integers | Moves one queue item to another valid queue position. [reorder_queue](core/stats.py#L359) |
-| POST | `/power` | — | Uses the Bose power control; when called internally with the shutdown-only flag it powers the speaker off. [power](core/stats.py#L366) |
+| POST | `/remove_from_queue` | JSON `index` integer | Removes that queued item and returns its title. [remove_from_queue](core/stats.py#L344) |
+| POST | `/play_next` | JSON `index` integer | Moves the chosen queued item to the front. [play_next](core/stats.py#L363) |
+| POST | `/reorder_queue` | JSON `{"source_index", "target_index"}` integers | Moves one queue item to another valid queue position. [reorder_queue](core/stats.py#L375) |
+| POST | `/power` | — | Uses the Bose power control; when called internally with the shutdown-only flag it powers the speaker off. [power](core/stats.py#L389) |
 | GET | `/poweroff` | — | Disables autoplay, releases the current owner or stops the idle player, clears radio state, and powers off Bose. [poweroff](core/stats.py#L375) |
 | POST | `/stop` | — | Disables autoplay, stops playback, and clears the queue. [stop](core/stats.py#L391) |
 | POST | `/skip` | — | Skips the current track without clearing upcoming tracks. [skip](core/stats.py#L398) |
@@ -235,7 +235,7 @@ Most queue controls do not accept a source/owner argument. They operate through 
 |---|---|---|---|
 | GET | `/local/`, `/local/browse/`, `/local/browse/<subpath>` | Optional relative `subpath` | Browses `ROOT_DIR`, lists supported media files and directories, and renders the local player. Paths outside the root are rejected. [browse](apps/local/routes.py#L41) |
 | POST | `/local/acquire` | Optional JSON `force` boolean | Requests local playback ownership; reports whether granted and the current owner. [acquire](apps/local/routes.py#L67) |
-| POST | `/local/enqueue_random` and `/local/enque_random` | Optional JSON `path`, query `path`, or browser referrer used to infer the folder | Chooses and queues one random local media file. The second spelling is a backward-compatible alias. [enqueue_random](apps/local/routes.py#L125) |
+| POST | `/local/enqueue_random` | Optional JSON `path`, query `path`, or browser referrer used to infer the folder | Chooses and queues one random local media file. [enqueue_random](apps/local/routes.py#L125) |
 | POST | `/local/enqueue` | JSON with `rel_path` and `title` | Resolves a relative path under `ROOT_DIR` and queues that local file. [enqueue](apps/local/routes.py#L157) |
 | POST | `/local/play_folder` | JSON optional relative `path` (empty means root) | Recursively lists supported files under the folder and queues them alphabetically. [play_folder](apps/local/routes.py#L186) |
 | GET | `/local/search?q=<text>` | Query parameter `q` | Searches local directory/file names. Empty query returns an empty list. [search_local_items](apps/local/routes.py#L255) |
@@ -246,7 +246,7 @@ Most queue controls do not accept a source/owner argument. They operate through 
 |---|---|---|---|
 | POST | `/youtube/ai_recommendations` | JSON non-empty `user_prompt` | Requests exactly three Gemini recommendations based on the playback history and queues them asynchronously. Requires `GEMINI_API_KEY` and YouTube playback resolution. [ai_recommendations](apps/yt/routes.py#L393) |
 | GET | `/youtube/` | — | Renders the online player. [index](apps/yt/routes.py#L435) |
-| GET | `/youtube/hist` and `/youtube/hist/` | Optional query `table` | Renders the history editor for the requested or active SQLite table. [history_manager](apps/yt/routes.py#L442) |
+| GET | `/youtube/hist` | Optional query `table` | Renders the history editor for the requested or active SQLite table. [history_manager](apps/yt/routes.py#L442) |
 | POST | `/youtube/hist/api/update` | JSON `table`, `id`, `song_name`, `song_id`; optional `number_of_listens`, `datetime_str` | Updates a history row. `song_id` must normalize to a YouTube video ID. [hist_update_record](apps/yt/routes.py#L473) |
 | POST | `/youtube/hist/api/delete` | JSON `table` and row `id` | Deletes a history row. [hist_delete_record](apps/yt/routes.py#L507) |
 | POST | `/youtube/hist/api/add` | JSON `table`, `song_name`, `song_id`; optional `number_of_listens`, `datetime_str` | Adds a history row or accumulates listens into the row with the same video ID. [hist_add_record](apps/yt/routes.py#L527) |

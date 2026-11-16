@@ -328,12 +328,26 @@ def _set_radio_playlist_entry(playlist, stream_url):
 def record_played_song(song):
     from core.history_db import record_played_song as db_record_played_song
     db_record_played_song(song)
-@stats_bp.route(
-    "/remove_from_queue/<int:index>",
-    methods=["POST"]
-)
-def remove_from_queue(index):
 
+
+def _queue_indexes(*keys):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return None
+
+    indexes = [data.get(key) for key in keys]
+    if any(type(index) is not int or index < 0 for index in indexes):
+        return None
+    return indexes
+
+
+@stats_bp.route("/remove_from_queue", methods=["POST"])
+def remove_from_queue():
+    indexes = _queue_indexes("index")
+    if indexes is None:
+        return jsonify({"error": "index must be a non-negative integer"}), 400
+
+    index = indexes[0]
     removed = current_app.playback.remove_from_queue(index)
 
     if removed is None:
@@ -346,15 +360,27 @@ def remove_from_queue(index):
         "title": removed["title"]
     })
 
-@stats_bp.route("/play_next/<int:index>", methods=["POST"])
-def play_next(index):
+@stats_bp.route("/play_next", methods=["POST"])
+def play_next():
+    indexes = _queue_indexes("index")
+    if indexes is None:
+        return jsonify({"error": "index must be a non-negative integer"}), 400
+
+    index = indexes[0]
     if not current_app.playback.move_to_front(index):
         return jsonify({"error": "song not found in queue"}), 404
 
     return jsonify({"status": "moved"})
 
-@stats_bp.route("/reorder_queue/<int:source_index>/<int:target_index>", methods=["POST"])
-def reorder_queue(source_index, target_index):
+@stats_bp.route("/reorder_queue", methods=["POST"])
+def reorder_queue():
+    indexes = _queue_indexes("source_index", "target_index")
+    if indexes is None:
+        return jsonify({
+            "error": "source_index and target_index must be non-negative integers"
+        }), 400
+
+    source_index, target_index = indexes
     if not current_app.playback.move_in_queue(source_index, target_index):
         return jsonify({"error": "invalid queue position"}), 400
 

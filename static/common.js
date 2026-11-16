@@ -640,14 +640,24 @@ async function runQueueMutation(request, errorMessage) {
 
 async function removeFromQueue(index) {
   await runQueueMutation(
-    () => fetch(`/remove_from_queue/${index}`, { method: "POST" }),
+    () =>
+      fetch("/remove_from_queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index }),
+      }),
     "Failed to remove song from queue.",
   );
 }
 
 async function playNextInQueue(index) {
   await runQueueMutation(
-    () => fetch(`/play_next/${index}`, { method: "POST" }),
+    () =>
+      fetch("/play_next", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index }),
+      }),
     "Failed to move song to the front of the queue.",
   );
 }
@@ -655,7 +665,11 @@ async function playNextInQueue(index) {
 async function reorderQueue(sourceIndex, targetIndex) {
   await runQueueMutation(
     () =>
-      fetch(`/reorder_queue/${sourceIndex}/${targetIndex}`, { method: "POST" }),
+      fetch("/reorder_queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_index: sourceIndex, target_index: targetIndex }),
+      }),
     "Failed to reorder queue.",
   );
 }
