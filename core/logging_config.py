@@ -19,7 +19,7 @@ class ColorFormatter(logging.Formatter):
     BOLD_RED = "\x1b[31;1m"
     RESET = "\x1b[0m"
 
-    FORMAT = "%(asctime)s %(levelname)s:%(name)s:%(message)s"
+    FORMAT = "%(asctime)s %(levelname)s: %(name)s : %(message)s"
     DATE_FORMAT = "%d/%m/%y-%H:%M:%S"
 
     LEVEL_COLORS = {

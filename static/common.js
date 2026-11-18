@@ -662,7 +662,7 @@ function renderModalLyrics(
     const lyricNodes = lines.map(({ text }) => {
       const line = document.createElement("div");
       line.className = "now-playing-lyric-line";
-      line.textContent = text;
+      renderLyricText(line, text);
       return line;
     });
 
@@ -709,6 +709,21 @@ function renderModalLyrics(
       behavior: "smooth",
     });
   }
+}
+
+function renderLyricText(element, text) {
+  const separatorIndex = text.indexOf("|");
+  if (separatorIndex === -1) {
+    element.textContent = text;
+    return;
+  }
+
+  const romanized = document.createElement("span");
+  romanized.textContent = text.slice(0, separatorIndex).trim();
+  const translated = document.createElement("span");
+  translated.className = "lyric-translation";
+  translated.textContent = text.slice(separatorIndex + 1).trim();
+  element.replaceChildren(romanized, translated);
 }
 
 document.addEventListener("keydown", (event) => {
@@ -1317,7 +1332,7 @@ async function updateStats() {
         setPlayingThumbnail(thumbnail);
       }
       if (statusEl) statusEl.textContent = playbackStatus;
-      if (lyricsEl) lyricsEl.textContent = data.current_lyric || "";
+      if (lyricsEl) renderLyricText(lyricsEl, data.current_lyric || "");
       if (modalThumbEl) {
         setExpandedThumbnail(modalThumbnail);
       }

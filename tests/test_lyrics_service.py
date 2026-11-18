@@ -408,7 +408,13 @@ class LyricsServiceTests(unittest.TestCase):
             def json(self):
                 return {
                     "candidates": [
-                        {"content": {"parts": [{"text": "Konnichiwa こんにちは\nSekai"}]}}
+                        {
+                            "content": {
+                                "parts": [
+                                    {"text": "Konnichiwa | Hello\nSekai | World"}
+                                ]
+                            }
+                        }
                     ]
                 }
 
@@ -416,8 +422,9 @@ class LyricsServiceTests(unittest.TestCase):
 
         result = romanize_lyrics("こんにちは\n世界")
 
-        self.assertEqual(result, "Konnichiwa こんにちは\nSekai")
-        self.assertIn("Do not translate them into English", post.call_args.kwargs["json"]["contents"][0]["parts"][0]["text"])
+        self.assertEqual(result, "Konnichiwa | Hello\nSekai | World")
+        prompt = post.call_args.kwargs["json"]["contents"][0]["parts"][0]["text"]
+        self.assertIn("romanized lyrics | English translation", prompt)
 
     @patch("services.lyrics_service.resolve_track", return_value=("Rick Astley", "Never Gonna Give You Up"))
     @patch("services.lyrics_service.LASTFM_KEY", "test-key")
@@ -437,7 +444,7 @@ class LyricsServiceTests(unittest.TestCase):
             def json(self):
                 return self.data
 
-        service = LyricsService()
+        service = LyricsService(lyrics_effort="GEMINI")
 
         def fake_get(_url, **kwargs):
             if kwargs["params"].get("q"):
@@ -464,7 +471,12 @@ class LyricsServiceTests(unittest.TestCase):
                         {
                             "content": {
                                 "parts": [
-                                    {"text": "Tadashisa to wa 正しさとは\nOrokasa to wa"}
+                                    {
+                                        "text": (
+                                            "Tadashisa to wa | What is righteousness?\n"
+                                            "Orokasa to wa | What is foolishness?"
+                                        )
+                                    }
                                 ]
                             }
                         }
@@ -482,7 +494,10 @@ class LyricsServiceTests(unittest.TestCase):
         )
         self.assertEqual(
             service.current_lyrics,
-            [(1.0, "Tadashisa to wa 正しさとは"), (4.0, "Orokasa to wa")],
+            [
+                (1.0, "Tadashisa to wa | What is righteousness?"),
+                (4.0, "Orokasa to wa | What is foolishness?"),
+            ],
         )
         self.assertEqual(service.lyrics_source, "Gemini")
         resolve_track.assert_called_once_with("Rick Astley - Never Gonna Give You Up", ANY)
@@ -545,7 +560,7 @@ class LyricsServiceTests(unittest.TestCase):
             ),
             FakeResponse({"lyrics": "Lyrica fallback line"}),
         ]
-        service = LyricsService()
+        service = LyricsService(lyrics_effort="GEMINI")
 
         service._load_lyrics("Rick Astley - Never Gonna Give You Up", 0)
 

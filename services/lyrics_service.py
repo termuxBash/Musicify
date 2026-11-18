@@ -89,18 +89,20 @@ def is_non_english_script(lyrics):
 
 
 def romanize_lyrics(lyrics):
-    """Romanize non-Latin lyrics with Gemini, preserving source line structure."""
+    """Romanize and translate lyrics with Gemini, preserving source line structure."""
     if not lyrics or not lyrics.strip() or not GEMINI_API_KEY:
         return None
 
     prompt = f"""You are an expert multilingual transliteration and romanization system.
 
-Automatically detect the language and transliterate the lyrics below into Latin characters.
-Do not translate them into English. Preserve the original language, words, meaning,
-pronunciation, every line break, and line order. Use standard conventions such as
-Hepburn for Japanese and readable standard transliteration for Hindi. Leave lines
-already written in Latin characters unchanged. Preserve timestamps and formatting.
-Return only the romanized lyrics, with no headings or explanations.
+Automatically detect the language and transliterate each lyric line into Latin
+characters, then translate that line into natural English. Return exactly one output
+line for every input line, formatted as:
+romanized lyrics | English translation
+Use standard conventions such as Hepburn for Japanese and readable standard
+transliteration for Hindi. Leave lines already written in Latin characters unchanged
+on the romanized side. Preserve line order and timestamps. Return only the formatted
+lyrics, with no headings or explanations.
 
 LYRICS:
 {lyrics}
@@ -128,15 +130,15 @@ LYRICS:
         candidates = response_json.get("candidates", [])
         content = candidates[0].get("content", {}) if candidates else {}
         parts = content.get("parts", [])
-        romanized = parts[0].get("text") if parts else None
-        if not isinstance(romanized, str):
+        formatted_lyrics = parts[0].get("text") if parts else None
+        if not isinstance(formatted_lyrics, str):
             logger.warning("Gemini returned no lyric text.")
             return None
-        romanized = romanized.strip()
-        if not romanized:
+        formatted_lyrics = formatted_lyrics.strip()
+        if not formatted_lyrics:
             logger.warning("Gemini returned empty lyrics.")
             return None
-        return romanized
+        return formatted_lyrics
     except (requests.RequestException, KeyError, IndexError, TypeError, ValueError) as error:
         logger.exception("Failed to romanize lyrics: %s", error)
         return None

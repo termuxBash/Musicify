@@ -230,10 +230,7 @@ def get_gemini_recommendations(user_prompt=""):
             try:
                 timestamp = int(ts_str)
             except ValueError:
-                try:
-                    timestamp = int(ts_str, 16)
-                except ValueError:
-                    pass
+                pass
 
         cleaned_name = cleanup_pattern.sub(" ", song_name)
         cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip(" -")
@@ -268,7 +265,7 @@ YouTubeVideoId must be a valid YouTube video ID."""
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
-                "responseMimeType": "application/json",
+                "responseMimeType": "text/plain",
             },
         }
         if include_tools:
@@ -295,6 +292,13 @@ YouTubeVideoId must be a valid YouTube video ID."""
         response.raise_for_status()
         # print("Gemini response:", response.text)  # Debugging output
         response_json = response.json()
+        usage = response_json.get("usageMetadata", {})
+        logger.info(
+            "Gemini token usage: prompt=%s, candidates=%s, total=%s",
+            usage.get("promptTokenCount"),
+            usage.get("candidatesTokenCount"),
+            usage.get("totalTokenCount"),
+        )
         response_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
         recommendations = []
         for line in response_text.splitlines():
