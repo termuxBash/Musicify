@@ -216,6 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.agents/
+skills-lock.json
 
 # User Config
 prompt.txt

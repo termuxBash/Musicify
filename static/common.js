@@ -198,6 +198,116 @@ function toggleMenu() {
   }
 }
 
+// --- Swipe-right-to-close sidebar on mobile ---
+(function setupSidePanelSwipe() {
+  const panel = document.getElementById("sidePanel");
+  if (!panel || panel.dataset.swipeReady) return;
+
+  let touchStart = null;
+  let currentDeltaX = 0;
+  const CLOSE_THRESHOLD = 80;
+
+  panel.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length !== 1) { touchStart = null; return; }
+      // Only start swipe on blank space (not on buttons, links, inputs, etc.)
+      const tag = e.target.tagName;
+      if (
+        e.target.closest("button, a, input, select, textarea, label, .queue-item-wrapper, .queue-item-drag-handle")
+      ) {
+        touchStart = null;
+        return;
+      }
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      panel.style.transition = "none";
+    },
+    { passive: true },
+  );
+
+  panel.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!touchStart) return;
+      const deltaX = e.touches[0].clientX - touchStart.x;
+      const deltaY = e.touches[0].clientY - touchStart.y;
+
+      // If vertical movement dominates, cancel the gesture (allow normal scroll)
+      if (Math.abs(deltaY) > Math.abs(deltaX) && currentDeltaX === 0) {
+        touchStart = null;
+        return;
+      }
+
+      // Only track leftward swipes (negative deltaX) to push panel back
+      if (deltaX < 0) {
+        currentDeltaX = deltaX;
+        panel.style.transform = `translateX(${deltaX}px)`;
+        const overlay = document.getElementById("overlay");
+        if (overlay) {
+          overlay.style.opacity = Math.max(0, 1 - Math.abs(deltaX) / 300);
+        }
+        if (e.cancelable) e.preventDefault();
+      }
+    },
+    { passive: false },
+  );
+
+  panel.addEventListener(
+    "touchend",
+    () => {
+      if (!touchStart && currentDeltaX === 0) return;
+      touchStart = null;
+
+      panel.style.transition = "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)";
+      const overlay = document.getElementById("overlay");
+
+      if (Math.abs(currentDeltaX) > CLOSE_THRESHOLD) {
+        // Slide fully off-screen to the left then close
+        panel.style.transform = `translateX(-100%)`;
+        if (overlay) {
+          overlay.style.transition = "opacity 0.25s ease";
+          overlay.style.opacity = "0";
+        }
+        setTimeout(() => {
+          // Remove open state directly (no CSS transition) to avoid a bump
+          panel.classList.remove("open");
+          overlay?.classList.remove("show");
+          const main = document.getElementById("main");
+          if (main) main.classList.remove("shift");
+          closeSettingsMenu();
+          // Reset inline styles
+          panel.style.transform = "";
+          panel.style.transition = "";
+          if (overlay) { overlay.style.opacity = ""; overlay.style.transition = ""; }
+        }, 250);
+      } else {
+        // Snap back
+        panel.style.transform = "";
+        if (overlay) { overlay.style.opacity = ""; }
+        setTimeout(() => { panel.style.transition = ""; }, 250);
+      }
+
+      currentDeltaX = 0;
+    },
+    { passive: true },
+  );
+
+  panel.addEventListener(
+    "touchcancel",
+    () => {
+      touchStart = null;
+      currentDeltaX = 0;
+      panel.style.transform = "";
+      panel.style.transition = "";
+      const overlay = document.getElementById("overlay");
+      if (overlay) { overlay.style.opacity = ""; overlay.style.transition = ""; }
+    },
+    { passive: true },
+  );
+
+  panel.dataset.swipeReady = "true";
+})();
+
 function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById("settingsPopupMenu");
@@ -676,13 +786,25 @@ async function reorderQueue(sourceIndex, targetIndex) {
 
 function startQueueGesture(event) {
   if (activeQueueGesture || event.target.closest(".queue-item-delete")) return;
-  if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (event.button !== 0) return;
 
   const wrapper = event.currentTarget;
   const row = wrapper.querySelector(".queue-item");
   const handle = event.target.closest(".queue-item-drag-handle");
-  if (event.pointerType === "mouse" || handle) {
+  if (handle) {
     startQueueReorder(event, wrapper, row);
+  } else if (event.pointerType === "mouse") {
+    activeQueueGesture = {
+      mode: "pending-reorder",
+      pointerId: event.pointerId,
+      wrapper,
+      row,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    document.addEventListener("pointermove", moveQueueGesture);
+    document.addEventListener("pointerup", endQueueGesture);
+    document.addEventListener("pointercancel", cancelQueueGesture);
   } else {
     startQueueSwipe(event, wrapper, row);
   }
@@ -713,7 +835,7 @@ function startQueueSwipe(event, wrapper, row) {
   document.addEventListener("pointercancel", cancelQueueGesture);
 }
 
-function startQueueReorder(event, wrapper, row) {
+function startQueueReorder(event, wrapper, row, pointerStartY = event.clientY) {
   event.preventDefault();
   const rect = row.getBoundingClientRect();
   const list = wrapper.parentElement;
@@ -738,7 +860,7 @@ function startQueueReorder(event, wrapper, row) {
     list,
     placeholder,
     sourceIndex: Number(wrapper.dataset.queueIndex),
-    pointerOffsetY: event.clientY - rect.top,
+    pointerOffsetY: pointerStartY - rect.top,
   };
   document.addEventListener("pointermove", moveQueueGesture);
   document.addEventListener("pointerup", endQueueGesture);
@@ -748,6 +870,17 @@ function startQueueReorder(event, wrapper, row) {
 function moveQueueGesture(event) {
   const gesture = activeQueueGesture;
   if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+  if (gesture.mode === "pending-reorder") {
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    if (Math.abs(deltaY) < 8 || Math.abs(deltaY) <= Math.abs(deltaX)) return;
+
+    startQueueReorder(event, gesture.wrapper, gesture.row, gesture.startY);
+    window.getSelection()?.removeAllRanges();
+    moveQueueGesture(event);
+    return;
+  }
 
   if (gesture.mode === "swipe") {
     const deltaX = event.clientX - gesture.startX;
@@ -789,6 +922,7 @@ function endQueueGesture(event) {
 
   removeQueueGestureListeners();
   activeQueueGesture = null;
+  if (gesture.mode === "pending-reorder") return;
   if (gesture.mode === "swipe") {
     const deltaX = event.clientX - gesture.startX;
     const threshold = 110;
@@ -851,6 +985,7 @@ function cancelQueueGesture(event) {
 
   removeQueueGestureListeners();
   activeQueueGesture = null;
+  if (gesture.mode === "pending-reorder") return;
   if (gesture.mode === "swipe") {
     gesture.row.style.transition = "";
     gesture.row.style.transform = "";

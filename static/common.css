@@ -251,10 +251,17 @@ nav {
   font: bold 20px/1 monospace;
   letter-spacing: -3px;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .queue-item-drag-handle:active {
   cursor: grabbing;
+}
+
+.queue-item-drag-handle:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 3px;
 }
 
 .queue-item-delete {
@@ -1295,6 +1302,13 @@ body.center-player-page .main.shift {
   padding: 20px;
 }
 
+.modal-overlay,
+.playlist-modal,
+.now-playing-modal {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
 .playlist-modal.open {
   display: flex;
 }
@@ -1306,6 +1320,12 @@ body.center-player-page .main.shift {
   border-radius: 18px;
   padding: 18px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.modal-content,
+.playlist-modal-card,
+.now-playing-modal-card {
+  overscroll-behavior: contain;
 }
 
 .ai-prompt-card {
