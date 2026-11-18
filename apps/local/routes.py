@@ -35,7 +35,7 @@ def _safe_path(base_dir, relative_path):
 
 
 def _local_thumbnail_url():
-    return url_for("static", filename="local-audio.svg")
+    return url_for("static", filename="music-note.svg")
 
 
 @local_bp.route('/')

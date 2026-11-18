@@ -129,7 +129,7 @@ class YTService:
                     "title": info.get("title") or playlist_id,
                     "thumbnail": _youtube_thumbnail(info)
                     or _youtube_thumbnail(first_entry)
-                    or "/static/favicon.svg",
+                    or "/static/music-note.svg",
                     "playlistId": playlist_id,
                 })
         return results

@@ -55,7 +55,7 @@
                     <div class="file-name">{{ item.name }}</div>
                 </a>
                 {% else %}
-                <img class="file-icon" src="/static/local-audio.svg" alt="Local Audio">
+                <img class="file-icon" src="/static/music-note.svg" alt="Local Audio">
                 <div class="file-name">{{ item.name }}</div>
                 {% endif %}
 
@@ -123,7 +123,7 @@
                         let escapingPath = item.rel_path.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 
                         card.innerHTML = `
-                    <img class="file-icon" src="${item.is_dir ? "/static/folder.svg" : "/static/local-audio.svg"}" alt="${item.is_dir ? "Folder" : "Audio"}">
+                    <img class="file-icon" src="${item.is_dir ? "/static/folder.svg" : "/static/music-note.svg"}" alt="${item.is_dir ? "Folder" : "Audio"}">
                     <div class="file-name">
                         ${item.is_dir ? `<a href="${window.API_PREFIX}/${item.rel_path}" style="color:white;text-decoration:none">${item.name}</a>` : item.name}
                     </div>

@@ -1153,9 +1153,9 @@ async function updateStats() {
 
     if (data.now_playing) {
       const title = data.now_playing.title || "Unknown track";
-      const thumbnail = data.now_playing.thumbnail || "/static/local-audio.svg";
+      const thumbnail = data.now_playing.thumbnail || "/static/music-note.svg";
       const modalThumbnail =
-        data.now_playing.thumbnail || "/static/local-audio.svg";
+        data.now_playing.thumbnail || "/static/music-note.svg";
       const playbackStatus =
         data.is_radio || data.owner === "radio"
           ? data.radio_playback_error

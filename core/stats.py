@@ -489,7 +489,7 @@ def playlist(name):
                     "playlist",
                     {
                         "title": title,
-                        "thumbnail": url_for("static", filename="local-audio.svg"),
+                        "thumbnail": url_for("static", filename="music-note.svg"),
                         "url": full_local_url
                     }
                 )

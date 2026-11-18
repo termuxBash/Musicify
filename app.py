@@ -1,6 +1,6 @@
 import sys
 import signal
-from flask import Flask, redirect, url_for
+from flask import Flask, redirect, url_for, Response
 from core.bose_routes import bose_control_bp
 from core.stats import stats_bp
 from apps.local.routes import local_bp
@@ -43,6 +43,12 @@ def create_app():
     @app.route("/")
     def index():
         return redirect(url_for('youtube.index'))
+
+    @app.route("/favicon.svg")
+    def favicon():
+        svg = open(app.static_folder + "/music-note.svg").read()
+        svg = svg.replace("#b197fc", "#63b0ec")
+        return Response(svg, mimetype="image/svg+xml")
 
     app.register_blueprint(bose_control_bp)
     app.register_blueprint(local_bp, url_prefix='/local')

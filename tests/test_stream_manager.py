@@ -30,7 +30,7 @@ def test_local_autoplay_generates_thumbnail_inside_request_context(monkeypatch):
     assert player.queue == [
         {
             "title": "Next track",
-            "thumbnail": "/static/local-audio.svg",
+            "thumbnail": "/static/music-note.svg",
             "url": "/music/next-track.mp3",
         }
     ]
