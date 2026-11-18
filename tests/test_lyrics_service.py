@@ -3,7 +3,7 @@ import json
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import requests
 from flask import Flask
@@ -399,40 +399,27 @@ class LyricsServiceTests(unittest.TestCase):
         self.assertEqual(service.lyrics_source, "Lyrica")
 
     @patch("services.lyrics_service.GEMINI_API_KEY", "test-key")
-    @patch("services.lyrics_service.requests.post")
-    def test_romanize_lyrics_trusts_non_latin_gemini_output(self, post):
-        class FakeResponse:
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {
-                    "candidates": [
-                        {
-                            "content": {
-                                "parts": [
-                                    {"text": "Konnichiwa | Hello\nSekai | World"}
-                                ]
-                            }
-                        }
-                    ]
-                }
-
-        post.return_value = FakeResponse()
+    @patch("services.lyrics_service.genai")
+    def test_romanize_lyrics_trusts_non_latin_gemini_output(self, mock_genai):
+        mock_client = MagicMock()
+        mock_genai.Client.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.text = "Konnichiwa | Hello\nSekai | World"
+        mock_client.models.generate_content.return_value = mock_response
 
         result = romanize_lyrics("こんにちは\n世界")
 
         self.assertEqual(result, "Konnichiwa | Hello\nSekai | World")
-        prompt = post.call_args.kwargs["json"]["contents"][0]["parts"][0]["text"]
-        self.assertIn("romanized lyrics | English translation", prompt)
+        call_kwargs = mock_client.models.generate_content.call_args
+        self.assertIn("romanized lyrics | English translation", call_kwargs.kwargs["contents"])
 
     @patch("services.lyrics_service.resolve_track", return_value=("Rick Astley", "Never Gonna Give You Up"))
     @patch("services.lyrics_service.LASTFM_KEY", "test-key")
     @patch("services.lyrics_service.GEMINI_API_KEY", "test-key")
-    @patch("services.lyrics_service.requests.post")
+    @patch("services.lyrics_service.genai")
     @patch("services.lyrics_service.requests.get")
     def test_load_lyrics_displays_gemini_output_even_with_non_latin_characters(
-        self, get, post, resolve_track
+        self, get, mock_genai, resolve_track
     ):
         class FakeResponse:
             def __init__(self, data):
@@ -445,6 +432,9 @@ class LyricsServiceTests(unittest.TestCase):
                 return self.data
 
         service = LyricsService(lyrics_effort="GEMINI")
+
+        mock_client = MagicMock()
+        mock_genai.Client.return_value = mock_client
 
         def fake_get(_url, **kwargs):
             if kwargs["params"].get("q"):
@@ -462,36 +452,23 @@ class LyricsServiceTests(unittest.TestCase):
             self.assertEqual(kwargs["timeout"], 30)
             return FakeResponse({"lyrics": "Lyrica line one\nLyrica line two"})
 
-        def fake_post(*_args, **_kwargs):
+        def fake_generate_content(**kwargs):
             self.assertEqual(service.lyrics_source, "Lyrica")
             self.assertEqual(service.current_lyrics[0][1], "Lyrica line one")
-            return FakeResponse(
-                {
-                    "candidates": [
-                        {
-                            "content": {
-                                "parts": [
-                                    {
-                                        "text": (
-                                            "Tadashisa to wa | What is righteousness?\n"
-                                            "Orokasa to wa | What is foolishness?"
-                                        )
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
+            mock_response = MagicMock()
+            mock_response.text = (
+                "Tadashisa to wa | What is righteousness?\n"
+                "Orokasa to wa | What is foolishness?"
             )
+            return mock_response
 
         get.side_effect = fake_get
-        post.side_effect = fake_post
+        mock_client.models.generate_content.side_effect = fake_generate_content
         service._load_lyrics("Rick Astley - Never Gonna Give You Up", 0)
 
-        self.assertEqual(
-            post.call_args.kwargs["json"]["contents"][0]["parts"][0]["text"].split("LYRICS:\n", 1)[1],
-            "正しさとは\n愚かさとは\n",
-        )
+        call_kwargs = mock_client.models.generate_content.call_args
+        prompt_text = call_kwargs.kwargs["contents"]
+        self.assertIn("正しさとは\n愚かさとは", prompt_text)
         self.assertEqual(
             service.current_lyrics,
             [
@@ -534,10 +511,10 @@ class LyricsServiceTests(unittest.TestCase):
     @patch("services.lyrics_service.resolve_track", return_value=("Rick Astley", "Never Gonna Give You Up"))
     @patch("services.lyrics_service.LASTFM_KEY", "test-key")
     @patch("services.lyrics_service.GEMINI_API_KEY", "test-key")
-    @patch("services.lyrics_service.requests.post", side_effect=requests.Timeout)
+    @patch("services.lyrics_service.genai")
     @patch("services.lyrics_service.requests.get")
     def test_load_lyrics_falls_back_to_lyrica_after_gemini_error(
-        self, get, post, resolve_track
+        self, get, mock_genai, resolve_track
     ):
         class FakeResponse:
             def __init__(self, data):
@@ -548,6 +525,10 @@ class LyricsServiceTests(unittest.TestCase):
 
             def json(self):
                 return self.data
+
+        mock_client = MagicMock()
+        mock_genai.Client.return_value = mock_client
+        mock_client.models.generate_content.side_effect = Exception("Gemini API error")
 
         get.side_effect = [
             FakeResponse(
@@ -566,7 +547,7 @@ class LyricsServiceTests(unittest.TestCase):
 
         self.assertEqual(service.current_lyrics, [(1.0, "Lyrica fallback line")])
         self.assertEqual(service.lyrics_source, "Lyrica")
-        post.assert_called_once()
+        mock_client.models.generate_content.assert_called_once()
         resolve_track.assert_called_once_with("Rick Astley - Never Gonna Give You Up", ANY)
 
     @patch("services.lyrics_service.resolve_track", return_value=("Rick Astley", "Never Gonna Give You Up"))

@@ -8,6 +8,9 @@ import unicodedata
 
 import requests
 
+from google import genai  # type: ignore
+from google.genai import types as genai_types  # type: ignore
+
 from core.settings import (
     DEFAULT_LYRICS_ENABLED,
     GEMINI_API_KEY,
@@ -107,30 +110,18 @@ lyrics, with no headings or explanations.
 LYRICS:
 {lyrics}
 """
-    endpoint = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent"
-    )
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
     try:
-        response = requests.post(
-            endpoint,
-            params={"key": GEMINI_API_KEY},
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "responseMimeType": "text/plain",
-                },
-            },
-            timeout=60,
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                temperature=0.1,
+                response_mime_type="text/plain",
+            ),
         )
-        response.raise_for_status()
-        response_json = response.json()
-        candidates = response_json.get("candidates", [])
-        content = candidates[0].get("content", {}) if candidates else {}
-        parts = content.get("parts", [])
-        formatted_lyrics = parts[0].get("text") if parts else None
+        formatted_lyrics = response.text
         if not isinstance(formatted_lyrics, str):
             logger.warning("Gemini returned no lyric text.")
             return None
@@ -139,7 +130,7 @@ LYRICS:
             logger.warning("Gemini returned empty lyrics.")
             return None
         return formatted_lyrics
-    except (requests.RequestException, KeyError, IndexError, TypeError, ValueError) as error:
+    except Exception as error:
         logger.exception("Failed to romanize lyrics: %s", error)
         return None
 

@@ -21,6 +21,8 @@ from services.lastfm_service import resolve_track
 import logging
 import random
 import requests # type: ignore
+from google import genai  # type: ignore
+from google.genai import types as genai_types  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -257,49 +259,40 @@ Each line must use this format and contain no other > characters:
 SongName>YouTubeVideoId
 YouTubeVideoId must be a valid YouTube video ID."""
 
-    endpoint = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent"
-    )
-    def build_payload(include_tools):
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "text/plain",
-            },
-        }
-        if include_tools:
-            payload["tools"] = [{"googleSearch": {}}]
-        return payload
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    def _call_gemini(use_search):
+        config = genai_types.GenerateContentConfig(
+            response_mime_type="text/plain",
+        )
+        tools = [genai_types.Tool(google_search=genai_types.GoogleSearch())] if use_search else None
+        if tools:
+            config.tools = tools
+        return client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=config,
+        )
 
     try:
-        response = requests.post(
-            endpoint,
-            params={"key": GEMINI_API_KEY},
-            json=build_payload(include_tools=True),
-            timeout=20,
-        )
+        try:
+            response = _call_gemini(use_search=True)
+        except genai.errors.ClientError as search_error:
+            if "429" in str(search_error) or "RESOURCE_EXHAUSTED" in str(search_error):
+                logger.warning("Gemini request with Google Search was rate limited; retrying without tools")
+                response = _call_gemini(use_search=False)
+            else:
+                raise
 
-        if response.status_code == 429:
-            logger.warning("Gemini request with Google Search was rate limited; retrying without tools")
-            response = requests.post(
-                endpoint,
-                params={"key": GEMINI_API_KEY},
-                json=build_payload(include_tools=False),
-                timeout=20,
+        usage = response.usage_metadata
+        if usage:
+            logger.info(
+                "Gemini token usage: prompt=%s, candidates=%s, total=%s",
+                usage.prompt_token_count,
+                usage.candidates_token_count,
+                usage.total_token_count,
             )
-
-        response.raise_for_status()
-        # print("Gemini response:", response.text)  # Debugging output
-        response_json = response.json()
-        usage = response_json.get("usageMetadata", {})
-        logger.info(
-            "Gemini token usage: prompt=%s, candidates=%s, total=%s",
-            usage.get("promptTokenCount"),
-            usage.get("candidatesTokenCount"),
-            usage.get("totalTokenCount"),
-        )
-        response_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
+        response_text = response.text
         recommendations = []
         for line in response_text.splitlines():
             song_name, song_id = _parse_gemini_recommendation(line)
@@ -309,11 +302,10 @@ YouTubeVideoId must be a valid YouTube video ID."""
                     "song_id": song_id,
                 })
 
-    except (requests.RequestException, KeyError, IndexError, TypeError) as error:
+    except Exception as error:
         logger.error(
-            "Gemini recommendation request failed: %s; response=%s",
+            "Gemini recommendation request failed: %s",
             error,
-            getattr(error.response, "text", None),
         )
         return []
 
