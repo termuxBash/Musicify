@@ -11,16 +11,7 @@ import requests
 from google import genai  # type: ignore
 from google.genai import types as genai_types  # type: ignore
 
-from core.settings import (
-    DEFAULT_LYRICS_ENABLED,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
-    LASTFM_KEY,
-    LYRICS_EFFORT,
-    LYRICS_EFFORT_LEVELS,
-    LYRICS_OFFSET_MS,
-    LYRICS_OFFSET_LOCAL_MS,
-)
+from core import settings
 from services.lastfm_service import resolve_track
 
 logger = logging.getLogger(__name__)
@@ -93,7 +84,7 @@ def is_non_english_script(lyrics):
 
 def romanize_lyrics(lyrics):
     """Romanize and translate lyrics with Gemini, preserving source line structure."""
-    if not lyrics or not lyrics.strip() or not GEMINI_API_KEY:
+    if not lyrics or not lyrics.strip() or not settings.GEMINI_API_KEY:
         return None
 
     prompt = f"""You are an expert multilingual transliteration and romanization system.
@@ -110,17 +101,25 @@ lyrics, with no headings or explanations.
 LYRICS:
 {lyrics}
 """
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     try:
         response = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=settings.GEMINI_MODEL,
             contents=prompt,
             config=genai_types.GenerateContentConfig(
                 temperature=0.1,
                 response_mime_type="text/plain",
             ),
         )
+        usage = response.usage_metadata
+        if usage:
+            logger.info(
+                "Gemini token usage: prompt=%s, candidates=%s, total=%s",
+                usage.prompt_token_count,
+                usage.candidates_token_count,
+                usage.total_token_count,
+            )
         formatted_lyrics = response.text
         if not isinstance(formatted_lyrics, str):
             logger.warning("Gemini returned no lyric text.")
@@ -138,10 +137,10 @@ LYRICS:
 class LyricsService:
     def __init__(
         self,
-        enabled=DEFAULT_LYRICS_ENABLED,
-        offset_ms=LYRICS_OFFSET_MS,
-        local_offset_ms=LYRICS_OFFSET_LOCAL_MS,
-        lyrics_effort=LYRICS_EFFORT,
+        enabled=settings.DEFAULT_LYRICS_ENABLED,
+        offset_ms=settings.LYRICS_OFFSET_MS,
+        local_offset_ms=settings.LYRICS_OFFSET_LOCAL_MS,
+        lyrics_effort=settings.LYRICS_EFFORT,
     ):
         self.current_lyrics = []
         self.song_start_time = None
@@ -201,9 +200,9 @@ class LyricsService:
     def _load_lyrics(self, song_title, generation, max_effort=None):
         with self._lock:
             lyrics_effort = self.lyrics_effort
-        max_step = LYRICS_EFFORT_LEVELS.index(lyrics_effort)
+        max_step = settings.LYRICS_EFFORT_LEVELS.index(lyrics_effort)
         if max_effort is not None:
-            max_step = min(max_step, LYRICS_EFFORT_LEVELS.index(max_effort))
+            max_step = min(max_step, settings.LYRICS_EFFORT_LEVELS.index(max_effort))
 
         clean_query = re.sub(r"\(.*?\)|\[.*?\]", "", song_title)
         clean_query = re.sub(
@@ -291,9 +290,9 @@ class LyricsService:
     def _resolve_artist_and_track(query):
         artist = None
         track = None
-        if LASTFM_KEY:
+        if settings.LASTFM_KEY:
             try:
-                artist, track = resolve_track(query, LASTFM_KEY)
+                artist, track = resolve_track(query, settings.LASTFM_KEY)
             except (requests.RequestException, ValueError) as error:
                 logger.warning("Last.fm track lookup failed for %s: %s", query, error)
 

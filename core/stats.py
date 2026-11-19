@@ -14,9 +14,9 @@ from urllib.parse import urlparse
 from flask import Blueprint, current_app, jsonify, request, url_for
 import psutil
 
+from core import settings
 from core.bose_routes import ctrl, get_status, power_off_bose
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
-from core.settings import LYRICS_EFFORT_LEVELS, PLAYLIST_DIR, ROOT_DIR, update_user_config
 from services.yt_service import YTService
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ def set_lyrics_offset():
     lyrics_svc = current_app.lyrics_service
     setting_key = f"lyrics_offset_{source}_ms"
     try:
-        update_user_config(setting_key, offset_ms)
+        settings.update_user_config(setting_key, offset_ms)
     except OSError:
         logger.exception("Could not persist the lyrics offset.")
         return jsonify({"status": "error", "message": "Could not save lyrics offset."}), 500
@@ -156,14 +156,14 @@ def set_lyrics_offset():
 def set_lyrics_effort():
     data = request.get_json()
     lyrics_effort = data.get("lyrics_effort") if isinstance(data, dict) else None
-    if lyrics_effort not in LYRICS_EFFORT_LEVELS:
+    if lyrics_effort not in settings.LYRICS_EFFORT_LEVELS:
         return jsonify({
             "status": "error",
             "message": "lyrics_effort must be LRCLIB, LYRICA, or GEMINI",
         }), 400
 
     try:
-        update_user_config("lyrics_effort", lyrics_effort)
+        settings.update_user_config("lyrics_effort", lyrics_effort)
     except OSError:
         logger.exception("Could not persist the lyrics effort.")
         return jsonify({"status": "error", "message": "Could not save lyrics effort."}), 500
@@ -220,14 +220,14 @@ def _power_off_bose():
 def playlists():
 
     os.makedirs(
-        PLAYLIST_DIR,
+        settings.PLAYLIST_DIR,
         exist_ok=True
     )
 
     return jsonify(
         sorted([
             os.path.splitext(f)[0]
-            for f in os.listdir(PLAYLIST_DIR)
+            for f in os.listdir(settings.PLAYLIST_DIR)
             if f.endswith(".txt")
         ])
     )
@@ -298,9 +298,9 @@ def add_to_playlist():
 
 
 def _append_to_playlist(playlist, title, source=""):
-    os.makedirs(PLAYLIST_DIR, exist_ok=True)
+    os.makedirs(settings.PLAYLIST_DIR, exist_ok=True)
     safe_playlist = _validated_playlist_name(playlist)
-    path = _safe_path(PLAYLIST_DIR, f"{safe_playlist}.txt")
+    path = _safe_path(settings.PLAYLIST_DIR, f"{safe_playlist}.txt")
 
 
     with open(path, "a", encoding="utf8") as playlist_file:
@@ -308,9 +308,9 @@ def _append_to_playlist(playlist, title, source=""):
 
 
 def _set_radio_playlist_entry(playlist, stream_url):
-    os.makedirs(PLAYLIST_DIR, exist_ok=True)
+    os.makedirs(settings.PLAYLIST_DIR, exist_ok=True)
     safe_playlist = _validated_playlist_name(playlist)
-    path = _safe_path(PLAYLIST_DIR, f"{safe_playlist}.txt")
+    path = _safe_path(settings.PLAYLIST_DIR, f"{safe_playlist}.txt")
 
     existing_lines = []
     if os.path.exists(path):
@@ -426,7 +426,7 @@ def skip():
 
 @stats_bp.route("/playlist/<name>", methods=["GET"])
 def playlist(name):
-    base_dir = os.path.realpath(PLAYLIST_DIR)
+    base_dir = os.path.realpath(settings.PLAYLIST_DIR)
     try:
         path = _safe_path(base_dir, f"{name}.txt")
     except ValueError:
@@ -479,7 +479,7 @@ def playlist(name):
                 (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".webm")
             ):
                 try:
-                    full_local_url = _safe_path(ROOT_DIR, source)
+                    full_local_url = _safe_path(settings.ROOT_DIR, source)
                 except ValueError:
                     logger.warning("Skipping local playlist path outside ROOT_DIR: %s", source)
                     continue

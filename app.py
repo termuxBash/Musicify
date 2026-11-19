@@ -1,21 +1,22 @@
 import sys
 import signal
 from flask import Flask, redirect, url_for, Response
+
 from core.bose_routes import bose_control_bp
 from core.stats import stats_bp
-from apps.local.routes import local_bp
-from apps.yt.routes import youtube_bp
-from apps.radio.routes import initialize_radio_playback, radio_bp
-from collections import deque
 from core.bose_worker import BoseSoundTouchWorker
 from core.playback_controller import PlaybackController
 from core.stream_manager import QueuePlayer
-from services.ffmpeg_service import FFmpegService
-from services.lyrics_service import LyricsService
-from core.settings import APP_HOST, APP_PORT, BOSE_IP, DEFAULT_AUTOPLAY_ENABLED, DEFAULT_INCOGNI_MODE, DEFAULT_LYRICS_ENABLED
+from core import settings
 from core.logging_config import setup_logging
 
+from apps.local.routes import local_bp
+from apps.yt.routes import youtube_bp
+from apps.radio.routes import initialize_radio_playback, radio_bp
 
+from collections import deque
+from services.ffmpeg_service import FFmpegService
+from services.lyrics_service import LyricsService
 def create_app():
     setup_logging()
     app = Flask(__name__)
@@ -23,16 +24,16 @@ def create_app():
     app.config['current_song'] = None
 
     # Instantiate services
-    app.lyrics_service = LyricsService(enabled=DEFAULT_LYRICS_ENABLED)
+    app.lyrics_service = LyricsService(enabled=settings.DEFAULT_LYRICS_ENABLED)
     app.last_known_title = None
-    app.incogni_mode = DEFAULT_INCOGNI_MODE
+    app.incogni_mode = settings.DEFAULT_INCOGNI_MODE
 
     app.player = QueuePlayer(
         ffmpeg_service=FFmpegService(),
-        autoplay_enabled=DEFAULT_AUTOPLAY_ENABLED,
+        autoplay_enabled=settings.DEFAULT_AUTOPLAY_ENABLED,
         flask_app=app,
         bose_worker=BoseSoundTouchWorker(
-            ip_address=BOSE_IP
+            ip_address=settings.BOSE_IP
         )
     )
     app.player.incogni_mode = app.incogni_mode
@@ -75,4 +76,4 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
     print("Music Link: http://127.0.0.1:8000/")
-    app.run(host=APP_HOST, port=APP_PORT, debug=False, use_reloader=False)
+    app.run(host=settings.APP_HOST, port=settings.APP_PORT, debug=False, use_reloader=False)

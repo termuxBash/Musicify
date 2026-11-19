@@ -8,15 +8,7 @@ from urllib.parse import parse_qs, urlparse
 from flask import Blueprint, jsonify, redirect, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
 from core.history_db import normalize_video_id, is_blacklisted_rick_roll, record_rick_roll_timestamp
-from core.settings import (
-    DB_FILENAME,
-    MUSIC_ATLAS_KEY,
-    LASTFM_KEY,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
-    PLAYLIST_DIR,
-    SONG_NAME_CLEANUP,
-)
+from core import settings
 from services.lastfm_service import resolve_track
 import logging
 import random
@@ -103,14 +95,14 @@ def get_lastfm_recommendations(query):
     - then fetches similar tracks
     """
 
-    if not LASTFM_KEY:
+    if not settings.LASTFM_KEY:
         logger.error("Missing LASTFM_KEY")
         return []
 
     # -------------------------
     # 1. Try direct parsing
     # -------------------------
-    seed_artist, seed_track = resolve_track(query, LASTFM_KEY)
+    seed_artist, seed_track = resolve_track(query, settings.LASTFM_KEY)
 
     if seed_track:
         seed_track = clean_track_name(seed_track)
@@ -120,7 +112,7 @@ def get_lastfm_recommendations(query):
     # -------------------------
     if not seed_artist or not seed_track:
         logger.info(f"Resolving track via search: {query}")
-        seed_artist, seed_track = resolve_track(query, LASTFM_KEY)
+        seed_artist, seed_track = resolve_track(query, settings.LASTFM_KEY)
 
     if not seed_artist or not seed_track:
         logger.warning("Could not resolve track/artist.")
@@ -137,7 +129,7 @@ def get_lastfm_recommendations(query):
         "method": "track.getsimilar",
         "artist": seed_artist,
         "track": seed_track,
-        "api_key": LASTFM_KEY,
+        "api_key": settings.LASTFM_KEY,
         "format": "json",
         "limit": 100,
         "autocorrect": 1
@@ -202,7 +194,7 @@ def get_lastfm_recommendations(query):
 
 def get_gemini_recommendations(user_prompt=""):
     """Return three YouTube song recommendations based on playback history."""
-    if not GEMINI_API_KEY:
+    if not settings.GEMINI_API_KEY:
         logger.error("Missing GEMINI_API_KEY")
         return []
 
@@ -215,7 +207,7 @@ def get_gemini_recommendations(user_prompt=""):
 
     cleanup_pattern = re.compile(
         r"(?:^|[\s\[\(\-])(?:"
-        + "|".join(re.escape(term) for term in sorted(SONG_NAME_CLEANUP, key=len, reverse=True))
+        + "|".join(re.escape(term) for term in sorted(settings.SONG_NAME_CLEANUP, key=len, reverse=True))
         + r")(?:$|[\s\]\)\-])",
         re.IGNORECASE,
     )
@@ -259,7 +251,7 @@ Each line must use this format and contain no other > characters:
 SongName>YouTubeVideoId
 YouTubeVideoId must be a valid YouTube video ID."""
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     def _call_gemini(use_search):
         config = genai_types.GenerateContentConfig(
@@ -269,7 +261,7 @@ YouTubeVideoId must be a valid YouTube video ID."""
         if tools:
             config.tools = tools
         return client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=settings.GEMINI_MODEL,
             contents=prompt,
             config=config,
         )
@@ -483,7 +475,7 @@ def history_manager():
     rows = get_history_rows(current_table)
     return render_template(
         'hist.html',
-        database_filename=DB_FILENAME,
+        database_filename=settings.DB_FILENAME,
         tables=tables,
         current_table=current_table,
         active_table=active_table,

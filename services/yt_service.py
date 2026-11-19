@@ -12,14 +12,14 @@ from yt_dlp import YoutubeDL
 import logging
 import re
 from urllib.parse import parse_qs, urlparse
-from core.settings import YOUTUBE_API_KEY, BACKUP_YOUTUBE_API_KEY
+from core import settings
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
 
 logger = logging.getLogger(__name__)
 YOUTUBE_API_KEYS = [
-    YOUTUBE_API_KEY,
-    BACKUP_YOUTUBE_API_KEY
+    settings.YOUTUBE_API_KEY,
+    settings.BACKUP_YOUTUBE_API_KEY
 ]
 
 _YOUTUBE_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")

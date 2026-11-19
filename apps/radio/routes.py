@@ -9,7 +9,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 import httpx
 from pyradios import RadioBrowser
 
-from core.settings import RADIO_GENRES, get_radio_config, update_user_config
+from core import settings
 
 
 logger = logging.getLogger(__name__)
@@ -381,7 +381,7 @@ def initialize_radio_playback(app):
 
 
 def _find_favorite(name):
-    favorites = get_radio_config()["favorites"]
+    favorites = settings.get_radio_config()["favorites"]
     query = name.strip().casefold()
     exact = next((station for station in favorites if station["name"].casefold() == query), None)
     if exact:
@@ -458,7 +458,7 @@ def _configure_radio_playback(state):  # pydead: keep
 
 @radio_bp.route("/")
 def index():
-    config = get_radio_config()
+    config = settings.get_radio_config()
     return render_template(
         "radio.html",
         page_title="Musicify Radio",
@@ -489,7 +489,7 @@ def search():
     ]
     if not query and not tags:
         return jsonify([])
-    if len(set(tags)) != len(tags) or any(tag not in RADIO_GENRES for tag in tags):
+    if len(set(tags)) != len(tags) or any(tag not in settings.RADIO_GENRES for tag in tags):
         return jsonify({"error": "Choose a supported radio genre."}), 400
 
     try:
@@ -524,7 +524,7 @@ def play():
 def play_preset(number):
     if number not in range(1, 7):
         return jsonify({"error": "Radio preset must be between 1 and 6."}), 404
-    station = get_radio_config().get(str(number))
+    station = settings.get_radio_config().get(str(number))
     if not station:
         return jsonify({"error": f"Radio preset {number} is empty."}), 404
 
@@ -556,10 +556,10 @@ def save_preset():
     if type(number) is not int or number not in range(1, 7) or station is None:
         return jsonify({"error": "Choose a radio station and a preset from 1 to 6."}), 400
 
-    config = get_radio_config()
+    config = settings.get_radio_config()
     config[str(number)] = station
     try:
-        update_user_config("radio", config)
+        settings.update_user_config("radio", config)
     except (OSError, ValueError):
         logger.exception("Could not save radio preset.")
         return jsonify({"error": "Could not save the radio preset."}), 500
@@ -571,12 +571,12 @@ def delete_preset(number):
     if number not in range(1, 7):
         return jsonify({"error": "Radio preset must be between 1 and 6."}), 404
 
-    config = get_radio_config()
+    config = settings.get_radio_config()
     if config[str(number)] is None:
         return jsonify({"error": f"Radio preset {number} is empty."}), 404
     config[str(number)] = None
     try:
-        update_user_config("radio", config)
+        settings.update_user_config("radio", config)
     except (OSError, ValueError):
         logger.exception("Could not delete radio preset.")
         return jsonify({"error": "Could not delete the radio preset."}), 500
@@ -590,7 +590,7 @@ def save_favorite():
     if station is None:
         return jsonify({"error": "Choose a valid radio station to favorite."}), 400
 
-    config = get_radio_config()
+    config = settings.get_radio_config()
     existing = next(
         (favorite for favorite in config["favorites"] if favorite["url"] == station["url"]),
         None,
@@ -600,7 +600,7 @@ def save_favorite():
 
     config["favorites"].append(station)
     try:
-        update_user_config("radio", config)
+        settings.update_user_config("radio", config)
     except (OSError, ValueError):
         logger.exception("Could not save radio favorite.")
         return jsonify({"error": "Could not save the radio favorite."}), 500
@@ -614,7 +614,7 @@ def delete_favorite():
     if not isinstance(station_url, str) or not station_url.strip():
         return jsonify({"error": "Choose a radio favorite to delete."}), 400
 
-    config = get_radio_config()
+    config = settings.get_radio_config()
     favorite = next(
         (station for station in config["favorites"] if station["url"] == station_url),
         None,
@@ -624,7 +624,7 @@ def delete_favorite():
 
     config["favorites"].remove(favorite)
     try:
-        update_user_config("radio", config)
+        settings.update_user_config("radio", config)
     except (OSError, ValueError):
         logger.exception("Could not delete radio favorite.")
         return jsonify({"error": "Could not delete the radio favorite."}), 500
