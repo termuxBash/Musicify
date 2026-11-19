@@ -12,6 +12,7 @@ from google import genai  # type: ignore
 from google.genai import types as genai_types  # type: ignore
 
 from core import settings
+from core.history_db import log_gemini_usage
 from services.lastfm_service import resolve_track
 
 logger = logging.getLogger(__name__)
@@ -114,12 +115,7 @@ LYRICS:
         )
         usage = response.usage_metadata
         if usage:
-            logger.info(
-                "Gemini token usage: prompt=%s, candidates=%s, total=%s",
-                usage.prompt_token_count,
-                usage.candidates_token_count,
-                usage.total_token_count,
-            )
+            log_gemini_usage(usage, source_code=1)
         formatted_lyrics = response.text
         if not isinstance(formatted_lyrics, str):
             logger.warning("Gemini returned no lyric text.")

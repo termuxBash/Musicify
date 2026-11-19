@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlparse
 from core import settings
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
+CLIENT = "web_embedded"  # Default client for YouTube API requests
 
 logger = logging.getLogger(__name__)
 YOUTUBE_API_KEYS = [
@@ -68,9 +69,7 @@ class YTService:
             "quiet": True,
             'nocheckcertificate': True,
             "remote_components": ["ejs:github"],
-            "extractor_args": {
-                "youtube": {"player_client": ["web_embedded"]}
-            }
+            "extractor_args": {"youtube": {"player_client": [CLIENT]} },
         }) as ydl:
 
             info = ydl.extract_info(
@@ -96,9 +95,7 @@ class YTService:
             "extract_flat": "in_playlist",
             "nocheckcertificate": True,
             "remote_components": ["ejs:github"],
-            "extractor_args": {
-                "youtube": {"player_client": ["web_embedded"]}
-            },
+            "extractor_args": { "youtube": {"player_client": [CLIENT]} },
         }) as ydl:
             if video_id:
                 info = ydl.extract_info(
@@ -196,9 +193,7 @@ class YTService:
             "extract_flat": "in_playlist",
             "nocheckcertificate": True,
             "remote_components": ["ejs:github"],
-            "extractor_args": {
-                "youtube": {"player_client": ["web_embedded"]}
-            },
+            "extractor_args": { "youtube": {"player_client": [CLIENT]} },
         }) as ydl:
             playlist = ydl.extract_info(playlist_url, download=False)
 

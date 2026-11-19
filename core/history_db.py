@@ -230,7 +230,7 @@ def get_all_tables():
     init_db()
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'extra_data' ORDER BY name;")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('extra_data', 'gemini_usage') ORDER BY name;")
         tables = [row["name"] for row in cursor.fetchall()]
     if "history" not in tables:
         create_table("history")
@@ -253,6 +253,8 @@ def init_db():
             );
         """)
         conn.commit()
+
+    init_gemini_usage_db()
 
 
 def record_played_song(song, table_name=None):
@@ -325,7 +327,7 @@ def get_history_rows(table_name=None):
     """Return all rows from the specified table formatted with datetime strings for web display."""
     init_db()
     table = _safe_table(table_name or get_active_table())
-    if table == "extra_data":
+    if table in ("extra_data", "gemini_usage"):
         return []
     create_table(table)
 
@@ -431,7 +433,7 @@ def delete_entry(table_name, row_id):
 def delete_table(table_name):
     """Delete an entire table (cannot delete default 'history' or 'extra_data')."""
     clean = _safe_table(table_name)
-    if clean in ("history", "extra_data"):
+    if clean in ("history", "extra_data", "gemini_usage"):
         return False
 
     with get_connection() as conn:
@@ -441,3 +443,138 @@ def delete_table(table_name):
     if get_active_table() == clean:
         set_active_table("history")
     return True
+
+
+_gemini_db_lock = threading.Lock()
+_gemini_db_initialized = False
+
+GEMINI_SOURCE_AUTOPLAY = 0
+GEMINI_SOURCE_LYRICS = 1
+
+
+def init_gemini_usage_db(conn=None):
+    """Ensure the gemini_usage table and token views exist in history.sqlite3."""
+    global _gemini_db_initialized
+    sql_statements = """
+    CREATE TABLE IF NOT EXISTS gemini_usage (
+        timestamp INTEGER NOT NULL DEFAULT (unixepoch()),
+        source_code INTEGER NOT NULL,
+        prompt_token_count INTEGER NOT NULL,
+        candidates_token_count INTEGER NOT NULL
+    );
+
+    CREATE VIEW IF NOT EXISTS Gemini_tokens AS
+    SELECT
+        datetime(timestamp, 'unixepoch', 'localtime') AS "DateTime",
+        CASE source_code
+            WHEN 0 THEN 'autoplay'
+            WHEN 1 THEN 'lyrics'
+        END AS "Source",
+        prompt_token_count AS "Input Tokens",
+        candidates_token_count AS "Output Tokens",
+        prompt_token_count + candidates_token_count AS "Total Tokens"
+    FROM gemini_usage;
+
+    CREATE VIEW IF NOT EXISTS Gemini_tokens_daily AS
+    SELECT
+        strftime('%Y-%m-%d', timestamp, 'unixepoch', 'localtime') AS "DateTime",
+        CASE source_code
+            WHEN 0 THEN 'autoplay'
+            WHEN 1 THEN 'lyrics'
+        END AS "Source",
+        SUM(prompt_token_count) AS "Input Tokens",
+        SUM(candidates_token_count) AS "Output Tokens",
+        SUM(prompt_token_count + candidates_token_count) AS "Total Tokens"
+    FROM gemini_usage
+    GROUP BY strftime('%Y-%m-%d', timestamp, 'unixepoch', 'localtime'), source_code;
+
+    CREATE VIEW IF NOT EXISTS Gemini_tokens_hourly AS
+    SELECT
+        strftime('%Y-%m-%d %H:00:00', timestamp, 'unixepoch', 'localtime') AS "DateTime",
+        CASE source_code
+            WHEN 0 THEN 'autoplay'
+            WHEN 1 THEN 'lyrics'
+        END AS "Source",
+        SUM(prompt_token_count) AS "Input Tokens",
+        SUM(candidates_token_count) AS "Output Tokens",
+        SUM(prompt_token_count + candidates_token_count) AS "Total Tokens"
+    FROM gemini_usage
+    GROUP BY strftime('%Y-%m-%d %H', timestamp, 'unixepoch', 'localtime'), source_code;
+    """
+    if conn is not None:
+        conn.executescript(sql_statements)
+        _gemini_db_initialized = True
+    else:
+        with _gemini_db_lock:
+            with get_connection() as c:
+                c.executescript(sql_statements)
+                c.commit()
+            _gemini_db_initialized = True
+
+
+def log_gemini_usage(usage, source_code=0, source=None):
+    """Log Gemini token usage and insert a record into gemini_usage table.
+
+    Handles the logger.info call and database persistence.
+    source_code: 0 for autoplay, 1 for lyrics (accepts int or string).
+    """
+    if not usage:
+        return
+
+    if source is not None:
+        source_code = source
+
+    if hasattr(usage, "usage_metadata") and usage.usage_metadata is not None:
+        usage = usage.usage_metadata
+
+    if isinstance(usage, dict):
+        prompt_tokens = int(usage.get("prompt_token_count") or 0)
+        candidates_tokens = int(usage.get("candidates_token_count") or 0)
+        total_tokens = usage.get("total_token_count")
+    else:
+        prompt_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
+        candidates_tokens = int(getattr(usage, "candidates_token_count", 0) or 0)
+        total_tokens = getattr(usage, "total_token_count", None)
+
+    if total_tokens is None:
+        total_tokens = prompt_tokens + candidates_tokens
+    else:
+        total_tokens = int(total_tokens)
+
+    logger.info(
+        "Gemini token usage: prompt=%s, candidates=%s, total=%s",
+        prompt_tokens,
+        candidates_tokens,
+        total_tokens,
+    )
+
+    if isinstance(source_code, str):
+        normalized = source_code.strip().lower()
+        if normalized == "lyrics":
+            numeric_source = 1
+        elif normalized == "autoplay":
+            numeric_source = 0
+        else:
+            try:
+                numeric_source = int(source_code)
+            except ValueError:
+                numeric_source = 0
+    else:
+        try:
+            numeric_source = int(source_code)
+        except (ValueError, TypeError):
+            numeric_source = 0
+
+    try:
+        global _gemini_db_initialized
+        if not _gemini_db_initialized:
+            init_gemini_usage_db()
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO gemini_usage (source_code, prompt_token_count, candidates_token_count) VALUES (?, ?, ?);",
+                (numeric_source, prompt_tokens, candidates_tokens),
+            )
+            conn.commit()
+    except Exception as error:
+        logger.error("Failed to record Gemini usage to database: %s", error)
+

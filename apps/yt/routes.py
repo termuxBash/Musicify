@@ -7,7 +7,7 @@ import re
 from urllib.parse import parse_qs, urlparse
 from flask import Blueprint, jsonify, redirect, request, render_template, url_for, current_app  # type: ignore
 from services.yt_service import YTService
-from core.history_db import normalize_video_id, is_blacklisted_rick_roll, record_rick_roll_timestamp
+from core.history_db import normalize_video_id, is_blacklisted_rick_roll, record_rick_roll_timestamp, log_gemini_usage
 from core import settings
 from services.lastfm_service import resolve_track
 import logging
@@ -278,12 +278,7 @@ YouTubeVideoId must be a valid YouTube video ID."""
 
         usage = response.usage_metadata
         if usage:
-            logger.info(
-                "Gemini token usage: prompt=%s, candidates=%s, total=%s",
-                usage.prompt_token_count,
-                usage.candidates_token_count,
-                usage.total_token_count,
-            )
+            log_gemini_usage(usage, source_code=0)
         response_text = response.text
         recommendations = []
         for line in response_text.splitlines():
