@@ -519,6 +519,67 @@ function closeNowPlaying() {
   document.getElementById("nowPlayingModal")?.classList.remove("open");
 }
 
+function setupPlayerBarSwipe() {
+  const playerBar = document.querySelector(".player-bar");
+  if (!playerBar || playerBar.dataset.swipeUpReady) return;
+
+  let touchStart = null;
+  const SWIPE_UP_THRESHOLD = 40;
+
+  playerBar.addEventListener(
+    "touchstart",
+    (event) => {
+      if (event.touches.length !== 1) {
+        touchStart = null;
+        return;
+      }
+
+      // Avoid triggering when interacting with sliders or buttons
+      if (event.target.closest("button, input, a")) {
+        touchStart = null;
+        return;
+      }
+
+      const touch = event.touches[0];
+      touchStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now(),
+      };
+    },
+    { passive: true },
+  );
+
+  playerBar.addEventListener(
+    "touchend",
+    (event) => {
+      if (!touchStart) return;
+
+      const touch = event.changedTouches[0];
+      const deltaX = touch.clientX - touchStart.x;
+      const deltaY = touch.clientY - touchStart.y;
+      const deltaTime = Date.now() - touchStart.time;
+
+      touchStart = null;
+
+      // Check if swipe was upwards and vertical movement was dominant
+      if (deltaY < -SWIPE_UP_THRESHOLD && Math.abs(deltaY) > Math.abs(deltaX) && deltaTime < 600) {
+        openNowPlaying();
+      }
+    },
+    { passive: true },
+  );
+
+  playerBar.dataset.swipeUpReady = "true";
+}
+
+// Automatically bind swipe-up on page load
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupPlayerBarSwipe);
+} else {
+  setupPlayerBarSwipe();
+}
+
 function setupNowPlayingSwipe() {
   const card = document.querySelector(".now-playing-modal-card");
   const modal = document.getElementById("nowPlayingModal");

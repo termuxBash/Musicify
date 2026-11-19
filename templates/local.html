@@ -13,16 +13,15 @@
     {% include "_side_panel.html" %}
 
     <div class="main" id="main">
-
+        <div class="path" id="explorerPath">
+            Explorer: /{{ current_path }}
+        </div>
         <div class="search-container">
             <input type="text" id="searchInput" class="search-input" placeholder="Search files and music...">
             <button class="search-btn" onclick="performSearch()">Search</button>
         </div>
 
         <div id="navigationControls">
-            <div class="path" id="explorerPath">
-                Explorer: /{{ current_path }}
-            </div>
 
             <div style="display: flex; gap: 10px; margin-bottom:10px;">
                 {% if current_path != "" %}
