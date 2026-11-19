@@ -1114,8 +1114,8 @@ body.center-player-page .main.shift {
 }
 
 .file-icon {
-  font-size: 28px;
-  margin-bottom: 8px;
+  width: 50%;
+  margin-top: 8px;
 }
 
 .song-card p,

@@ -48,7 +48,7 @@ def create_app():
     @app.route("/favicon.svg")
     def favicon():
         svg = open(app.static_folder + "/music-note.svg").read()
-        svg = svg.replace("#b197fc", "#63b0ec")
+        svg = svg.replace("#b9f", "#6be")
         return Response(svg, mimetype="image/svg+xml")
 
     app.register_blueprint(bose_control_bp)
