@@ -2,18 +2,18 @@
    1. VARIABLES & RESET
    ========================================================================== */
 :root {
-  --spotify-green: #1db954;
-  --bg-dark: #0f0c29;
-  --panel-bg: #121212;
-  --card-bg: #1a1a1a;
-  --border-color: #2a2a2a;
-  --danger-red: #d32f2f;
+  --spotify-green: #2b5;
+  --bg-dark: #112;
+  --panel-bg: #111;
+  --card-bg: #222;
+  --border-color: #222;
+  --danger-red: #c33;
   --button-text: #fff;
-  --search-gradient: linear-gradient(135deg, #16a34a, #0f766e);
-  --queue-gradient: linear-gradient(135deg, #2563eb, #7c3aed);
-  --skip-gradient: linear-gradient(135deg, #06b6d4, #2563eb);
-  --power-on-gradient: linear-gradient(135deg, #bef264, #16a34a);
-  --power-off-gradient: linear-gradient(135deg, #ef4444, #b91c1c);
+  --search-gradient: linear-gradient(135deg, #1a4, #176);
+  --queue-gradient: linear-gradient(135deg, #26e, #73e);
+  --skip-gradient: linear-gradient(135deg, #0bc, #26e);
+  --power-on-gradient: linear-gradient(135deg, #be6, #1a4);
+  --power-off-gradient: linear-gradient(135deg, #e44, #b22);
 }
 
 * {
@@ -29,7 +29,7 @@ body {
     -apple-system,
     sans-serif;
   background: var(--bg-dark);
-  color: white;
+  color: #fff;
   overflow-x: hidden;
   height: 100vh;
   transition: opacity 0.3s ease;
@@ -43,7 +43,7 @@ nav {
   top: 0;
   width: 100%;
   height: 60px;
-  background: rgba(0, 0, 0, 0.9);
+  background: #000;
   backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
@@ -69,7 +69,7 @@ nav {
   margin-left: auto;
   font-family: monospace;
   font-size: 0.8rem;
-  background: rgba(29, 185, 84, 0.1);
+  background: #2b52;
   padding: 5px 10px;
   border-radius: 15px;
 }
@@ -87,7 +87,7 @@ nav {
   z-index: 2000;
   transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 20px;
-  box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
+  box-shadow: 5px 0 15px #0008;
   display: flex;
   flex-direction: column;
 }
@@ -109,7 +109,7 @@ nav {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.7);
+  background: #000a;
   z-index: 1500;
   display: none;
 }
@@ -202,19 +202,19 @@ nav {
 
 .queue-swipe-bg-play-next {
   justify-content: flex-start;
-  background: #2196f3;
+  background: #29e;
 }
 
 .queue-swipe-bg-delete {
   justify-content: flex-end;
-  background: #f44336;
+  background: #e43;
 }
 
 .queue-item-placeholder {
   margin-bottom: 10px;
-  border: 2px dashed rgba(255, 255, 255, 0.35);
+  border: 2px dashed #fff5;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #fff1;
 }
 
 .queue-item {
@@ -238,7 +238,7 @@ nav {
 }
 
 .queue-item-wrapper.dragging .queue-item {
-  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 12px 25px #0006;
 }
 
 .queue-item-drag-handle {
@@ -323,10 +323,10 @@ nav {
   justify-content: center;
   width: 42px;
   height: 42px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #fff1;
+  border: 1px solid #fff2;
   border-radius: 8px;
-  color: #e0e0e0;
+  color: #ddd;
   cursor: pointer;
   flex-shrink: 0;
   transition:
@@ -336,7 +336,7 @@ nav {
 }
 
 .settings-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: #fff2;
   border-color: var(--spotify-green);
   color: var(--spotify-green);
 }
@@ -358,8 +358,8 @@ nav {
   margin-top: 0;
   margin-bottom: 0;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #fff1;
+  border: 1px solid #fff2;
   border-radius: 8px;
   text-align: center;
   white-space: nowrap;
@@ -369,9 +369,9 @@ nav {
 }
 
 .side-panel-switch-row .switch-player-link:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #fff2;
   border-color: var(--spotify-green);
-  color: #1ed760;
+  color: #2d6;
 }
 
 .side-panel-switch-row .radio-nav-link {
@@ -414,9 +414,9 @@ nav {
   gap: 9px;
   width: 100%;
   padding: 7px 9px;
-  border: 1px solid #2d2d2d;
+  border: 1px solid #333;
   border-radius: 7px;
-  background: #1a1a1a;
+  background: #222;
   color: #ddd;
   cursor: pointer;
   text-align: left;
@@ -430,7 +430,7 @@ nav {
   flex: 0 0 auto;
   border: 1px solid #444;
   border-radius: 7px;
-  background: #252525;
+  background: #222;
   color: #ccc;
   cursor: pointer;
   font: inherit;
@@ -448,8 +448,8 @@ nav {
 }
 
 .radio-sidebar-favorite-delete:hover {
-  border-color: #ef4444;
-  color: #f87171;
+  border-color: #f44;
+  color: #f77;
 }
 
 .radio-sidebar-favorite-delete:disabled {
@@ -479,10 +479,10 @@ nav {
   left: 0;
   right: 0;
   background: #18181b;
-  border: 1px solid #333338;
+  border: 1px solid #334;
   border-radius: 12px;
   padding: 14px 16px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 12px 32px #000c;
   display: none;
   flex-direction: column;
   gap: 12px;
@@ -545,9 +545,9 @@ nav {
 .radio-genre-filter,
 .radio-clear-filter {
   padding: 3px 9px;
-  border: 1px solid #3a3a3a;
+  border: 1px solid #333;
   border-radius: 999px;
-  background: #202020;
+  background: #222;
   color: #ccc;
   cursor: pointer;
   font: inherit;
@@ -558,7 +558,7 @@ nav {
 .radio-genre-filter:hover,
 .radio-genre-filter.active {
   border-color: var(--spotify-green);
-  background: rgba(29, 185, 84, 0.16);
+  background: #2b52;
   color: #fff;
 }
 
@@ -569,13 +569,13 @@ nav {
 }
 
 .radio-clear-filter {
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
+  border-color: #e448;
+  color: #faa;
   white-space: nowrap;
 }
 
 .radio-clear-filter:hover:not(:disabled) {
-  background: rgba(185, 28, 28, 0.2);
+  background: #b223;
   color: #fff;
 }
 
@@ -627,9 +627,9 @@ nav {
   gap: 8px;
   min-height: 42px;
   padding: 0 18px;
-  border: 1px solid rgba(239, 68, 68, 0.5);
+  border: 1px solid #e448;
   border-radius: 9px;
-  background: linear-gradient(135deg, #991b1b, #b91c1c);
+  background: linear-gradient(135deg, #922, #b22);
   color: #fff;
   cursor: pointer;
   font: inherit;
@@ -660,12 +660,12 @@ nav {
 
 .radio-delete-presets-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  background: linear-gradient(135deg, #b91c1c, #dc2626);
-  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.28);
+  background: linear-gradient(135deg, #b22, #d22);
+  box-shadow: 0 4px 14px #d224;
 }
 
 .radio-delete-presets-btn:focus-visible {
-  outline: 2px solid #f87171;
+  outline: 2px solid #f77;
   outline-offset: 2px;
 }
 
@@ -711,7 +711,7 @@ nav {
 
 #radioSearchStatus,
 .radio-error {
-  color: #ff9a9a;
+  color: #f99;
   font-size: 0.82rem;
 }
 
@@ -740,7 +740,7 @@ nav {
   height: 52px;
   flex: 0 0 52px;
   border-radius: 8px;
-  background: #252525;
+  background: #222;
   object-fit: cover;
 }
 
@@ -793,9 +793,9 @@ nav {
 }
 
 .radio-heart-btn {
-  border: 1px solid rgba(251, 113, 133, 0.35);
-  background: rgba(190, 24, 93, 0.16);
-  color: #fda4af;
+  border: 1px solid #f785;
+  background: #b152;
+  color: #faa;
   font-size: 1.35rem;
   line-height: 1;
   transition:
@@ -806,18 +806,18 @@ nav {
 }
 
 .radio-star-btn:hover {
-  color: #facc15;
+  color: #fc1;
 }
 
 .radio-heart-btn:hover {
   transform: translateY(-1px);
-  border-color: #fb7185;
-  background: rgba(190, 24, 93, 0.42);
+  border-color: #f78;
+  background: #b156;
   color: #fff;
 }
 
 .radio-heart-btn:focus-visible {
-  outline: 2px solid #fb7185;
+  outline: 2px solid #f78;
   outline-offset: 2px;
 }
 
@@ -865,7 +865,7 @@ nav {
   justify-content: space-between;
   align-items: center;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid #fff1;
   font-weight: 600;
   font-size: 0.95rem;
   color: #eee;
@@ -911,14 +911,14 @@ nav {
   padding: 7px 8px;
   border: 1px solid #444;
   border-radius: 6px;
-  background: #101012;
+  background: #111;
   color: #fff;
   font: inherit;
 }
 
 .settings-popup-help {
   grid-column: 1 / -1;
-  color: #929299;
+  color: #999;
   font-size: 0.72rem;
   line-height: 1.4;
 }
@@ -930,19 +930,19 @@ nav {
 
 .settings-popup-range {
   width: 100%;
-  accent-color: #9b87f5;
+  accent-color: #98e;
 }
 
 .settings-popup-effort-labels {
   display: flex;
   justify-content: space-between;
-  color: #929299;
+  color: #999;
   font-size: 0.68rem;
 }
 
 .settings-popup-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #fff1;
   margin: 2px 0;
 }
 
@@ -955,8 +955,8 @@ nav {
   font-weight: 600;
   text-align: center;
   text-decoration: none;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid #fff2;
+  background: #fff1;
   color: #ddd;
   cursor: pointer;
   box-sizing: border-box;
@@ -967,20 +967,20 @@ nav {
 }
 
 .settings-popup-action-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: #fff2;
   border-color: var(--spotify-green);
   color: #fff;
 }
 
 .settings-popup-action-btn.settings-shutdown-btn {
-  background: rgba(220, 53, 69, 0.15);
-  border-color: rgba(220, 53, 69, 0.35);
-  color: #ff6b6b;
+  background: #d342;
+  border-color: #d345;
+  color: #f66;
 }
 
 .settings-popup-action-btn.settings-shutdown-btn:hover {
-  background: rgba(220, 53, 69, 0.3);
-  border-color: #dc3545;
+  background: #d344;
+  border-color: #d34;
   color: #fff;
 }
 
@@ -1031,7 +1031,7 @@ body.center-player-page .main.shift {
   border-radius: 25px;
   border: 1px solid #444;
   background: var(--card-bg);
-  color: white;
+  color: #fff;
   outline: none;
   font-size: 14px;
 }
@@ -1051,7 +1051,7 @@ body.center-player-page .main.shift {
   cursor: pointer;
   color: var(--button-text);
   min-height: 41px;
-  box-shadow: 0 6px 16px rgba(15, 118, 110, 0.25);
+  box-shadow: 0 6px 16px #1764;
   transition:
     transform 0.2s ease,
     filter 0.2s ease,
@@ -1074,7 +1074,7 @@ body.center-player-page .main.shift {
 .queue-playlist-btn:focus-visible,
 .skip-btn:focus-visible,
 .power-btn:focus-visible {
-  outline: 2px solid #f8fafc;
+  outline: 2px solid #fff;
   outline-offset: 2px;
 }
 
@@ -1138,7 +1138,7 @@ body.center-player-page .main.shift {
 .btn {
   width: 100%;
   background: #333;
-  color: white;
+  color: #fff;
   border: none;
   padding: 8px;
   border-radius: 20px;
@@ -1171,7 +1171,7 @@ body.center-player-page .main.shift {
   gap: 6px;
   font-size: 0.82rem;
   font-weight: 600;
-  color: white;
+  color: #fff;
 }
 
 .queue-icon-btn:hover {
@@ -1179,13 +1179,13 @@ body.center-player-page .main.shift {
 }
 
 .queue-icon-btn.status-loading {
-  background: #1a1a1a;
+  background: #222;
   cursor: wait;
   pointer-events: none;
 }
 
 .queue-icon-btn.status-done {
-  background: rgba(29, 185, 84, 0.15);
+  background: #2b52;
   pointer-events: none;
 }
 
@@ -1215,10 +1215,10 @@ body.center-player-page .main.shift {
 }
 
 .auto-pick-btn {
-  background: linear-gradient(135deg, #ffd166, #ff8c42);
+  background: linear-gradient(135deg, #fc6, #f84);
   color: #111;
   min-width: 48px;
-  box-shadow: 0 8px 20px rgba(255, 140, 66, 0.25);
+  box-shadow: 0 8px 20px #f844;
 }
 
 .auto-pick-btn:disabled {
@@ -1251,7 +1251,7 @@ body.center-player-page .main.shift {
 .queue-playlist-select {
   flex: 1;
   background: var(--card-bg);
-  color: white;
+  color: #fff;
   border: 1px solid #333;
   border-radius: 12px;
   padding: 10px;
@@ -1267,7 +1267,7 @@ body.center-player-page .main.shift {
   cursor: pointer;
   font-weight: bold;
   white-space: nowrap;
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 6px 16px #26e4;
   transition:
     transform 0.2s ease,
     filter 0.2s ease,
@@ -1278,8 +1278,8 @@ body.center-player-page .main.shift {
   padding: 8px;
   border: none;
   border-radius: 20px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  color: white;
+  background: linear-gradient(135deg, #38e, #85e);
+  color: #fff;
   font-weight: bold;
   cursor: pointer;
 }
@@ -1297,7 +1297,7 @@ body.center-player-page .main.shift {
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.72);
+  background: #000b;
   z-index: 2500;
   padding: 20px;
 }
@@ -1316,10 +1316,10 @@ body.center-player-page .main.shift {
 .playlist-modal-card {
   width: min(92vw, 360px);
   background: #111;
-  border: 1px solid #2f2f2f;
+  border: 1px solid #333;
   border-radius: 18px;
   padding: 18px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 16px 40px #0007;
 }
 
 .modal-content,
@@ -1337,7 +1337,7 @@ body.center-player-page .main.shift {
   min-height: 150px;
   resize: vertical;
   background: var(--card-bg);
-  color: white;
+  color: #fff;
   border: 1px solid #333;
   border-radius: 12px;
   padding: 12px;
@@ -1360,7 +1360,7 @@ body.center-player-page .main.shift {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px solid #2f2f2f;
+  border-bottom: 1px solid #333;
 }
 
 .ai-recommendation span {
@@ -1382,7 +1382,7 @@ body.center-player-page .main.shift {
 .playlist-combo-input {
   width: 100%;
   background: var(--card-bg);
-  color: white;
+  color: #fff;
   border: 1px solid #333;
   border-radius: 12px;
   padding: 10px;
@@ -1400,14 +1400,14 @@ body.center-player-page .main.shift {
   border: 1px solid #333;
   border-radius: 12px;
   background: var(--card-bg);
-  color: white;
+  color: #fff;
   padding: 10px;
   font-weight: bold;
   cursor: pointer;
 }
 
 .playlist-digit-btn.active {
-  background: rgba(29, 185, 84, 0.2);
+  background: #2b53;
   border-color: var(--spotify-green);
   color: var(--spotify-green);
 }
@@ -1428,11 +1428,11 @@ body.center-player-page .main.shift {
 
 .playlist-cancel {
   background: #333;
-  color: white;
+  color: #fff;
 }
 
 .playlist-save {
-  background: linear-gradient(135deg, #ffd166, #ff8c42);
+  background: linear-gradient(135deg, #fc6, #f84);
   color: #111;
 }
 
@@ -1534,7 +1534,7 @@ body.center-player-page .main.shift {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.78);
+  background: #000c;
   padding: 0;
   z-index: 2600;
   opacity: 0;
@@ -1563,7 +1563,7 @@ body.center-player-page .main.shift {
   border-bottom: none;
   border-radius: 24px 24px 0 0;
   background: #111;
-  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 20px 55px #0009;
   text-align: center;
   transform: translateY(100%);
   transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1593,8 +1593,8 @@ body.center-player-page .main.shift {
   height: 34px;
   border: 1px solid #555;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
+  background: #0009;
+  color: #fff;
   cursor: pointer;
   font-size: 24px;
   line-height: 1;
@@ -1651,10 +1651,10 @@ body.center-player-page .main.shift {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 18px 16px;
-  border: 1px solid #2f2f2f;
+  border: 1px solid #333;
   border-radius: 10px;
-  background: #1a1a1a;
-  color: #a1a1aa;
+  background: #222;
+  color: #99a;
   line-height: 1.7;
   scroll-behavior: smooth;
   scrollbar-width: none;
@@ -1678,23 +1678,23 @@ body.center-player-page .main.shift {
 .now-playing-lyric-line.active {
   color: #fff;
   font-weight: 600;
-  text-shadow: 0 0 14px rgba(29, 185, 84, 0.38);
+  text-shadow: 0 0 14px #2b56;
 }
 
 .now-playing-lyrics-empty {
   padding: 4px;
-  color: #9ca3af;
+  color: #9aa;
 }
 
 .now-playing-lyrics-empty[href] {
   display: inline-block;
-  color: #1db954;
+  color: #2b5;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 .now-playing-lyrics-empty[href]:hover {
-  color: #86efac;
+  color: #8ea;
 }
 
 @keyframes now-playing-ticker {
@@ -1776,7 +1776,7 @@ body.center-player-page .main.shift {
 .vol-btn {
   background: #333;
   border: none;
-  color: white;
+  color: #fff;
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -1810,7 +1810,7 @@ body.center-player-page .main.shift {
   border-radius: 20px;
   font-weight: bold;
   font-size: 0.75rem;
-  box-shadow: 0 5px 14px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 5px 14px #26e4;
   transition:
     transform 0.2s ease,
     filter 0.2s ease,
@@ -1819,7 +1819,7 @@ body.center-player-page .main.shift {
 .clear-queue-btn {
   background: var(--danger-red);
   border: none;
-  color: white;
+  color: #fff;
   padding: 8px 15px;
   border-radius: 20px;
   cursor: pointer;
@@ -1837,7 +1837,7 @@ body.center-player-page .main.shift {
   border-radius: 20px;
   font-weight: bold;
   font-size: 0.75rem;
-  box-shadow: 0 5px 14px rgba(185, 28, 28, 0.3);
+  box-shadow: 0 5px 14px #b224;
   transition:
     transform 0.2s ease,
     filter 0.2s ease,
@@ -1847,24 +1847,24 @@ body.center-player-page .main.shift {
 .power-btn.is-on {
   background: var(--power-on-gradient);
   color: #111;
-  box-shadow: 0 5px 16px rgba(22, 163, 74, 0.4);
+  box-shadow: 0 5px 16px #1a46;
   animation: power-on-glow 1.8s ease-in-out infinite;
 }
 
 .power-btn.is-off {
   color: var(--button-text);
   background: var(--power-off-gradient);
-  box-shadow: 0 5px 14px rgba(185, 28, 28, 0.3);
+  box-shadow: 0 5px 14px #b224;
   animation: power-off-glow 1.8s ease-in-out infinite;
 }
 
 .power-btn.is-disconnected {
-  background: #4b5563;
-  color: #f8fafc;
+  background: #456;
+  color: #fff;
   cursor: not-allowed;
   box-shadow:
-    0 0 0 1px rgba(248, 250, 252, 0.18),
-    0 4px 12px rgba(15, 23, 42, 0.35);
+    0 0 0 1px #fff3,
+    0 4px 12px #1125;
   animation: none;
 }
 
@@ -1877,13 +1877,13 @@ body.center-player-page .main.shift {
   0%,
   100% {
     box-shadow:
-      0 5px 14px rgba(185, 28, 28, 0.3),
-      0 0 0 0 rgba(239, 68, 68, 0.35);
+      0 5px 14px #b224,
+      0 0 0 0 #e445;
   }
   50% {
     box-shadow:
-      0 5px 18px rgba(185, 28, 28, 0.5),
-      0 0 0 6px rgba(239, 68, 68, 0.12);
+      0 5px 18px #b228,
+      0 0 0 6px #e442;
   }
 }
 
@@ -1891,13 +1891,13 @@ body.center-player-page .main.shift {
   0%,
   100% {
     box-shadow:
-      0 5px 16px rgba(22, 163, 74, 0.4),
-      0 0 0 0 rgba(190, 242, 100, 0.3);
+      0 5px 16px #1a46,
+      0 0 0 0 #be64;
   }
   50% {
     box-shadow:
-      0 5px 20px rgba(22, 163, 74, 0.55),
-      0 0 0 6px rgba(190, 242, 100, 0.14);
+      0 5px 20px #1a48,
+      0 0 0 6px #be62;
   }
 }
 
@@ -1956,7 +1956,7 @@ body.center-player-page .main.shift {
   width: 18px;
   left: 3px;
   bottom: 3px;
-  background-color: white;
+  background-color: #fff;
   transition: 0.3s;
   border-radius: 50%;
 }
