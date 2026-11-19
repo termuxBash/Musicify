@@ -715,6 +715,13 @@ function renderLyricText(element, text) {
   const separatorIndex = text.indexOf("|");
   if (separatorIndex === -1) {
     element.textContent = text;
+    if (element.id === "live-lyrics") {
+      element.classList.remove("lyrics-translated");
+      const playerBar = element.closest(".player-bar");
+      if (playerBar) {
+        playerBar.classList.remove("has-translated-lyrics", "lyrics-translated");
+      }
+    }
     return;
   }
 
@@ -724,6 +731,14 @@ function renderLyricText(element, text) {
   translated.className = "lyric-translation";
   translated.textContent = text.slice(separatorIndex + 1).trim();
   element.replaceChildren(romanized, translated);
+
+  if (element.id === "live-lyrics") {
+    element.classList.add("lyrics-translated");
+    const playerBar = element.closest(".player-bar");
+    if (playerBar) {
+      playerBar.classList.add("has-translated-lyrics", "lyrics-translated");
+    }
+  }
 }
 
 document.addEventListener("keydown", (event) => {
@@ -1355,7 +1370,14 @@ async function updateStats() {
       if (titleEl) titleEl.classList.remove("ticker");
       if (thumbEl) thumbEl.src = defaultSpeakerThumb;
       if (statusEl) statusEl.textContent = "IDLE";
-      if (lyricsEl) lyricsEl.textContent = "";
+      if (lyricsEl) {
+        lyricsEl.textContent = "";
+        lyricsEl.classList.remove("lyrics-translated");
+        const playerBar = lyricsEl.closest(".player-bar");
+        if (playerBar) {
+          playerBar.classList.remove("has-translated-lyrics", "lyrics-translated");
+        }
+      }
 
       if (modalThumbEl) {
         setExpandedThumbnail("/static/speaker.svg");

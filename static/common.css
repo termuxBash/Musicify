@@ -1452,6 +1452,14 @@ body.center-player-page .main.shift {
   justify-content: center;
   padding: 10px 15px;
   z-index: 1000;
+  transition: height 0.2s ease;
+}
+
+.player-bar.has-translated-lyrics,
+.player-bar.lyrics-translated,
+.player-bar:has(#live-lyrics .lyric-translation),
+.player-bar:has(#live-lyrics.lyrics-translated) {
+  height: 150px;
 }
 
 .player-top {
@@ -2043,5 +2051,18 @@ input:checked + .slider:before {
   }
   #vol-slider {
     width: 150px;
+  }
+}
+
+@media (orientation: portrait) {
+  .player-bar {
+    flex-direction: column;
+    height: 110px;
+  }
+  .player-bar.has-translated-lyrics,
+  .player-bar.lyrics-translated,
+  .player-bar:has(#live-lyrics .lyric-translation),
+  .player-bar:has(#live-lyrics.lyrics-translated) {
+    height: 150px;
   }
 }

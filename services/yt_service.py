@@ -69,7 +69,7 @@ class YTService:
             "quiet": True,
             'nocheckcertificate': True,
             "remote_components": ["ejs:github"],
-            "extractor_args": {"youtube": {"player_client": [CLIENT]} },
+            #"extractor_args": {"youtube": {"player_client": [CLIENT]} },
         }) as ydl:
 
             info = ydl.extract_info(
