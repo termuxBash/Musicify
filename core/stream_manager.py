@@ -373,8 +373,8 @@ class QueuePlayer:
                             publisher_stopped_for_idle = True
                             logger.info("Stopped FFmpeg publisher after 2 minutes with an empty queue.")
                         except Exception as pub_err:
-                            logger.error(f"Failed to stop idle FFmpeg publisher: {pub_err}")
-                time.sleep(0.1)
+                            logger.error("Failed to stop idle FFmpeg publisher: %s", pub_err)
+                time.sleep(1)
                 continue
 
             queue_empty_since = None

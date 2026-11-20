@@ -8,6 +8,8 @@ This file is based on the official API docs at https://assets.bosecreative.com/m
 
 """
 import time
+import logging
+logger = logging.getLogger(__name__)
 import requests
 import xml.etree.ElementTree as ET
 import upnpclient
@@ -44,7 +46,7 @@ class BoseSoundTouchWorker:
             self.session.post(url, data=release_xml, headers=headers, timeout=0.5)
             return True
         except Exception as e:
-            print(f"[Bose Worker] Failed sending key {key_value}: {e}")
+            logger.error("[Bose Worker] Failed sending key %s: %s", key_value, e)
             return False
 
     def toggle_power(self):
@@ -69,7 +71,7 @@ class BoseSoundTouchWorker:
             r = self.session.post(url, data=volume_xml, headers=headers, timeout=0.5)
             return r.status_code == 200
         except Exception as e:
-            print(f"[Bose Worker] Volume set exception: {e}")
+            logger.error("[Bose Worker] Volume set exception: %s", e)
             return False
 
     def get_volume(self):
@@ -83,9 +85,9 @@ class BoseSoundTouchWorker:
                 if actual_vol is not None:
                     return int(actual_vol.text)
         except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
-            print("[Bose Offline] Failed to get volume.")
+            logger.warning("[Bose Offline] Failed to get volume.")
         except Exception as e:
-            print(f"[Bose Worker] Failed get volume: {e}")
+            logger.warning("[Bose Worker] Failed get volume: %s", e)
         return 0
 
     def toggle_mute(self):
@@ -119,9 +121,9 @@ class BoseSoundTouchWorker:
                     "is_on": power_state == "on",
                 }
         except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
-            print("[Bose Offline] Failed to fetch now_playing node.")
+            logger.warning("[Bose Offline] Failed to fetch now_playing node.")
         except Exception as e:
-            print(f"[Bose Worker] Failed fetching status: {e}")
+            logger.warning("[Bose Worker] Failed fetching status: %s", e)
         return {
             "now_playing": {"source": "UNKNOWN", "track": "NA", "artist": "NA"},
             "power_state": "disconnected",
@@ -161,7 +163,7 @@ class BoseSoundTouchWorker:
             av.Play(InstanceID=0, Speed="1")
             return True
         except Exception as e:
-            print(f"[Bose Worker] DLNA/UPnP playback injection failed: {e}")
+            logger.error("[Bose Worker] DLNA/UPnP playback injection failed: %s", e)
             self._upnp_device = None  # Reset tracking token for reconstruction retry
             return False
         
@@ -236,7 +238,7 @@ class BoseSoundTouchWorker:
             }
 
         except Exception as e:
-            print(f"[Bose Worker] Get playing URL failed: {e}")
+            logger.warning("[Bose Worker] Get playing URL failed: %s", e)
 
             return {
                 "success": False,
