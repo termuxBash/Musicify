@@ -15,8 +15,9 @@ from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
 logger = logging.getLogger(__name__)
 
-CHUNK_SIZE = 4096
-SILENCE_CHUNK = b"\x00" * CHUNK_SIZE
+CHUNK_SIZE = 17640
+SILENCE_CHUNK = bytes(CHUNK_SIZE)
+EMPTY_QUEUE_PUBLISHER_TIMEOUT = 120
 
 class QueuePlayer:
 
@@ -351,13 +352,33 @@ class QueuePlayer:
             except Exception as pub_err:
                 logger.error(f"Failed to ensure FFmpeg publisher in worker: {pub_err}")
 
+        queue_empty_since = None
+        publisher_stopped_for_idle = False
+
         while self.running:
             song = self._get_next_song()
 
             if song is None:
-                # Idle: audio pump automatically feeds continuous digital silence to Icecast
+                if queue_empty_since is None:
+                    queue_empty_since = time.monotonic()
+                elif (
+                    not publisher_stopped_for_idle
+                    and time.monotonic() - queue_empty_since >= EMPTY_QUEUE_PUBLISHER_TIMEOUT
+                ):
+                    with self.lock:
+                        queue_still_empty = not self.queue and self.current_song is None
+                    if queue_still_empty and hasattr(self.ffmpeg, "stop_publisher"):
+                        try:
+                            self.ffmpeg.stop_publisher()
+                            publisher_stopped_for_idle = True
+                            logger.info("Stopped FFmpeg publisher after 2 minutes with an empty queue.")
+                        except Exception as pub_err:
+                            logger.error(f"Failed to stop idle FFmpeg publisher: {pub_err}")
                 time.sleep(0.1)
                 continue
+
+            queue_empty_since = None
+            publisher_stopped_for_idle = False
 
             # Detect blacklisted Rick Roll attempt each time it tries to play
             if is_blacklisted_rick_roll(song):

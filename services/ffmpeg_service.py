@@ -18,11 +18,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
-CHUNK_SIZE = 4096
-# 44100 Hz * 2 channels * 2 bytes = 176,400 bytes/sec
-# 4096 bytes / 176400 bytes/sec = ~0.02322 seconds per chunk
-CHUNK_DURATION = CHUNK_SIZE / (44100 * 4)
-SILENCE_CHUNK = b"\x00" * CHUNK_SIZE
+CHUNK_SIZE = 17640
+CHUNK_DURATION = 0.1
+SILENCE_CHUNK = bytes(CHUNK_SIZE)
 
 
 class FFmpegService:
@@ -51,7 +49,6 @@ class FFmpegService:
                 "-ac", "2",
                 "-i", "pipe:0",
                 "-vn",
-                "-af", "dynaudnorm=f=500:g=5:m=10:p=0.95",
                 "-threads", "1",
                 "-c:a", "libvorbis",
                 "-qscale:a", "3",
@@ -206,6 +203,7 @@ class FFmpegService:
             *( ["-headers", header_value] if header_value and not source_process else [] ),
             "-i", target_url,
             "-vn",
+            "-af", "dynaudnorm=f=500:g=5:m=10:p=0.95",
             "-threads", "1",
             "-f", "s16le",
             "-ar", "44100",

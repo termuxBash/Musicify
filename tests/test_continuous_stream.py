@@ -1,6 +1,7 @@
 import threading
 import time
 from unittest.mock import MagicMock
+import core.stream_manager as stream_manager
 from core.stream_manager import QueuePlayer
 from services.ffmpeg_service import FFmpegService
 
@@ -29,6 +30,54 @@ def test_ffmpeg_service_pump_continuous_silence():
         assert service.is_publisher_alive()
     finally:
         service.stop_publisher()
+
+
+def test_ffmpeg_filter_runs_on_decoder_not_publisher(monkeypatch):
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append(cmd)
+        return MagicMock()
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService()
+    service._ensure_pump_thread = lambda: None
+
+    service.start_publisher()
+    service.start_decoder("/music/song.mp3")
+
+    publisher_cmd, decoder_cmd = popen_calls
+    audio_filter = ["-af", "dynaudnorm=f=500:g=5:m=10:p=0.95"]
+    assert not any(
+        publisher_cmd[index:index + len(audio_filter)] == audio_filter
+        for index in range(len(publisher_cmd))
+    )
+    assert any(
+        decoder_cmd[index:index + len(audio_filter)] == audio_filter
+        for index in range(len(decoder_cmd))
+    )
+
+
+def test_queue_player_stops_publisher_after_idle_timeout(monkeypatch):
+    monkeypatch.setattr(stream_manager, "EMPTY_QUEUE_PUBLISHER_TIMEOUT", 0.05)
+    publisher_stopped = threading.Event()
+    stop_calls = []
+
+    class MockFFmpegService:
+        def ensure_publisher(self):
+            pass
+
+        def stop_publisher(self):
+            stop_calls.append(True)
+            publisher_stopped.set()
+
+    player = QueuePlayer(MockFFmpegService())
+    player.start()
+    try:
+        assert publisher_stopped.wait(timeout=1)
+        assert len(stop_calls) == 1
+    finally:
+        player.stop()
 
 
 def test_queue_player_single_publisher_across_tracks():
