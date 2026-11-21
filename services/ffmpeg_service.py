@@ -23,8 +23,25 @@ CHUNK_SIZE = 17640
 CHUNK_DURATION = 0.1
 SILENCE_CHUNK = bytes(CHUNK_SIZE)
 
+# Transient mid-stream socket/TLS/demuxer resets (especially at stream end)
+IGNORED_DECODER_STDERR_PATTERNS = (
+    "[tls @",
+    "Error in the pull function",
+    "IO error: Connection reset by peer",
+    "The specified session has been invalidated",
+    "Last message repeated",
+    "Error during demuxing: Input/output error",
+    "Error retrieving a packet from demuxer: Input/output error",
+)
 
-def _log_process_stderr(process, label, redacted_values=()):
+
+def _should_ignore_decoder_error(line: str, is_decoder: bool) -> bool:
+    if not is_decoder:
+        return False
+    return any(pattern in line for pattern in IGNORED_DECODER_STDERR_PATTERNS)
+
+
+def _log_process_stderr(process, label, redacted_values=(), is_decoder=False):
     stderr = getattr(process, "stderr", None)
     if not isinstance(stderr, io.IOBase):
         return
@@ -38,7 +55,10 @@ def _log_process_stderr(process, label, redacted_values=()):
                         line = line.replace(value, "<stream-url>")
                 line = line.strip()
                 if line:
-                    logger.error("%s: %s", label, line)
+                    if _should_ignore_decoder_error(line, is_decoder):
+                        logger.debug("%s (ignored mid-stream reset): %s", label, line)
+                    else:
+                        logger.error("%s: %s", label, line)
         except OSError:
             logger.exception("Failed reading stderr from %s.", label)
 
@@ -217,6 +237,7 @@ class FFmpegService:
                 source_process,
                 f"yt-dlp source for {track_title}",
                 (source_url,),
+                is_decoder=False,
             )
             target_url = "pipe:0"
 
@@ -250,6 +271,7 @@ class FFmpegService:
             decoder,
             f"FFmpeg decoder for {track_title}",
             (target_url,),
+            is_decoder=True,
         )
 
         if source_process:
