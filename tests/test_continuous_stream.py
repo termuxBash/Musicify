@@ -61,6 +61,100 @@ def test_ffmpeg_filter_runs_on_decoder_not_publisher(monkeypatch):
     )
 
 
+def test_decoder_prefers_resolved_direct_url(monkeypatch):
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        return MagicMock()
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService()
+
+    decoder = service.start_decoder({
+        "title": "Direct stream",
+        "url": "https://rr.example.test/videoplayback?id=abc",
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+        "stream_headers": {
+            "Referer": "https://www.youtube.com/",
+            "User-Agent": "Musicify-Test",
+        },
+    })
+
+    assert isinstance(decoder, MagicMock)
+    assert len(popen_calls) == 1
+    ffmpeg_cmd, ffmpeg_kwargs = popen_calls[0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == (
+        "https://rr.example.test/videoplayback?id=abc"
+    )
+    assert "-headers" in ffmpeg_cmd
+    headers = ffmpeg_cmd[ffmpeg_cmd.index("-headers") + 1]
+    assert "Referer: https://www.youtube.com/" in headers
+    assert "User-Agent: Musicify-Test" in headers
+    assert "-reconnect" in ffmpeg_cmd
+    assert "youtube:player_client" not in " ".join(ffmpeg_cmd)
+
+
+def test_decoder_pipes_yt_dlp_when_no_direct_url(monkeypatch):
+    monkeypatch.setattr(
+        "services.ffmpeg_service.settings.YOUTUBE_PLAYER_CLIENT",
+        None,
+    )
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        process = MagicMock()
+        process.stdout = MagicMock()
+        return process
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService()
+
+    decoder = service.start_decoder({
+        "title": "Playlist track",
+        "url": None,
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    })
+
+    assert isinstance(decoder, MagicMock)
+    assert len(popen_calls) == 2
+    yt_dlp_cmd = popen_calls[0][0]
+    ffmpeg_cmd = popen_calls[1][0]
+    assert "yt_dlp" in yt_dlp_cmd
+    assert "--extractor-args" not in yt_dlp_cmd
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == "pipe:0"
+
+
+def test_decoder_passes_configured_yt_dlp_player_client(monkeypatch):
+    monkeypatch.setattr(
+        "services.ffmpeg_service.settings.YOUTUBE_PLAYER_CLIENT",
+        "android",
+    )
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        process = MagicMock()
+        process.stdout = MagicMock()
+        return process
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService()
+
+    service.start_decoder({
+        "title": "Android client track",
+        "url": None,
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    })
+
+    yt_dlp_cmd = popen_calls[0][0]
+    extractor_args_index = yt_dlp_cmd.index("--extractor-args")
+    assert yt_dlp_cmd[extractor_args_index + 1] == (
+        "youtube:player_client=android"
+    )
+
+
 def test_queue_player_stops_publisher_after_idle_timeout(monkeypatch):
     monkeypatch.setattr(stream_manager, "EMPTY_QUEUE_PUBLISHER_TIMEOUT", 0.05)
     publisher_stopped = threading.Event()

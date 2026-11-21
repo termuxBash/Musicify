@@ -14,6 +14,10 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+# Development-only override for yt-dlp's YouTube player client.
+# Leave as None to let yt-dlp use its default player clients.
+YOUTUBE_PLAYER_CLIENT = None
+
 
 def env_bool(name, default=False):
     value = os.getenv(name)

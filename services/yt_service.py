@@ -15,8 +15,6 @@ from urllib.parse import parse_qs, urlparse
 from core import settings
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
-CLIENT = "web_embedded"  # Default client for YouTube API requests
-
 logger = logging.getLogger(__name__)
 YOUTUBE_API_KEYS = [
     settings.YOUTUBE_API_KEY,
@@ -24,6 +22,18 @@ YOUTUBE_API_KEYS = [
 ]
 
 _YOUTUBE_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _youtube_extractor_args():
+    if settings.YOUTUBE_PLAYER_CLIENT:
+        return {
+            "extractor_args": {
+                "youtube": {
+                    "player_client": [settings.YOUTUBE_PLAYER_CLIENT],
+                },
+            },
+        }
+    return {}
 
 
 def _youtube_thumbnail(info):
@@ -69,7 +79,7 @@ class YTService:
             "quiet": True,
             'nocheckcertificate': True,
             "remote_components": ["ejs:github"],
-            #"extractor_args": {"youtube": {"player_client": [CLIENT]} },
+            **_youtube_extractor_args(),
         }) as ydl:
 
             info = ydl.extract_info(
@@ -95,7 +105,7 @@ class YTService:
             "extract_flat": "in_playlist",
             "nocheckcertificate": True,
             "remote_components": ["ejs:github"],
-            "extractor_args": { "youtube": {"player_client": [CLIENT]} },
+            **_youtube_extractor_args(),
         }) as ydl:
             if video_id:
                 info = ydl.extract_info(
@@ -193,7 +203,7 @@ class YTService:
             "extract_flat": "in_playlist",
             "nocheckcertificate": True,
             "remote_components": ["ejs:github"],
-            "extractor_args": { "youtube": {"player_client": [CLIENT]} },
+            **_youtube_extractor_args(),
         }) as ydl:
             playlist = ydl.extract_info(playlist_url, download=False)
 

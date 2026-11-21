@@ -15,6 +15,7 @@ import time
 import queue
 import logging
 import io
+from core import settings
 
 logger = logging.getLogger(__name__)
 
@@ -219,16 +220,25 @@ class FFmpegService:
         source_url = target.get("source_url") if isinstance(target, dict) else None
         track_title = target.get("title", "Unknown") if isinstance(target, dict) else "stream"
 
-        if source_url:
+        # Prefer yt-dlp only for URL resolution. Once a direct media URL is
+        # available, let FFmpeg handle downloading and decoding itself.
+        if not target_url and source_url:
+            yt_dlp_cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--quiet", "--no-warnings", "--no-check-certificates",
+                "--remote-components", "ejs:github",
+            ]
+            if settings.YOUTUBE_PLAYER_CLIENT:
+                yt_dlp_cmd.extend([
+                    "--extractor-args",
+                    f"youtube:player_client={settings.YOUTUBE_PLAYER_CLIENT}",
+                ])
+            yt_dlp_cmd.extend([
+                "--format", "bestaudio",
+                "--output", "-", source_url,
+            ])
             source_process = subprocess.Popen(
-                [
-                    sys.executable, "-m", "yt_dlp",
-                    "--quiet", "--no-warnings", "--no-check-certificates",
-                    "--remote-components", "ejs:github",
-                    "--extractor-args", "youtube:player_client=web_embedded",
-                    "--format", "bestaudio",
-                    "--output", "-", source_url
-                ],
+                yt_dlp_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 preexec_fn=os.setsid
@@ -244,12 +254,25 @@ class FFmpegService:
         header_value = "".join(
             f"{key}: {value}\r\n" for key, value in stream_headers.items()
         )
+        is_direct_http_url = (
+            isinstance(target_url, str)
+            and target_url.startswith(("http://", "https://"))
+        )
 
         cmd = [
             "ffmpeg",
             "-hide_banner",
             "-loglevel", "error",
             *( ["-headers", header_value] if header_value and not source_process else [] ),
+            *(
+                [
+                    "-reconnect", "1",
+                    "-reconnect_streamed", "1",
+                    "-reconnect_delay_max", "5",
+                ]
+                if is_direct_http_url
+                else []
+            ),
             "-i", target_url,
             "-vn",
             "-af", "dynaudnorm=f=500:g=5:m=10:p=0.95",
