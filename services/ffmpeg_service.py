@@ -14,6 +14,7 @@ import threading
 import time
 import queue
 import logging
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,27 @@ ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
 CHUNK_SIZE = 17640
 CHUNK_DURATION = 0.1
 SILENCE_CHUNK = bytes(CHUNK_SIZE)
+
+
+def _log_process_stderr(process, label, redacted_values=()):
+    stderr = getattr(process, "stderr", None)
+    if not isinstance(stderr, io.IOBase):
+        return
+
+    def drain():
+        try:
+            for raw_line in stderr:
+                line = raw_line.decode(errors="replace") if isinstance(raw_line, bytes) else raw_line
+                for value in redacted_values:
+                    if value:
+                        line = line.replace(value, "<stream-url>")
+                line = line.strip()
+                if line:
+                    logger.error("%s: %s", label, line)
+        except OSError:
+            logger.exception("Failed reading stderr from %s.", label)
+
+    threading.Thread(target=drain, daemon=True).start()
 
 
 class FFmpegService:
@@ -175,6 +197,7 @@ class FFmpegService:
         stream_headers = target.get("stream_headers", {}) if isinstance(target, dict) else {}
         target_url = target.get("url") if isinstance(target, dict) else target
         source_url = target.get("source_url") if isinstance(target, dict) else None
+        track_title = target.get("title", "Unknown") if isinstance(target, dict) else "stream"
 
         if source_url:
             source_process = subprocess.Popen(
@@ -187,8 +210,13 @@ class FFmpegService:
                     "--output", "-", source_url
                 ],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 preexec_fn=os.setsid
+            )
+            _log_process_stderr(
+                source_process,
+                f"yt-dlp source for {track_title}",
+                (source_url,),
             )
             target_url = "pipe:0"
 
@@ -215,8 +243,13 @@ class FFmpegService:
             cmd,
             stdin=source_process.stdout if source_process else None,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             preexec_fn=os.setsid
+        )
+        _log_process_stderr(
+            decoder,
+            f"FFmpeg decoder for {track_title}",
+            (target_url,),
         )
 
         if source_process:

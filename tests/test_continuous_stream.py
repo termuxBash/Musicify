@@ -1,9 +1,12 @@
+import io
+import logging
 import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 import core.stream_manager as stream_manager
 from core.stream_manager import QueuePlayer
-from services.ffmpeg_service import FFmpegService
+from services.ffmpeg_service import FFmpegService, _log_process_stderr
 
 
 def test_ffmpeg_service_publisher_lifecycle():
@@ -213,3 +216,103 @@ def test_queue_player_skip_terminates_decoder_not_publisher():
         assert publisher_start_count[0] == 1
     finally:
         player.stop()
+
+
+def test_queue_player_publishes_song_only_after_audio_is_accepted():
+    decoder_reading = threading.Event()
+    allow_audio = threading.Event()
+    audio_accepted = threading.Event()
+    finish_track = threading.Event()
+
+    class MockFFmpegService:
+        def ensure_publisher(self):
+            pass
+
+        def write_pcm(self, data):
+            audio_accepted.set()
+            return True
+
+        def start_decoder(self, song):
+            decoder = MagicMock()
+            decoder.stdout = MagicMock()
+
+            def read(_size):
+                decoder_reading.set()
+                if not allow_audio.wait(timeout=2):
+                    return b""
+                if not audio_accepted.is_set():
+                    return b"audio"
+                finish_track.wait(timeout=2)
+                return b""
+
+            decoder.stdout.read.side_effect = read
+            return decoder
+
+        def kill_process(self, _process):
+            pass
+
+    player = QueuePlayer(MockFFmpegService(), autoplay_enabled=False)
+    player.start()
+    player.enqueue({"title": "Delayed song", "url": "/music/delayed.mp3"})
+
+    try:
+        assert decoder_reading.wait(timeout=3)
+        assert player.status()["current_song"] is None
+
+        allow_audio.set()
+        assert audio_accepted.wait(timeout=3)
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            current_song = player.status()["current_song"]
+            if current_song and current_song.get("title") == "Delayed song":
+                break
+            time.sleep(0.01)
+        assert player.status()["current_song"]["title"] == "Delayed song"
+    finally:
+        finish_track.set()
+        player.stop()
+
+
+def test_queue_player_logs_decoder_exit_code(caplog):
+    decoder_finished = threading.Event()
+
+    class MockFFmpegService:
+        def ensure_publisher(self):
+            pass
+
+        def start_decoder(self, _song):
+            decoder = MagicMock()
+            decoder.stdout = MagicMock()
+            decoder.stdout.read.return_value = b""
+            decoder.poll.return_value = 1
+            return decoder
+
+        def kill_process(self, _process):
+            decoder_finished.set()
+
+    player = QueuePlayer(MockFFmpegService(), autoplay_enabled=False)
+    with caplog.at_level(logging.ERROR, logger="core.stream_manager"):
+        player.start()
+        player.enqueue({"title": "Broken song", "url": "/music/broken.mp3"})
+        try:
+            assert decoder_finished.wait(timeout=3)
+        finally:
+            player.stop()
+
+    assert "Decoder exited with code 1 for 'Broken song'." in caplog.text
+
+
+def test_decoder_stderr_is_logged_with_stream_url_redacted(caplog):
+    signed_url = "https://example.test/audio?signature=secret"
+    process = SimpleNamespace(
+        stderr=io.BytesIO(f"Could not open {signed_url}\n".encode())
+    )
+
+    with caplog.at_level(logging.ERROR, logger="services.ffmpeg_service"):
+        _log_process_stderr(process, "FFmpeg decoder for Broken song", (signed_url,))
+        deadline = time.monotonic() + 1
+        while "Could not open" not in caplog.text and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+    assert "Could not open <stream-url>" in caplog.text
+    assert "signature=secret" not in caplog.text

@@ -410,7 +410,7 @@ class QueuePlayer:
                     continue
 
             with self.lock:
-                self.current_song = song
+                self.current_song = None
                 song_generation = self._playback_generation
 
             title = song.get("title")
@@ -423,6 +423,8 @@ class QueuePlayer:
                 and title.endswith(")")
                 and has_radio_url
             ):
+                with self.lock:
+                    self.current_song = song
                 try:
                     if self.radio_handler is None:
                         logger.error("Cannot play queued radio station: no radio handler is configured.")
@@ -435,10 +437,6 @@ class QueuePlayer:
                         if self.current_song == song:
                             self.current_song = None
                 continue
-
-            # Record only normal YouTube tracks when playback actually starts.
-            from core.stats import record_played_song
-            record_played_song(song)
 
             # --- DYNAMIC AUTOPLAY CANCELLATION CHECK ---
             if self.autoplay_enabled:
@@ -465,6 +463,8 @@ class QueuePlayer:
                 threading.Thread(target=self._trigger_autoplay, args=(song,), daemon=True).start()
 
             decoder = None
+            playback_started = False
+            playback_interrupted = False
             try:
                 logger.info(f"Playing: {song.get('title', 'Unknown')}")
                 target = song
@@ -494,6 +494,7 @@ class QueuePlayer:
                     with self.lock:
                         if self._playback_generation != song_generation:
                             logger.info("Playback generation shifted (skipped/stopped).")
+                            playback_interrupted = True
                             break
 
                     chunk = decoder.stdout.read(CHUNK_SIZE) if decoder and decoder.stdout else None
@@ -502,17 +503,47 @@ class QueuePlayer:
                         break
 
                     if hasattr(self.ffmpeg, "write_pcm"):
-                        self.ffmpeg.write_pcm(chunk)
+                        if self.ffmpeg.write_pcm(chunk) is False:
+                            continue
+
+                    if not playback_started:
+                        with self.lock:
+                            if self._playback_generation != song_generation:
+                                playback_interrupted = True
+                                break
+                            self.current_song = song
+                        playback_started = True
+                        from core.stats import record_played_song
+                        record_played_song(song)
 
             except Exception as loop_error:
-                logger.warning(f"Playback runtime event: {loop_error}")
+                logger.exception("Playback failed for '%s': %s", title or "Unknown", loop_error)
 
             finally:
                 with self.lock:
+                    if self._playback_generation != song_generation:
+                        playback_interrupted = True
                     self.current_process = None
                     self.current_song = None
                 if decoder:
                     try:
+                        return_code = decoder.poll()
+                        if not playback_interrupted:
+                            if isinstance(return_code, int) and return_code != 0:
+                                logger.error(
+                                    "Decoder exited with code %d for '%s'.",
+                                    return_code,
+                                    title or "Unknown",
+                                )
+                            elif not playback_started:
+                                logger.warning(
+                                    "Decoder ended before producing audio for '%s' (exit code: %s).",
+                                    title or "Unknown",
+                                    return_code,
+                                )
+                    except Exception:
+                        logger.exception("Could not inspect decoder status for '%s'.", title or "Unknown")
+                    try:
                         self.ffmpeg.kill_process(decoder)
                     except Exception:
-                        pass
+                        logger.exception("Failed to stop decoder for '%s'.", title or "Unknown")

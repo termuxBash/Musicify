@@ -121,7 +121,7 @@ class BoseSoundTouchWorker:
                     "is_on": power_state == "on",
                 }
         except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
-            logger.warning("[Bose Offline] Failed to fetch now_playing node.")
+            pass#logger.warning("[Bose Offline] Failed to fetch now_playing node.")
         except Exception as e:
             logger.warning("[Bose Worker] Failed fetching status: %s", e)
         return {
