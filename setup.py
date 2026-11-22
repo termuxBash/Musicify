@@ -182,7 +182,7 @@ def write_env() -> None:
         "HISTORY_TABLE": "history",
         "DB_FILENAME": "history.sqlite3",
         "ROOT_DIR": root_dir,
-        "DOWNLOAD_DIRS": str(USER_HOME / "downloads" / "ram500mb" / "ytdlp") + "," + str(USER_HOME / "Downloads" / "ytdlp"),
+        "DOWNLOAD_DIR": str(USER_HOME / "Downloads"),
         "TIME_OFFSET": "0",
         "LYRICS_ENABLED": "false",
         "AUTOPLAY_ENABLED": "false",

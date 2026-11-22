@@ -7,6 +7,27 @@ from unittest.mock import MagicMock
 import core.stream_manager as stream_manager
 from core.stream_manager import QueuePlayer
 from services.ffmpeg_service import FFmpegService, _log_process_stderr
+from core import settings
+
+
+def test_ffmpeg_default_cache_dir_uses_ytdlp_subdir(monkeypatch, tmp_path):
+    configured_dir = tmp_path / "downloads"
+    monkeypatch.setattr(settings, "DOWNLOAD_DIR", str(configured_dir))
+
+    service = FFmpegService(cache_dir=None)
+
+    assert service.cache_dir == configured_dir / "ytdlp"
+    assert service.cache_dir.is_dir()
+
+
+def test_ffmpeg_default_cache_dir_does_not_duplicate_ytdlp(monkeypatch, tmp_path):
+    configured_dir = tmp_path / "downloads" / "ytdlp"
+    monkeypatch.setattr(settings, "DOWNLOAD_DIR", str(configured_dir))
+
+    service = FFmpegService(cache_dir=None)
+
+    assert service.cache_dir == configured_dir
+    assert service.cache_dir.is_dir()
 
 
 def test_ffmpeg_service_publisher_lifecycle():

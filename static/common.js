@@ -1316,7 +1316,11 @@ function getLyricIndexAtTime(lines, elapsedSeconds) {
   if (!Array.isArray(lines)) return activeIndex;
 
   for (let index = 0; index < lines.length; index += 1) {
-    const timestamp = Number(lines[index]?.time);
+    const rawTime = lines[index]?.time;
+    const timestamp =
+      rawTime === null || rawTime === undefined || rawTime === ""
+        ? NaN
+        : Number(rawTime);
     if (Number.isFinite(timestamp) && elapsedSeconds >= timestamp) {
       activeIndex = index;
     }
@@ -1359,24 +1363,40 @@ function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
   if (playbackTimeline) {
     const modalLyrics = document.getElementById("nowPlayingModalLyrics");
     const liveLyrics = document.getElementById("live-lyrics");
+    const lines = Array.isArray(playbackTimeline.lines)
+      ? playbackTimeline.lines
+      : [];
+    const hasTimings = lines.some((line) => {
+      const rawTime = line?.time;
+      return (
+        rawTime !== null &&
+        rawTime !== undefined &&
+        rawTime !== "" &&
+        Number.isFinite(Number(rawTime))
+      );
+    });
+
     const offsetSeconds = Number(playbackTimeline.lyricsOffsetMs || 0) / 1000;
-    const lyricIndex = getLyricIndexAtTime(
-      playbackTimeline.lines,
-      safeElapsed + offsetSeconds,
-    );
+    const lyricIndex = hasTimings
+      ? getLyricIndexAtTime(lines, safeElapsed + offsetSeconds)
+      : null;
     renderModalLyrics(
       modalLyrics,
-      playbackTimeline.lines,
+      lines,
       lyricIndex,
       playbackTimeline.title,
       playbackTimeline.radioUrl,
     );
-    if (liveLyrics && Array.isArray(playbackTimeline.lines)) {
-      const activeLine =
-        lyricIndex !== null && playbackTimeline.lines[lyricIndex]
-          ? playbackTimeline.lines[lyricIndex].text || ""
-          : "";
-      renderLyricText(liveLyrics, activeLine);
+    if (liveLyrics) {
+      if (lines.length > 0 && !hasTimings) {
+        renderLyricText(liveLyrics, "Lyrics available, timing not available");
+      } else {
+        const activeLine =
+          lyricIndex !== null && lines[lyricIndex]
+            ? lines[lyricIndex].text || ""
+            : "";
+        renderLyricText(liveLyrics, activeLine);
+      }
     }
   }
 

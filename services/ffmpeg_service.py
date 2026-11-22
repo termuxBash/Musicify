@@ -83,15 +83,16 @@ class FFmpegService:
         self._pump_stop_event = threading.Event()
 
     def _default_cache_dir(self):
-        for configured_dir in getattr(settings, "DOWNLOAD_DIRS", []):
-            if not isinstance(configured_dir, str) or not configured_dir.strip():
-                continue
+        configured_dir = getattr(settings, "DOWNLOAD_DIR", None)
+        if isinstance(configured_dir, str) and configured_dir.strip():
             candidate = Path(configured_dir.strip()).expanduser()
+            if candidate.name.lower() != "ytdlp":
+                candidate = candidate / "ytdlp"
             try:
                 candidate.mkdir(parents=True, exist_ok=True)
                 return candidate
             except OSError:
-                continue
+                pass
 
         fallback = Path.home() / "Downloads" / "ytdlp"
         fallback.mkdir(parents=True, exist_ok=True)

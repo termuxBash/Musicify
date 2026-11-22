@@ -51,6 +51,7 @@ Set these in your `.env` file to override runtime defaults:
 - `STREAM_FALLBACK_URLS` for comma-separated fallback stream URLs.
 - `ROOT_DIR` for the root music directory. Defaults to `~/Music`.
 - `PLAYLIST_DIR` for the playlist text-files directory. Defaults to `~/Music/playlists`.
+- `DOWNLOAD_DIR` for the base directory used for downloaded YouTube audio. Defaults to `~/Downloads`; Musicify creates a `ytdlp` subdirectory there automatically. If the configured directory already ends in `ytdlp`, it is used directly without adding another `ytdlp` level.
 - `HISTORY_TABLE` for the active history table. Defaults to `history`; online player can switch it at `/youtube/<filename>`.
 - `DB_FILENAME` for the SQLite database filename. Defaults to `history.sqlite3`.
 - `TIME_OFFSET` for the hexadecimal Unix timestamp baseline used in playback history.
