@@ -224,6 +224,17 @@ class LyricsServiceTests(unittest.TestCase):
 
         self.assertEqual(aligned, [(1.0, "Translated one"), (8.0, "Translated two")])
 
+    def test_align_lyrics_preserves_explicit_transformed_timestamps(self):
+        aligned = align_lyrics(
+            "[00:02.00] Romanized one\n[00:07.50] Romanized two",
+            "[00:01.00] Source one\n[00:04.00] Source two\n[00:08.00] Source three",
+        )
+
+        self.assertEqual(
+            aligned,
+            [(2.0, "Romanized one"), (7.5, "Romanized two")],
+        )
+
     def test_align_lyrics_keeps_unsynced_provider_lines(self):
         aligned = align_lyrics("First line\nSecond line", "")
 

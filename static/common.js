@@ -1358,6 +1358,7 @@ function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
 
   if (playbackTimeline) {
     const modalLyrics = document.getElementById("nowPlayingModalLyrics");
+    const liveLyrics = document.getElementById("live-lyrics");
     const offsetSeconds = Number(playbackTimeline.lyricsOffsetMs || 0) / 1000;
     const lyricIndex = getLyricIndexAtTime(
       playbackTimeline.lines,
@@ -1370,6 +1371,13 @@ function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
       playbackTimeline.title,
       playbackTimeline.radioUrl,
     );
+    if (liveLyrics && Array.isArray(playbackTimeline.lines)) {
+      const activeLine =
+        lyricIndex !== null && playbackTimeline.lines[lyricIndex]
+          ? playbackTimeline.lines[lyricIndex].text || ""
+          : "";
+      renderLyricText(liveLyrics, activeLine);
+    }
   }
 
   void isPlaying;
@@ -1547,7 +1555,6 @@ async function updateStats() {
         setPlayingThumbnail(thumbnail);
       }
       if (statusEl) statusEl.textContent = playbackStatus;
-      if (lyricsEl) renderLyricText(lyricsEl, data.current_lyric || "");
       if (modalThumbEl) {
         setExpandedThumbnail(modalThumbnail);
       }
@@ -1558,13 +1565,6 @@ async function updateStats() {
         modalLyricsSourceEl.hidden = !source;
       }
       if (modalStatusEl) modalStatusEl.textContent = playbackStatus;
-      renderModalLyrics(
-        modalLyricsEl,
-        data.lyrics,
-        data.current_lyric_index,
-        title,
-        data.is_radio || data.owner === "radio" ? data.now_playing.url : "",
-      );
     } else {
       if (titleTextEl) titleTextEl.textContent = "Ready to stream";
       if (titleEl) titleEl.classList.remove("ticker");

@@ -178,6 +178,30 @@ def test_decoder_uses_downloaded_cache_file(monkeypatch, tmp_path):
     assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == str(cached_song)
 
 
+def test_decoder_finds_existing_cache_by_video_id(monkeypatch, tmp_path):
+    cached_song = tmp_path / "1700000000__abcdefghijk__Cached track.webm"
+    cached_song.write_bytes(b"cached")
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        return MagicMock()
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService(cache_dir=tmp_path)
+    target = {
+        "title": "Cached track",
+        "videoId": "abcdefghijk",
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    }
+
+    service.start_decoder(target)
+
+    ffmpeg_cmd = popen_calls[0][0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == str(cached_song)
+    assert target["cache_path"] == str(cached_song)
+
+
 def test_decoder_falls_back_when_cache_file_is_missing(monkeypatch, tmp_path):
     popen_calls = []
 
@@ -232,6 +256,32 @@ def test_precache_song_uses_path_glob_for_cache_files(monkeypatch, tmp_path):
 
     assert result["path"] == str(cached_song)
     assert result["duration"] == 200.0
+
+
+def test_precache_song_reuses_existing_video_id(monkeypatch, tmp_path):
+    cached_song = tmp_path / "1700000000__abcdefghijk__Cached track.webm"
+    cached_song.write_bytes(b"cached")
+    monkeypatch.setattr(
+        "services.ffmpeg_service.subprocess.run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("yt-dlp should not run for a reused cache")
+        ),
+    )
+    monkeypatch.setattr(
+        FFmpegService,
+        "get_media_duration",
+        lambda self, path: 200.0,
+    )
+    service = FFmpegService(cache_dir=tmp_path)
+
+    result = service.precache_song({
+        "title": "Cached track",
+        "videoId": "abcdefghijk",
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    })
+
+    assert result["path"] == str(cached_song)
+    assert result["reused"] is True
 
 
 def test_queue_player_marks_failed_precache_and_moves_it_to_bottom(monkeypatch, tmp_path):

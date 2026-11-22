@@ -16,6 +16,7 @@ import queue
 import logging
 import io
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from core import settings
 
 logger = logging.getLogger(__name__)
@@ -100,15 +101,42 @@ class FFmpegService:
         """Download a YouTube track with yt-dlp and return cache metadata."""
         source_url = song.get("source_url") if isinstance(song, dict) else None
         video_id = song.get("videoId") if isinstance(song, dict) else None
+        if not isinstance(video_id, str) or not video_id:
+            if isinstance(source_url, str) and source_url:
+                parsed_url = urlparse(source_url)
+                if parsed_url.hostname in {"youtu.be", "www.youtu.be"}:
+                    video_id = parsed_url.path.strip("/").split("/")[0] or None
+                else:
+                    video_id = (parse_qs(parsed_url.query).get("v") or [None])[0]
         if not source_url and video_id:
             source_url = f"https://www.youtube.com/watch?v={video_id}"
         if not isinstance(source_url, str) or not source_url:
             raise ValueError("Song has no YouTube source URL")
 
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        if isinstance(video_id, str) and video_id:
+            for cached_path in self.cache_dir.glob("*"):
+                if (
+                    cached_path.is_file()
+                    and cached_path.stat().st_size > 0
+                    and f"__{video_id}__" in cached_path.name
+                ):
+                    duration = self.get_media_duration(str(cached_path.resolve()))
+                    return {
+                        "path": str(cached_path.resolve()),
+                        "duration": duration,
+                        "downloaded_at": int(cached_path.stat().st_mtime),
+                        "reused": True,
+                    }
+
         before = {path.resolve() for path in self.cache_dir.glob("*") if path.is_file()}
         timestamp = int(time.time())
-        output_template = str(self.cache_dir / f"%(timestamp)s-%(title)s.%(ext)s")
+        title = song.get("title") if isinstance(song, dict) else None
+        title = str(title).strip() if isinstance(title, str) and title.strip() else "Unknown"
+        video_key = video_id if isinstance(video_id, str) and video_id else "unknown"
+        output_template = str(
+            self.cache_dir / f"{timestamp}__{video_key}__%(title)s.%(ext)s"
+        )
         command = [
             sys.executable, "-m", "yt_dlp",
             "--quiet", "--no-warnings", "--no-check-certificates",
@@ -161,6 +189,39 @@ class FFmpegService:
             "duration": duration,
             "downloaded_at": timestamp,
         }
+
+    def find_cached_song(self, target):
+        """Find an existing cache file matching a target's YouTube video ID."""
+        if not isinstance(target, dict):
+            return None
+
+        video_id = target.get("videoId")
+        source_url = target.get("source_url")
+        if not isinstance(video_id, str) or not video_id:
+            candidate_url = (
+                source_url
+                if isinstance(source_url, str) and source_url
+                else target.get("url")
+            )
+            if isinstance(candidate_url, str) and candidate_url:
+                parsed_url = urlparse(candidate_url)
+                if parsed_url.hostname in {"youtu.be", "www.youtu.be"}:
+                    video_id = parsed_url.path.strip("/").split("/")[0] or None
+                elif parsed_url.hostname and "youtube" in parsed_url.hostname:
+                    video_id = (parse_qs(parsed_url.query).get("v") or [None])[0]
+
+        if not isinstance(video_id, str) or not video_id:
+            return None
+
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        for cached_path in self.cache_dir.glob("*"):
+            if (
+                cached_path.is_file()
+                and cached_path.stat().st_size > 0
+                and f"__{video_id}__" in cached_path.name
+            ):
+                return str(cached_path.resolve())
+        return None
 
     def get_media_duration(self, target):
         if not isinstance(target, str) or not target:
@@ -353,6 +414,21 @@ class FFmpegService:
         source_process = None
         stream_headers = target.get("stream_headers", {}) if isinstance(target, dict) else {}
         cache_path = target.get("cache_path") if isinstance(target, dict) else None
+        if (
+            not isinstance(cache_path, str)
+            or not os.path.isfile(cache_path)
+            or os.path.getsize(cache_path) <= 0
+        ):
+            cached_path = self.find_cached_song(target)
+            if cached_path:
+                cache_path = cached_path
+                if isinstance(target, dict):
+                    target["cache_path"] = cached_path
+                    logger.info(
+                        "Using existing cache for '%s': %s",
+                        target.get("title", "Unknown"),
+                        cached_path,
+                    )
         valid_cache_path = (
             isinstance(cache_path, str)
             and os.path.isfile(cache_path)
