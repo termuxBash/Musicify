@@ -310,17 +310,30 @@ function toggleMenu() {
 
 function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
+  const overlay = document.getElementById("settingsModalOverlay");
   const menu = document.getElementById("settingsPopupMenu");
-  if (menu) {
-    menu.classList.toggle("show");
+  const isOpen = overlay ? overlay.classList.contains("open") : (menu && menu.classList.contains("show"));
+  if (isOpen) {
+    closeSettingsMenu();
+  } else {
+    openSettingsMenu();
   }
 }
 
-function closeSettingsMenu() {
+function openSettingsMenu() {
+  const overlay = document.getElementById("settingsModalOverlay");
   const menu = document.getElementById("settingsPopupMenu");
-  if (menu) {
-    menu.classList.remove("show");
-  }
+  if (overlay) overlay.classList.add("open");
+  if (menu) menu.classList.add("show");
+  document.body.classList.add("modal-open");
+}
+
+function closeSettingsMenu() {
+  const overlay = document.getElementById("settingsModalOverlay");
+  const menu = document.getElementById("settingsPopupMenu");
+  if (overlay) overlay.classList.remove("open");
+  if (menu) menu.classList.remove("show");
+  document.body.classList.remove("modal-open");
 }
 
 async function shutdownServer() {
@@ -342,9 +355,14 @@ async function shutdownServer() {
 }
 
 window.addEventListener("click", (e) => {
+  const overlay = document.getElementById("settingsModalOverlay");
   const menu = document.getElementById("settingsPopupMenu");
   const btn = document.getElementById("settingsBtn");
-  if (menu && menu.classList.contains("show")) {
+  if (overlay && overlay.classList.contains("open")) {
+    if (e.target === overlay) {
+      closeSettingsMenu();
+    }
+  } else if (menu && menu.classList.contains("show")) {
     if (!menu.contains(e.target) && !btn?.contains(e.target)) {
       closeSettingsMenu();
     }
@@ -460,6 +478,78 @@ async function reconnectStream() {
     showPopup("Stream reconnected");
   } else {
     showPopup("Stream reconnect failed");
+  }
+}
+
+// Device audio playback testing Icecast stream
+let deviceAudio = null;
+
+function getIcecastStreamUrl() {
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  return `${protocol}//${hostname}:8000/mpv.ogg`;
+}
+
+function updateDevicePlayPauseBtn(isPlaying) {
+  const btn = document.getElementById("devicePlayPauseBtn");
+  const playIcon = document.getElementById("devicePlayIcon");
+  const pauseIcon = document.getElementById("devicePauseIcon");
+  if (!btn) return;
+
+  if (isPlaying) {
+    if (playIcon) playIcon.style.display = "none";
+    if (pauseIcon) pauseIcon.style.display = "block";
+    btn.setAttribute("aria-label", "Stop playing stream on device");
+    btn.setAttribute("title", "Stop playing stream on device");
+  } else {
+    if (playIcon) playIcon.style.display = "block";
+    if (pauseIcon) pauseIcon.style.display = "none";
+    btn.setAttribute("aria-label", "Play stream on device");
+    btn.setAttribute("title", "Play stream on device");
+  }
+}
+
+function toggleDevicePlayback() {
+  if (deviceAudio && !deviceAudio.paused) {
+    // Stop playing in the frontend without affecting backend/Icecast
+    deviceAudio.pause();
+    deviceAudio.removeAttribute("src");
+    deviceAudio.load();
+    deviceAudio = null;
+    updateDevicePlayPauseBtn(false);
+    showPopup("Device playback stopped");
+  } else {
+    if (!deviceAudio) {
+      deviceAudio = new Audio();
+      deviceAudio.addEventListener("error", (e) => {
+        console.error("Device playback error:", e);
+        showPopup("Device stream playback error");
+        updateDevicePlayPauseBtn(false);
+        if (deviceAudio) {
+          deviceAudio.removeAttribute("src");
+          deviceAudio.load();
+          deviceAudio = null;
+        }
+      });
+      deviceAudio.addEventListener("ended", () => {
+        updateDevicePlayPauseBtn(false);
+        deviceAudio = null;
+      });
+    }
+    // Set stream URL with cache-buster timestamp to ensure connecting to live stream
+    const streamUrl = `${getIcecastStreamUrl()}?t=${Date.now()}`;
+    deviceAudio.src = streamUrl;
+    deviceAudio
+      .play()
+      .then(() => {
+        updateDevicePlayPauseBtn(true);
+        showPopup("Playing stream on device");
+      })
+      .catch((err) => {
+        console.error("Device audio play failed:", err);
+        showPopup("Could not start device playback");
+        updateDevicePlayPauseBtn(false);
+      });
   }
 }
 async function power() {
@@ -1798,3 +1888,84 @@ window.addEventListener("focus", () => {
 if (!document.hidden) {
   startStatsPolling();
 }
+
+// --- URL PARAMETER ACTIONS ---
+(function handleUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+
+  // 1. Turning on lyrics: ?lyrics or ?lyrics=1 / ?lyrics=true
+  if (params.has("lyrics")) {
+    const val = params.get("lyrics");
+    if (val === "" || val === "1" || val === "true" || val === "on") {
+      fetch("/stats")
+        .then((res) => res.json())
+        .then((data) => {
+          if (!data.show_lyrics) {
+            toggleLyrics();
+          }
+        })
+        .catch((err) => console.error("Failed to check lyrics state for URL param:", err));
+    }
+  }
+
+  // 2. Opening now playing modal: ?openModal or ?nowPlaying / ?openModal=1
+  if (params.has("openModal") || params.has("nowPlaying")) {
+    const val = params.has("openModal") ? params.get("openModal") : params.get("nowPlaying");
+    if (val === "" || val === "1" || val === "true" || val === "on") {
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => openNowPlaying());
+      } else {
+        openNowPlaying();
+      }
+    }
+  }
+
+  // 3. Turning on auto-play after a delay of 5 seconds: ?autoplayOn or ?autoplay
+  if (params.has("autoplayOn") || params.has("autoplay")) {
+    const val = params.has("autoplayOn") ? params.get("autoplayOn") : params.get("autoplay");
+    if (val === "" || val === "1" || val === "true" || val === "on") {
+      setTimeout(() => {
+        fetch("/stats")
+          .then((res) => res.json())
+          .then((data) => {
+            if (!data.autoplay_enabled) {
+              toggleAutoplay();
+            }
+          })
+          .catch((err) => console.error("Failed to check autoplay state for URL param:", err));
+      }, 5000);
+    }
+  }
+
+  // 4. Turning on device playback: ?playOnDevice or ?playStream
+  if (params.has("playOnDevice") || params.has("playStream")) {
+    const val = params.has("playOnDevice") ? params.get("playOnDevice") : params.get("playStream");
+    if (val === "" || val === "1" || val === "true" || val === "on") {
+      const triggerDevicePlay = () => {
+        if (!deviceAudio || deviceAudio.paused) {
+          toggleDevicePlayback();
+        }
+      };
+
+      // Try playing immediately
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", triggerDevicePlay);
+      } else {
+        triggerDevicePlay();
+      }
+
+      // If autoplay was blocked by the browser policy, attach a one-time gesture listener
+      const unlockOnFirstInteraction = () => {
+        if (!deviceAudio || deviceAudio.paused) {
+          toggleDevicePlayback();
+        }
+        window.removeEventListener("pointerdown", unlockOnFirstInteraction);
+        window.removeEventListener("keydown", unlockOnFirstInteraction);
+      };
+
+      window.addEventListener("pointerdown", unlockOnFirstInteraction, { once: true });
+      window.addEventListener("keydown", unlockOnFirstInteraction, { once: true });
+    }
+  }
+})();
+

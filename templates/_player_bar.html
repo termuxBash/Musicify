@@ -48,6 +48,10 @@
             <button class="now-playing-modal-reconnect" type="button" onclick="reconnectStream()" aria-label="Reconnect stream" title="Reconnect stream">
                 <img src="/static/repeat-solid-full.svg" alt="">
             </button>
+            <button class="now-playing-modal-reconnect now-playing-modal-playpause" id="devicePlayPauseBtn" type="button" onclick="toggleDevicePlayback()" aria-label="Play stream on device" title="Play stream on device">
+                <svg id="devicePlayIcon" width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
+                <svg id="devicePauseIcon" width="16" height="16" viewBox="0 0 24 24" fill="white" style="display:none;"><rect x="5" y="4" width="4" height="16"/><rect x="15" y="4" width="4" height="16"/></svg>
+            </button>
             <div class="volume-cluster now-playing-modal-volume">
                 <button class="vol-btn" type="button" onclick="sendControl('vol_down')" aria-label="Decrease volume">-</button>
                 <input type="range" min="0" max="100" value="0" oninput="setVolume(this.value)" aria-label="Volume">
