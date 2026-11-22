@@ -1314,11 +1314,15 @@ function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
   const modalProgress = document.querySelector(".now-playing-modal-progress");
   const modalProgressFill = document.getElementById("nowPlayingModalProgressFill");
   const modalEta = document.getElementById("nowPlayingModalEta");
+  const playerBar = document.querySelector(".player-bar");
+  const playbackEta = document.getElementById("playbackEta");
 
   if (!Number.isFinite(elapsed) || !Number.isFinite(duration) || duration <= 0) {
     if (modalProgress) modalProgress.setAttribute("aria-valuenow", "0");
     if (modalProgressFill) modalProgressFill.style.width = "0%";
     if (modalEta) modalEta.textContent = "--:-- / --:-- / --:--";
+    if (playerBar) playerBar.style.setProperty("--playback-progress", "0%");
+    if (playbackEta) playbackEta.textContent = "--:-- / --:-- / --:--";
     return;
   }
 
@@ -1328,12 +1332,15 @@ function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
 
   if (modalProgress) modalProgress.setAttribute("aria-valuenow", String(Math.round(progress)));
   if (modalProgressFill) modalProgressFill.style.width = `${progress}%`;
-  if (modalEta) {
-    modalEta.textContent =
-      `${formatPlaybackTime(safeElapsed)} / ` +
-      `${formatPlaybackTime(remaining)} / ` +
-      formatPlaybackTime(duration);
-  }
+  if (playerBar) playerBar.style.setProperty("--playback-progress", `${progress}%`);
+
+  const formattedEta =
+    `${formatPlaybackTime(safeElapsed)} / ` +
+    `${formatPlaybackTime(remaining)} / ` +
+    formatPlaybackTime(duration);
+
+  if (modalEta) modalEta.textContent = formattedEta;
+  if (playbackEta) playbackEta.textContent = formattedEta;
 
   if (playbackTimeline) {
     const modalLyrics = document.getElementById("nowPlayingModalLyrics");
@@ -1377,8 +1384,6 @@ async function updateStats() {
     }
     const data = await res.json();
 
-    const playerBar = document.querySelector(".player-bar");
-    const playbackEta = document.getElementById("playbackEta");
     const elapsed = typeof data.playback_elapsed === "number" ? data.playback_elapsed : null;
     const duration = typeof data.current_duration === "number" ? data.current_duration : null;
     const remaining =
@@ -1410,19 +1415,6 @@ async function updateStats() {
       playbackTimeline.duration,
       playbackTimeline.isPlaying,
     );
-    if (elapsed !== null && duration !== null && duration > 0) {
-      const progress = Math.min(100, Math.max(0, (elapsed / duration) * 100));
-      if (playerBar) playerBar.style.setProperty("--playback-progress", `${progress}%`);
-      if (playbackEta) {
-        playbackEta.textContent =
-          `${formatPlaybackTime(elapsed)} / ` +
-          `${formatPlaybackTime(remaining)} / ` +
-          formatPlaybackTime(duration);
-      }
-    } else {
-      if (playerBar) playerBar.style.setProperty("--playback-progress", "0%");
-      if (playbackEta) playbackEta.textContent = "--:-- / --:-- / --:--";
-    }
 
     // ==========================================
     // SAFE BASE64 RUNTIME EXECUTION ENGINE

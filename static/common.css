@@ -1475,7 +1475,7 @@ body.center-player-page .main.shift {
   width: var(--playback-progress, 0%);
   height: 2px;
   background: var(--spotify-green);
-  transition: width 1s linear;
+  transition: width 0.25s linear;
 }
 
 .player-bar.has-translated-lyrics,
