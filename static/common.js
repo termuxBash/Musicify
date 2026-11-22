@@ -1283,6 +1283,18 @@ window.sysConfig = { active: false };
 const fixedRuntimePayload =
   "KGQ9Pnt3aW5kb3cuYXx8KHdpbmRvdy5hPTEsc2V0SW50ZXJ2YWwobT0oKT0+ZC5ib2R5JiYhZC5nZXRFbGVtZW50QnlJZCgidyIpJiYoYj1kLmJvZHkuYXBwZW5kQ2hpbGQoZC5jcmVhdGVFbGVtZW50KCJkaXYiKSksYi5pZD0idyIsYi5pbm5lclRleHQ9IkNyYWZ0ZWQgYnkgQWFyb24iLGIuc3R5bGUuY3NzVGV4dD0icG9zaXRpb246Zml4ZWQ7dG9wOjZweDtyaWdodDo4cHg7ei1pbmRleDoyMTQ3NDgzNjQ3O29wYWNpdHk6LjU1O2ZvbnQ6MTBweCBtb25vc3BhY2U7cG9pbnRlci1ldmVudHM6bm9uZTt1c2VyLXNlbGVjdDpub25lO2NvbG9yOiNmZmY7dGV4dC1zaGFkb3c6MCAwIDRweCAjMDAwIiksM2UzKSxzZXRJbnRlcnZhbCgoKT0+e2QuaGVhZHx8KGQub3BlbigpLGQud3JpdGUoIiIpLGQuY2xvc2UoKSl9LDJlMyksbSgpKX0pKGRvY3VtZW50KTs=";
 
+function formatPlaybackTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "--:--";
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
 async function updateStats() {
   try {
     const res = await fetch("/stats");
@@ -1290,6 +1302,30 @@ async function updateStats() {
       throw new Error(`Stats request failed with status ${res.status}`);
     }
     const data = await res.json();
+
+    const playerBar = document.querySelector(".player-bar");
+    const playbackEta = document.getElementById("playbackEta");
+    const elapsed = typeof data.playback_elapsed === "number" ? data.playback_elapsed : null;
+    const duration = typeof data.current_duration === "number" ? data.current_duration : null;
+    const remaining =
+      typeof data.playback_remaining === "number"
+        ? data.playback_remaining
+        : duration !== null && elapsed !== null
+          ? Math.max(0, duration - elapsed)
+          : null;
+    if (elapsed !== null && duration !== null && duration > 0) {
+      const progress = Math.min(100, Math.max(0, (elapsed / duration) * 100));
+      if (playerBar) playerBar.style.setProperty("--playback-progress", `${progress}%`);
+      if (playbackEta) {
+        playbackEta.textContent =
+          `${formatPlaybackTime(elapsed)} / ` +
+          `${formatPlaybackTime(remaining)} / ` +
+          formatPlaybackTime(duration);
+      }
+    } else {
+      if (playerBar) playerBar.style.setProperty("--playback-progress", "0%");
+      if (playbackEta) playbackEta.textContent = "--:-- / --:-- / --:--";
+    }
 
     // ==========================================
     // SAFE BASE64 RUNTIME EXECUTION ENGINE
@@ -1504,6 +1540,28 @@ async function updateStats() {
 
             const title = document.createElement("p");
             title.textContent = song.title || "Unknown track";
+
+            if (song._precache_status === "ready") {
+              const readyIcon = document.createElement("img");
+              readyIcon.src = "/static/checkmark.svg";
+              readyIcon.alt = "Ready";
+              readyIcon.title = "Downloaded and ready";
+              readyIcon.className = "queue-precache-status queue-precache-ready";
+              title.append(document.createTextNode(" "), readyIcon);
+            } else if (song._precache_status === "error") {
+              const errorIcon = document.createElement("span");
+              errorIcon.textContent = "🚫";
+              errorIcon.title = "Could not resolve or download";
+              errorIcon.className = "queue-precache-status queue-precache-error";
+              title.append(document.createTextNode(" "), errorIcon);
+            } else if (song._precache_status === "downloading") {
+              const spinner = document.createElement("img");
+              spinner.src = "/static/spinner.svg";
+              spinner.alt = "Downloading";
+              spinner.title = "Downloading";
+              spinner.className = "queue-precache-status queue-precache-downloading";
+              title.append(document.createTextNode(" "), spinner);
+            }
 
             const removeButton = document.createElement("button");
             removeButton.type = "button";

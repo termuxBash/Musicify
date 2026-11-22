@@ -15,6 +15,7 @@ import time
 import queue
 import logging
 import io
+from pathlib import Path
 from core import settings
 
 logger = logging.getLogger(__name__)
@@ -67,16 +68,151 @@ def _log_process_stderr(process, label, redacted_values=(), is_decoder=False):
 
 
 class FFmpegService:
-    def __init__(self, icecast_url=ICECAST_URL):
+    def __init__(self, icecast_url=ICECAST_URL, cache_dir=None):
         self.icecast_url = icecast_url
         self.publisher_process = None
         self._publisher_lock = threading.RLock()
         self._last_publisher_start = 0.0
+        self.cache_dir = Path(cache_dir).expanduser() if cache_dir else self._default_cache_dir()
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Dedicated audio buffer queue for decoupled, continuous real-time pumping
         self._audio_queue = queue.Queue(maxsize=30)  # holds ~0.7s of audio buffer
         self._pump_thread = None
         self._pump_stop_event = threading.Event()
+
+    def _default_cache_dir(self):
+        for configured_dir in getattr(settings, "DOWNLOAD_DIRS", []):
+            if not isinstance(configured_dir, str) or not configured_dir.strip():
+                continue
+            candidate = Path(configured_dir.strip()).expanduser()
+            try:
+                candidate.mkdir(parents=True, exist_ok=True)
+                return candidate
+            except OSError:
+                continue
+
+        fallback = Path.home() / "Downloads" / "ytdlp"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+    def precache_song(self, song):
+        """Download a YouTube track with yt-dlp and return cache metadata."""
+        source_url = song.get("source_url") if isinstance(song, dict) else None
+        video_id = song.get("videoId") if isinstance(song, dict) else None
+        if not source_url and video_id:
+            source_url = f"https://www.youtube.com/watch?v={video_id}"
+        if not isinstance(source_url, str) or not source_url:
+            raise ValueError("Song has no YouTube source URL")
+
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        before = {path.resolve() for path in self.cache_dir.iterglob("*") if path.is_file()}
+        timestamp = int(time.time())
+        output_template = str(self.cache_dir / f"%(timestamp)s-%(title)s.%(ext)s")
+        command = [
+            sys.executable, "-m", "yt_dlp",
+            "--quiet", "--no-warnings", "--no-check-certificates",
+            "--remote-components", "ejs:github",
+            "--no-part", "--no-playlist",
+            "--format", "bestaudio",
+            "--restrict-filenames",
+            "--paths", str(self.cache_dir),
+            "--output", output_template,
+            "--print", "after_move:filepath",
+        ]
+        if settings.YOUTUBE_PLAYER_CLIENT:
+            command.extend([
+                "--extractor-args",
+                f"youtube:player_client={settings.YOUTUBE_PLAYER_CLIENT}",
+            ])
+        command.append(source_url)
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=30 * 60,
+        )
+        if result.returncode != 0:
+            error = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(error or f"yt-dlp exited with code {result.returncode}")
+
+        downloaded = None
+        for line in reversed((result.stdout or "").splitlines()):
+            candidate = Path(line.strip())
+            if candidate.is_file():
+                downloaded = candidate.resolve()
+                break
+
+        if downloaded is None:
+            after = [
+                path.resolve()
+                for path in self.cache_dir.iterglob("*")
+                if path.is_file() and path.resolve() not in before
+            ]
+            if after:
+                downloaded = max(after, key=lambda path: path.stat().st_mtime)
+        if downloaded is None:
+            raise RuntimeError("yt-dlp completed without producing a cache file")
+
+        duration = self.get_media_duration(str(downloaded))
+        return {
+            "path": str(downloaded),
+            "duration": duration,
+            "downloaded_at": timestamp,
+        }
+
+    def get_media_duration(self, target):
+        if not isinstance(target, str) or not target:
+            return None
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    target,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                value = float((result.stdout or "").strip())
+                return value if value > 0 else None
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            pass
+        return None
+
+    def clear_cached_song(self, path):
+        if not isinstance(path, str) or not path:
+            return
+        try:
+            cached_path = Path(path)
+            if cached_path.is_file() and cached_path.parent.resolve() == self.cache_dir.resolve():
+                cached_path.unlink()
+        except OSError as error:
+            logger.warning("Could not delete cached song %s: %s", path, error)
+
+    def cleanup_cache(self, keep_paths=(), max_age_seconds=300):
+        keep = {
+            str(Path(path).resolve())
+            for path in keep_paths
+            if isinstance(path, str) and path
+        }
+        cutoff = time.time() - max_age_seconds
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            for path in self.cache_dir.glob("*"):
+                if not path.is_file():
+                    continue
+                try:
+                    if str(path.resolve()) not in keep and path.stat().st_mtime < cutoff:
+                        path.unlink()
+                except OSError as error:
+                    logger.warning("Could not clean cached song %s: %s", path, error)
+        except OSError as error:
+            logger.warning("Could not clean cache directory %s: %s", self.cache_dir, error)
 
     def start_publisher(self):
         """Starts a persistent FFmpeg publisher process streaming to Icecast and ensures the pump is running."""
@@ -216,7 +352,12 @@ class FFmpegService:
         """
         source_process = None
         stream_headers = target.get("stream_headers", {}) if isinstance(target, dict) else {}
-        target_url = target.get("url") if isinstance(target, dict) else target
+        cache_path = target.get("cache_path") if isinstance(target, dict) else None
+        target_url = (
+            cache_path
+            if isinstance(cache_path, str) and os.path.isfile(cache_path)
+            else target.get("url")
+        ) if isinstance(target, dict) else target
         source_url = target.get("source_url") if isinstance(target, dict) else None
         track_title = target.get("title", "Unknown") if isinstance(target, dict) else "stream"
 

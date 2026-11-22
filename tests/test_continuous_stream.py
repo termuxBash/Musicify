@@ -155,6 +155,44 @@ def test_decoder_passes_configured_yt_dlp_player_client(monkeypatch):
     )
 
 
+def test_decoder_uses_downloaded_cache_file(monkeypatch, tmp_path):
+    cached_song = tmp_path / "timestamp-Cached track.webm"
+    cached_song.write_bytes(b"cached")
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        return MagicMock()
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService(cache_dir=tmp_path)
+
+    service.start_decoder({
+        "title": "Cached track",
+        "cache_path": str(cached_song),
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    })
+
+    ffmpeg_cmd = popen_calls[0][0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == str(cached_song)
+
+
+def test_queue_player_marks_failed_precache_and_moves_it_to_bottom(monkeypatch, tmp_path):
+    class MockFFmpeg:
+        def precache_song(self, song):
+            raise RuntimeError("video unavailable")
+
+    player = QueuePlayer(MockFFmpeg())
+    first = {"title": "First", "videoId": "abcdefghijk"}
+    second = {"title": "Second", "videoId": "12345678901"}
+    player.queue.extend([first, second])
+
+    player._precache_worker(first)
+
+    assert player.queue == [second, first]
+    assert first["_precache_status"] == "error"
+
+
 def test_queue_player_stops_publisher_after_idle_timeout(monkeypatch):
     monkeypatch.setattr(stream_manager, "EMPTY_QUEUE_PUBLISHER_TIMEOUT", 0.05)
     publisher_stopped = threading.Event()
