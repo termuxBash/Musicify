@@ -2218,6 +2218,11 @@ input:checked + .slider:before {
   transform: translateX(20px);
 }
 
+.switch input:focus-visible + .slider {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
 /* ==========================================================================
    10. RESPONSIVE DESIGN & MEDIA QUERIES
    ========================================================================== */
