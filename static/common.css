@@ -915,7 +915,7 @@ nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
+  padding: 5px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
 }
@@ -1130,6 +1130,16 @@ nav {
   box-sizing: border-box;
   transition: all 0.2s ease;
   white-space: nowrap;
+}
+
+.system-prompt-modal {
+  z-index: 4000;
+}
+
+.settings-action-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .settings-shutdown-btn {
@@ -1495,6 +1505,10 @@ body.center-player-page .main.shift {
 
 .playlist-modal.open {
   display: flex;
+}
+
+.playlist-modal.system-prompt-modal {
+  z-index: 5000;
 }
 
 .playlist-modal-card {

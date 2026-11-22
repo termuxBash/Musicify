@@ -235,7 +235,7 @@ def get_gemini_recommendations(user_prompt=""):
     cleaned_history_lines = [entry[2] for entry in history_entries]
 
     cleaned_history = "\n".join(cleaned_history_lines)
-    prompt = f"""Recommend exactly 3 songs based on this playback history.
+    prompt = f"""Recommend songs based on this playback history.
 The history uses one entry per line in this exact compact format:
 Song Name>PlayCount
 Use the song names and play counts
@@ -246,7 +246,7 @@ Playback history:
 
 {user_prompt.strip()}
 
-Respond with exactly 3 lines and no markdown, numbering, or explanation.
+Respond with up to 3 lines and no markdown, numbering, or explanation.
 Each line must use this format and contain no other > characters:
 SongName>YouTubeVideoId
 YouTubeVideoId must be a valid YouTube video ID."""

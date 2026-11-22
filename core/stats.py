@@ -175,6 +175,34 @@ def set_lyrics_effort():
     return jsonify({"status": "success", "lyrics_effort": lyrics_effort})
 
 
+@stats_bp.route("/system_prompt", methods=["GET", "POST"])
+def system_prompt():
+    if request.method == "GET":
+        return jsonify({
+            "status": "success",
+            "systemprompt": settings.get_system_prompt(),
+        })
+
+    data = request.get_json(silent=True) or {}
+    systemprompt = data.get("systemprompt")
+    if not isinstance(systemprompt, str):
+        return jsonify({
+            "status": "error",
+            "message": "systemprompt must be a string",
+        }), 400
+
+    try:
+        settings.update_user_config("systemprompt", systemprompt)
+    except OSError:
+        logger.exception("Could not persist the AI system prompt.")
+        return jsonify({"status": "error", "message": "Could not save AI system prompt."}), 500
+
+    return jsonify({
+        "status": "success",
+        "systemprompt": settings.get_system_prompt(),
+    })
+
+
 @stats_bp.route("/toggle_autoplay", methods=["POST"])
 def toggle_autoplay():
     current_enabled = current_app.player.status().get("autoplay_enabled", False)

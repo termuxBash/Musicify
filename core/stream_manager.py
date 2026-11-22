@@ -11,7 +11,7 @@ import logging
 import os
 import urllib.request
 import json
-from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL
+from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL, get_system_prompt
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
 logger = logging.getLogger(__name__)
@@ -397,9 +397,7 @@ class QueuePlayer:
 
             gemini_prompt = (
                 f"Current playing track: '{full_title}'. "
-                "Recommend 3 songs that fit this vibe. "
-                "Constraint: Include 1 or 2 songs by the same artist as the current track, "
-                "but ensure at least 1 recommendation is from a different, matching artist (do not make all 3 by the same artist)."
+                f"{get_system_prompt()}"
             )
             gemini_tracks = get_gemini_recommendations(gemini_prompt)
             recommended_tracks = [

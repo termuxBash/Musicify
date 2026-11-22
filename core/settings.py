@@ -44,6 +44,12 @@ def env_int(name, default=0):
 
 DEFAULT_LYRICS_OFFSET_MS = -13000
 LYRICS_EFFORT_LEVELS = ("LRCLIB", "LYRICA", "GEMINI")
+DEFAULT_SYSTEM_PROMPT = (
+    "Recommend 3 songs that fit this vibe. "
+    "Constraint: Include 1 or 2 songs by the same artist as the current track, "
+    "but ensure at least 1 recommendation is from a different, matching artist "
+    "(do not make all 3 by the same artist)."
+)
 RADIO_GENRES = (
     "pop",
     "rock",
@@ -84,6 +90,25 @@ def _read_user_config():
         pass
     except (OSError, json.JSONDecodeError) as error:
         _logger.warning("Could not read userconfig.json: %s", error)
+
+    systemprompt = config.get("systemprompt")
+    if not isinstance(systemprompt, str) or not systemprompt.strip():
+        config["systemprompt"] = DEFAULT_SYSTEM_PROMPT
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=USER_CONFIG_PATH.parent,
+                prefix=".userconfig-",
+                suffix=".tmp",
+                delete=False,
+            ) as config_file:
+                temporary_path = Path(config_file.name)
+                json.dump(config, config_file, indent=2)
+                config_file.write("\n")
+            os.replace(temporary_path, USER_CONFIG_PATH)
+        except OSError as error:
+            _logger.warning("Could not initialize systemprompt in userconfig.json: %s", error)
 
     legacy_offset_ms = config.pop("lyrics_offset_ms", DEFAULT_LYRICS_OFFSET_MS)
     if type(legacy_offset_ms) is not int:
@@ -141,6 +166,12 @@ def update_user_config(key, value):
     elif key == "lyrics_effort":
         if not isinstance(value, str) or value not in LYRICS_EFFORT_LEVELS:
             raise ValueError("lyrics_effort must be LRCLIB, LYRICA, or GEMINI")
+    elif key == "systemprompt":
+        if not isinstance(value, str):
+            raise ValueError("systemprompt must be a string")
+        update_values = {
+            "systemprompt": value.strip() or DEFAULT_SYSTEM_PROMPT,
+        }
     elif key == "radio":
         if not isinstance(value, dict):
             raise ValueError("radio must be an object")
@@ -189,6 +220,15 @@ def update_user_config(key, value):
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
         _user_config = updated_config
+
+
+def get_system_prompt():
+    """Return the configured autoplay recommendation prompt or its default."""
+    with _user_config_lock:
+        prompt = _user_config.get("systemprompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            return DEFAULT_SYSTEM_PROMPT
+        return prompt.strip()
 
 
 def get_radio_config():

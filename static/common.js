@@ -371,6 +371,7 @@ window.addEventListener("click", (e) => {
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
+    closeSystemPromptEditor();
     closeSettingsMenu();
   }
 });
@@ -444,6 +445,58 @@ async function setLyricsEffort(value) {
     showPopup(error.message || "Failed to update lyrics effort.");
   }
 }
+
+async function openSystemPromptEditor() {
+  const modal = document.getElementById("systemPromptModal");
+  const input = document.getElementById("systemPromptInput");
+  if (!modal || !input) return;
+
+  let currentPrompt = "";
+  try {
+    const response = await fetch("/system_prompt");
+    const data = await response.json();
+    if (response.ok) currentPrompt = data.systemprompt || "";
+  } catch (error) {
+    console.error("Failed to load AI system prompt:", error);
+  }
+
+  input.value = currentPrompt;
+  modal.classList.add("open");
+  input.focus();
+  input.select();
+}
+
+function closeSystemPromptEditor() {
+  document.getElementById("systemPromptModal")?.classList.remove("open");
+}
+
+document.getElementById("systemPromptForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const input = document.getElementById("systemPromptInput");
+  const saveButton = document.getElementById("systemPromptSaveBtn");
+  const updatedPrompt = input?.value || "";
+
+  if (saveButton) saveButton.disabled = true;
+  try {
+    const response = await fetch("/system_prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ systemprompt: updatedPrompt }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to update AI system prompt.");
+    }
+    closeSystemPromptEditor();
+    showPopup("AI system prompt updated.");
+  } catch (error) {
+    console.error("Failed to update AI system prompt:", error);
+    showPopup(error.message || "Failed to update AI system prompt.");
+  } finally {
+    if (saveButton) saveButton.disabled = false;
+  }
+});
 /* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */
 async function toggleAutoplay() {
   await fetch("/toggle_autoplay", {
