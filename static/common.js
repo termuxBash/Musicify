@@ -551,6 +551,17 @@ function setupPlayerBarSwipe() {
   );
 
   playerBar.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!touchStart || event.touches.length !== 1) return;
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+    },
+    { passive: false },
+  );
+
+  playerBar.addEventListener(
     "touchend",
     (event) => {
       if (!touchStart) return;
@@ -564,10 +575,13 @@ function setupPlayerBarSwipe() {
 
       // Check if swipe was upwards and vertical movement was dominant
       if (deltaY < -SWIPE_UP_THRESHOLD && Math.abs(deltaY) > Math.abs(deltaX) && deltaTime < 600) {
+        if (event.cancelable) {
+          event.preventDefault();
+        }
         openNowPlaying();
       }
     },
-    { passive: true },
+    { passive: false },
   );
 
   playerBar.dataset.swipeUpReady = "true";

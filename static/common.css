@@ -1465,6 +1465,7 @@ body.center-player-page .main.shift {
   padding: 10px 15px;
   z-index: 1000;
   transition: height 0.2s ease;
+  touch-action: none;
 }
 
 .player-bar::before {
