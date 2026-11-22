@@ -1295,6 +1295,80 @@ function formatPlaybackTime(seconds) {
   return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
+let playbackTimeline = null;
+
+function getLyricIndexAtTime(lines, elapsedSeconds) {
+  let activeIndex = null;
+  if (!Array.isArray(lines)) return activeIndex;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const timestamp = Number(lines[index]?.time);
+    if (Number.isFinite(timestamp) && elapsedSeconds >= timestamp) {
+      activeIndex = index;
+    }
+  }
+  return activeIndex;
+}
+
+function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
+  const modalProgress = document.querySelector(".now-playing-modal-progress");
+  const modalProgressFill = document.getElementById("nowPlayingModalProgressFill");
+  const modalEta = document.getElementById("nowPlayingModalEta");
+
+  if (!Number.isFinite(elapsed) || !Number.isFinite(duration) || duration <= 0) {
+    if (modalProgress) modalProgress.setAttribute("aria-valuenow", "0");
+    if (modalProgressFill) modalProgressFill.style.width = "0%";
+    if (modalEta) modalEta.textContent = "--:-- / --:-- / --:--";
+    return;
+  }
+
+  const safeElapsed = Math.min(duration, Math.max(0, elapsed));
+  const remaining = Math.max(0, duration - safeElapsed);
+  const progress = Math.min(100, Math.max(0, (safeElapsed / duration) * 100));
+
+  if (modalProgress) modalProgress.setAttribute("aria-valuenow", String(Math.round(progress)));
+  if (modalProgressFill) modalProgressFill.style.width = `${progress}%`;
+  if (modalEta) {
+    modalEta.textContent =
+      `${formatPlaybackTime(safeElapsed)} / ` +
+      `${formatPlaybackTime(remaining)} / ` +
+      formatPlaybackTime(duration);
+  }
+
+  if (playbackTimeline) {
+    const modalLyrics = document.getElementById("nowPlayingModalLyrics");
+    const offsetSeconds = Number(playbackTimeline.lyricsOffsetMs || 0) / 1000;
+    const lyricIndex = getLyricIndexAtTime(
+      playbackTimeline.lines,
+      safeElapsed + offsetSeconds,
+    );
+    renderModalLyrics(
+      modalLyrics,
+      playbackTimeline.lines,
+      lyricIndex,
+      playbackTimeline.title,
+      playbackTimeline.radioUrl,
+    );
+  }
+
+  void isPlaying;
+}
+
+function startPlaybackTimelineTicker() {
+  if (window.playbackTimelineTicker) return;
+  window.playbackTimelineTicker = window.requestAnimationFrame(function tick() {
+    if (playbackTimeline) {
+      const elapsed =
+        playbackTimeline.elapsed +
+        (playbackTimeline.isPlaying
+          ? Math.max(0, performance.now() - playbackTimeline.updatedAt) / 1000
+          : 0);
+      updateNowPlayingTimeline(elapsed, playbackTimeline.duration, playbackTimeline.isPlaying);
+    }
+    window.playbackTimelineTicker = window.requestAnimationFrame(tick);
+  });
+}
+
 async function updateStats() {
   try {
     const res = await fetch("/stats");
@@ -1313,6 +1387,29 @@ async function updateStats() {
         : duration !== null && elapsed !== null
           ? Math.max(0, duration - elapsed)
           : null;
+    playbackTimeline = {
+      elapsed: typeof elapsed === "number" ? elapsed : 0,
+      duration: typeof duration === "number" ? duration : 0,
+      isPlaying: Boolean(data.is_playing),
+      updatedAt: performance.now(),
+      lyricsOffsetMs:
+        typeof data.lyrics_offset_ms === "number" ? data.lyrics_offset_ms : 0,
+      lines: Array.isArray(data.lyrics) ? data.lyrics : [],
+      title:
+        data.now_playing?.title ||
+        document.getElementById("nowPlayingModalTitleText")?.textContent ||
+        "",
+      radioUrl:
+        data.is_radio || data.owner === "radio"
+          ? data.now_playing?.url || ""
+          : "",
+    };
+    startPlaybackTimelineTicker();
+    updateNowPlayingTimeline(
+      playbackTimeline.elapsed,
+      playbackTimeline.duration,
+      playbackTimeline.isPlaying,
+    );
     if (elapsed !== null && duration !== null && duration > 0) {
       const progress = Math.min(100, Math.max(0, (elapsed / duration) * 100));
       if (playerBar) playerBar.style.setProperty("--playback-progress", `${progress}%`);

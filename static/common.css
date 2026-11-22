@@ -1668,6 +1668,37 @@ body.center-player-page .main.shift {
   display: none;
 }
 
+.now-playing-modal-timeline {
+  width: 100%;
+  margin: -8px 0 12px;
+}
+
+.now-playing-modal-progress {
+  position: relative;
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #333;
+}
+
+.now-playing-modal-progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--spotify-green);
+  transition: width 0.25s linear;
+}
+
+.now-playing-modal-eta {
+  display: block;
+  margin-top: 6px;
+  color: #aaa;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .now-playing-modal-lyrics {
   max-height: 42vh;
   min-height: 54px;

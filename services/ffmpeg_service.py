@@ -106,7 +106,7 @@ class FFmpegService:
             raise ValueError("Song has no YouTube source URL")
 
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        before = {path.resolve() for path in self.cache_dir.iterglob("*") if path.is_file()}
+        before = {path.resolve() for path in self.cache_dir.glob("*") if path.is_file()}
         timestamp = int(time.time())
         output_template = str(self.cache_dir / f"%(timestamp)s-%(title)s.%(ext)s")
         command = [
@@ -147,7 +147,7 @@ class FFmpegService:
         if downloaded is None:
             after = [
                 path.resolve()
-                for path in self.cache_dir.iterglob("*")
+                for path in self.cache_dir.glob("*")
                 if path.is_file() and path.resolve() not in before
             ]
             if after:
@@ -353,13 +353,24 @@ class FFmpegService:
         source_process = None
         stream_headers = target.get("stream_headers", {}) if isinstance(target, dict) else {}
         cache_path = target.get("cache_path") if isinstance(target, dict) else None
+        valid_cache_path = (
+            isinstance(cache_path, str)
+            and os.path.isfile(cache_path)
+            and os.path.getsize(cache_path) > 0
+        )
         target_url = (
             cache_path
-            if isinstance(cache_path, str) and os.path.isfile(cache_path)
+            if valid_cache_path
             else target.get("url")
         ) if isinstance(target, dict) else target
         source_url = target.get("source_url") if isinstance(target, dict) else None
         track_title = target.get("title", "Unknown") if isinstance(target, dict) else "stream"
+
+        if isinstance(cache_path, str) and not valid_cache_path:
+            logger.warning(
+                "Precached file is unavailable for '%s'; using the resolved stream.",
+                track_title,
+            )
 
         # Prefer yt-dlp only for URL resolution. Once a direct media URL is
         # available, let FFmpeg handle downloading and decoding itself.
@@ -392,19 +403,24 @@ class FFmpegService:
             )
             target_url = "pipe:0"
 
-        header_value = "".join(
-            f"{key}: {value}\r\n" for key, value in stream_headers.items()
-        )
         is_direct_http_url = (
             isinstance(target_url, str)
             and target_url.startswith(("http://", "https://"))
         )
+        header_args = []
+        if is_direct_http_url:
+            user_agent = stream_headers.get("User-Agent") or stream_headers.get("user-agent")
+            referer = stream_headers.get("Referer") or stream_headers.get("referer")
+            if user_agent:
+                header_args.extend(["-user_agent", str(user_agent)])
+            if referer:
+                header_args.extend(["-referer", str(referer)])
 
         cmd = [
             "ffmpeg",
             "-hide_banner",
             "-loglevel", "error",
-            *( ["-headers", header_value] if header_value and not source_process else [] ),
+            *header_args,
             *(
                 [
                     "-reconnect", "1",

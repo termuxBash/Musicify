@@ -87,10 +87,11 @@ def test_decoder_prefers_resolved_direct_url(monkeypatch):
     assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == (
         "https://rr.example.test/videoplayback?id=abc"
     )
-    assert "-headers" in ffmpeg_cmd
-    headers = ffmpeg_cmd[ffmpeg_cmd.index("-headers") + 1]
-    assert "Referer: https://www.youtube.com/" in headers
-    assert "User-Agent: Musicify-Test" in headers
+    assert "-headers" not in ffmpeg_cmd
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-referer") + 1] == (
+        "https://www.youtube.com/"
+    )
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-user_agent") + 1] == "Musicify-Test"
     assert "-reconnect" in ffmpeg_cmd
     assert "youtube:player_client" not in " ".join(ffmpeg_cmd)
 
@@ -175,6 +176,62 @@ def test_decoder_uses_downloaded_cache_file(monkeypatch, tmp_path):
 
     ffmpeg_cmd = popen_calls[0][0]
     assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == str(cached_song)
+
+
+def test_decoder_falls_back_when_cache_file_is_missing(monkeypatch, tmp_path):
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        return MagicMock()
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService(cache_dir=tmp_path)
+
+    service.start_decoder({
+        "title": "Stale cache",
+        "cache_path": str(tmp_path / "missing.webm"),
+        "url": "https://rr.example.test/videoplayback?id=abc",
+        "stream_headers": {
+            "Referer": "https://www.youtube.com/",
+            "User-Agent": "Musicify-Test",
+        },
+    })
+
+    ffmpeg_cmd = popen_calls[0][0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == (
+        "https://rr.example.test/videoplayback?id=abc"
+    )
+    assert "-headers" not in ffmpeg_cmd
+
+
+def test_precache_song_uses_path_glob_for_cache_files(monkeypatch, tmp_path):
+    cached_song = tmp_path / "timestamp-Cached track.webm"
+
+    def fake_run(command, **kwargs):
+        cached_song.write_bytes(b"cached")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=f"{cached_song}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        FFmpegService,
+        "get_media_duration",
+        lambda self, path: 200.0,
+    )
+    service = FFmpegService(cache_dir=tmp_path)
+
+    result = service.precache_song({
+        "title": "Cached track",
+        "videoId": "abcdefghijk",
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    })
+
+    assert result["path"] == str(cached_song)
+    assert result["duration"] == 200.0
 
 
 def test_queue_player_marks_failed_precache_and_moves_it_to_bottom(monkeypatch, tmp_path):

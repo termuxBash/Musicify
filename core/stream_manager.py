@@ -8,6 +8,7 @@ The QueuePlayer class encapsulates the core functionality of managing the playba
 import threading
 import time
 import logging
+import os
 import urllib.request
 import json
 from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL
@@ -523,6 +524,16 @@ class QueuePlayer:
 
             previous_cache_path = self._active_cache_path
             next_cache_path = song.get("cache_path") if isinstance(song, dict) else None
+            if isinstance(next_cache_path, str) and not os.path.isfile(next_cache_path):
+                logger.warning(
+                    "Precached file missing for '%s'; removing stale cache entry.",
+                    song.get("title", "Unknown"),
+                )
+                song.pop("cache_path", None)
+                identity = self._song_identity(song)
+                with self.lock:
+                    self._ready_cache.pop(identity, None)
+                next_cache_path = None
             if (
                 isinstance(previous_cache_path, str)
                 and previous_cache_path != next_cache_path

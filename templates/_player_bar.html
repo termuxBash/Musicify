@@ -37,6 +37,12 @@
             <span id="nowPlayingModalTitleText">Ready to stream</span>
             <span class="now-playing-lyrics-source" id="nowPlayingModalLyricsSource" hidden></span>
         </h2>
+        <div class="now-playing-modal-timeline">
+            <div class="now-playing-modal-progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="now-playing-modal-progress-fill" id="nowPlayingModalProgressFill"></div>
+            </div>
+            <span class="now-playing-modal-eta" id="nowPlayingModalEta" aria-label="Playback time">--:-- / --:-- / --:--</span>
+        </div>
         <div class="now-playing-modal-lyrics" id="nowPlayingModalLyrics">No lyrics available</div>
         <div class="now-playing-modal-controls">
             <button class="now-playing-modal-reconnect" type="button" onclick="reconnectStream()" aria-label="Reconnect stream" title="Reconnect stream">
