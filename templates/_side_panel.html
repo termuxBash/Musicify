@@ -10,7 +10,7 @@
             </span>
         </div>
         <button class="clear-queue-btn" onclick="clearQueue()">Clear Queue & Stop Music</button>
-        <span onclick="toggleMenu()" style="cursor:pointer;font-size:24px;"> ✕ </span>
+        <span class="side-panel-close-btn" onclick="toggleMenu()" style="cursor:pointer;font-size:24px;"> ✕ </span>
     </div>
     <p class="queue-help">Drag = to reorder upcoming songs. Swipe right to play next or left to remove. The current song
         is not in this list.</p>
@@ -173,6 +173,10 @@
                     <p class="settings-help">Sets the maximum lyrics lookup stage and fallback engine.</p>
                 </div>
             </div>
+
+            <!--<a href="/youtube/hist" class="settings-action-btn">
+                📜 History Database
+            </a>-->
 
             <div class="settings-section danger-section">
                 <button type="button" class="settings-action-btn settings-shutdown-btn"

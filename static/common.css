@@ -2280,7 +2280,55 @@ input:checked + .slider:before {
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1024px) and (min-aspect-ratio: 16/10) {
+  nav {
+    left: 350px;
+    width: calc(100% - 350px);
+  }
+  .side-panel {
+    left: 0;
+    width: 350px;
+    box-shadow: none;
+    border-right: 1px solid var(--border-color);
+  }
+  .side-panel-close-btn {
+    display: none;
+  }
+  .overlay {
+    display: none !important;
+    pointer-events: none;
+  }
+  .menu-toggle,
+  .menu {
+    display: none;
+  }
+  .main-content,
+  .main,
+  .main.radio-main,
+  .hist-page-container {
+    margin-left: 350px;
+    width: calc(100% - 350px);
+    max-width: none;
+  }
+  body.center-player-page .main-content,
+  body.center-player-page .main,
+  body.center-player-page .main-content.shift,
+  body.center-player-page .main.shift {
+    margin-left: 350px;
+    margin-right: auto;
+  }
+  .player-bar {
+    left: 350px;
+    width: calc(100% - 350px);
+    flex-direction: row;
+    height: 90px;
+  }
+  #vol-slider {
+    width: 150px;
+  }
+}
+
+@media (min-width: 1024px) and (max-aspect-ratio: 16/10) {
   .side-panel {
     left: -100%;
     width: 350px;
