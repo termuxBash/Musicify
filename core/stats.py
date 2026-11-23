@@ -253,6 +253,14 @@ def _get_local_ip():
         sock.close()
 
 
+def _press_enter_after_page_load(device_ip):
+    sleep(10)
+    _run_adb_command([
+        "adb", "-s", device_ip, "shell",
+        "input", "keyevent", "KEYCODE_ENTER",
+    ])
+
+
 @stats_bp.route("/playOnTV", methods=["POST"])
 def play_on_tv():
     device_ip = settings.TV_ADB_IP.strip()
@@ -294,6 +302,12 @@ def play_on_tv():
     if intent_code != 0:
         message = intent_stderr.strip() or intent_stdout.strip() or "Failed to open the website on the TV"
         return jsonify({"status": "error", "message": message}), 502
+
+    threading.Thread(
+        target=_press_enter_after_page_load,
+        args=(device_ip,),
+        daemon=True,
+    ).start()
 
     return jsonify({
         "status": "success",

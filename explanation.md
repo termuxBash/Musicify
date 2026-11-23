@@ -353,7 +353,7 @@ The separate `extra_data` table is intentionally small: it stores `rick_roll_tim
 
 The shared browser URL handler detects Android TV environments from the user agent and pointer/hover/touch capabilities. A detected TV or an enabled `tv` URL parameter runs the same TV mode once: it enables lyrics, opens the Now Playing modal, enables autoplay after the existing delay, starts device playback, and adds `is-tv-layout` to the document root. Individual TV aliases are not executed a second time when `tv` mode is already active.
 
-The Settings **Play on TV** button calls `POST /playOnTV`. The route uses the `TV_ADB_IP` setting, starts or connects ADB, verifies that the device is authorized and connected, determines the server LAN IP, and sends an Android VIEW/BROWSABLE intent for `http://<server-lan-ip>:<APP_PORT>/?tv`. ADB is a system executable and is not provided by `requirements.txt`; install Android Platform Tools and authorize the TV before using this feature.
+The Settings **Play on TV** button calls `POST /playOnTV`. The route uses the `TV_ADB_IP` setting, starts or connects ADB, verifies that the device is authorized and connected, determines the server LAN IP, and sends an Android VIEW/BROWSABLE intent for `http://<server-lan-ip>:<APP_PORT>/?tv`. Ten seconds later, a daemon thread sends `adb -s <TV_ADB_IP> shell input keyevent KEYCODE_ENTER` so the TV can complete first-load browser interaction. ADB is a system executable and is not provided by `requirements.txt`; install Android Platform Tools and authorize the TV before using this feature.
 
 ### `userconfig.json`
 

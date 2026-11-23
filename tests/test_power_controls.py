@@ -194,11 +194,21 @@ def test_shutdown_still_powers_off_bose_for_other_owners(monkeypatch):
 def test_play_on_tv_opens_configured_url(monkeypatch):
     app = create_power_app()
     commands = []
+    delayed_threads = []
 
     monkeypatch.setattr(stats.settings, "TV_ADB_IP", "192.168.29.193:5555")
     monkeypatch.setattr(stats.settings, "APP_PORT", 5000)
     monkeypatch.setattr(stats, "_get_local_ip", lambda: "192.168.29.157")
     monkeypatch.setattr(stats, "sleep", lambda _seconds: None)
+
+    class FakeThread:
+        def __init__(self, **kwargs):
+            delayed_threads.append(kwargs)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(stats.threading, "Thread", FakeThread)
 
     def fake_adb(command):
         commands.append(command)
@@ -215,3 +225,5 @@ def test_play_on_tv_opens_configured_url(monkeypatch):
     assert ["adb", "connect", "192.168.29.193:5555"] in commands
     assert "-d" in commands[-1]
     assert "http://192.168.29.157:5000/?tv" in commands[-1]
+    assert delayed_threads[0]["target"] is stats._press_enter_after_page_load
+    assert delayed_threads[0]["args"] == ("192.168.29.193:5555",)
