@@ -292,7 +292,7 @@ def play_on_tv():
             message = f"TV at {device_ip} is not connected"
         return jsonify({"status": "error", "message": message}), 502
 
-    target_url = f"http://{_get_local_ip()}:{settings.APP_PORT}/youtube/?tv"
+    target_url = f"http://{_get_local_ip()}:{settings.APP_PORT}/local/?tv"
     intent_code, intent_stdout, intent_stderr = _run_adb_command([
         "adb", "-s", device_ip, "shell", "am", "start",
         "-a", "android.intent.action.VIEW",

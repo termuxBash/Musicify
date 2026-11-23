@@ -1,6 +1,6 @@
 import sys
 import signal
-from flask import Flask, redirect, url_for, Response
+from flask import Flask, redirect, request, url_for, Response
 
 from core.bose_routes import bose_control_bp
 from core.stats import stats_bp
@@ -43,7 +43,10 @@ def create_app():
 
     @app.route("/")
     def index():
-        return redirect(url_for('youtube.index'))
+        destination = url_for("youtube.index")
+        if request.query_string:
+            destination = f"{destination}?{request.query_string.decode('latin-1')}"
+        return redirect(destination)
 
     @app.route("/favicon.svg")
     def favicon():
