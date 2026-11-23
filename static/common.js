@@ -1993,6 +1993,9 @@ if (!document.hidden) {
 // --- URL PARAMETER ACTIONS ---
 function detectDeviceEnvironment() {
   const ua = navigator.userAgent || "";
+  const appVersion = navigator.appVersion || "";
+  const platform = navigator.platform || "";
+  const combinedDeviceInfo = `${ua} ${appVersion} ${platform}`;
 
   const hasFinePointer = window.matchMedia?.("(pointer: fine)").matches ?? false;
   const hasHoverSupport = window.matchMedia?.("(hover: hover)").matches ?? false;
@@ -2001,12 +2004,19 @@ function detectDeviceEnvironment() {
   const isTclTv = /(TCL TV|TCL Google TV|TCLSmartTV)/i.test(ua);
   const isGenericAndroidTv =
     /(Android TV|GoogleTV|SmartTV|BRAVIA|MiTV|SHIELD Android TV)/i.test(ua);
+  const isSmartTv = /(?:SMART[\s-]?TV|Smart TV|Thano\/|Tizen|Web0S|AFT[A-Z]*|BRAVIA)/i.test(combinedDeviceInfo);
 
   if (isAndroid && isTclTv) {
     return { device: "TV", brand: "TCL", os: "Android/Google TV" };
   }
   if (isAndroid && isGenericAndroidTv) {
     return { device: "TV", brand: "Generic/Other", os: "Android TV" };
+  }
+  if (isSmartTv) {
+    const brand = /Thano\/|SMART-TV/i.test(combinedDeviceInfo)
+      ? "Thano/Generic Smart TV"
+      : "Generic/Other";
+    return { device: "TV", brand, os: "Smart TV" };
   }
   if (!hasFinePointer && !hasHoverSupport && !isTouchDevice) {
     return { device: "TV", brand: "Unknown", os: "TV Environment" };
