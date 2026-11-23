@@ -221,9 +221,9 @@ def test_play_on_tv_opens_configured_url(monkeypatch):
     response = app.test_client().post("/playOnTV")
 
     assert response.status_code == 200
-    assert response.get_json()["url"] == "http://192.168.29.157:5000/?tv"
+    assert response.get_json()["url"] == "http://192.168.29.157:5000/youtube/?tv"
     assert ["adb", "connect", "192.168.29.193:5555"] in commands
     assert "-d" in commands[-1]
-    assert "http://192.168.29.157:5000/?tv" in commands[-1]
+    assert "http://192.168.29.157:5000/youtube/?tv" in commands[-1]
     assert delayed_threads[0]["target"] is stats._press_enter_after_page_load
     assert delayed_threads[0]["args"] == ("192.168.29.193:5555",)
