@@ -51,6 +51,7 @@ Set these in your `.env` file to override runtime defaults:
 - `STREAM_FALLBACK_URLS` for comma-separated fallback stream URLs.
 - `ROOT_DIR` for the root music directory. Defaults to `~/Music`.
 - `PLAYLIST_DIR` for the playlist text-files directory. Defaults to `~/Music/playlists`.
+- `DOWNLOAD_DIR` for the base directory used for downloaded YouTube audio. Defaults to `~/Downloads`; Musicify creates a `ytdlp` subdirectory there automatically. If the configured directory already ends in `ytdlp`, it is used directly without adding another `ytdlp` level.
 - `HISTORY_TABLE` for the active history table. Defaults to `history`; online player can switch it at `/youtube/<filename>`.
 - `DB_FILENAME` for the SQLite database filename. Defaults to `history.sqlite3`.
 - `TIME_OFFSET` for the hexadecimal Unix timestamp baseline used in playback history.
@@ -74,6 +75,26 @@ Set these in your `.env` file to override runtime defaults:
 - `radio`: numbered station presets (`1` through `6`), a `favorites` list populated when a station is starred, and the supported genre filters.
 
 The settings panel saves changes to `userconfig.json` immediately, so they persist across server restarts. If a setting is absent or invalid, `settings.py` uses its default. Neither lyrics setting is configured in `.env`.
+
+## URL Parameters
+
+You can pass query parameters to page URLs to trigger interface actions and toggle features automatically on load:
+
+| Parameter | Aliases | Description |
+| :--- | :--- | :--- |
+| `lyrics` | — | Automatically enables the lyrics display if currently disabled. |
+| `openModal` | `nowPlaying` | Opens the Now Playing modal immediately on page load. |
+| `autoplayOn` | `autoplay` | Automatically enables auto-play after a 5-second delay if currently disabled. |
+| `playOnDevice` | `playStream` | Starts playing the Icecast audio stream directly on the current browser/device (triggers the device play/pause button). Due to browser autoplay policies, playback begins immediately or activates on the user's first interaction if blocked. |
+
+### Example
+
+```text
+http://<host-ip>:5000/?lyrics&openModal&autoplayOn&playOnDevice
+```
+*(Accepts bare flags like `?lyrics` or explicit values like `?lyrics=1` / `?lyrics=true`)*
+
+The Radio page is available at `/radio`. It loads top-voted stations from Radio Browser after the page is displayed, supports station search and genre filters, and plays streams directly through the SoundTouch speaker. Use a station's star button to save it to one of the six numbered presets; the separate heart button adds it to Radio favorites in the side panel. Presets can be played from the page or directly at `/radio/1` through `/radio/6`. Favorites can be played from the side panel or directly at `/radio/fav/<station-name>`; the route matches exact names, partial name fragments, or fuzzy typos against saved favorites. Page controls ask for confirmation before starting Radio playback, while direct preset and favorite URLs intentionally take control immediately. Presets and favorites are stored independently in the `radio` object in `userconfig.json`.
 
 The Radio page is available at `/radio`. It loads top-voted stations from Radio Browser after the page is displayed, supports station search and genre filters, and plays streams directly through the SoundTouch speaker. Use a station's star button to save it to one of the six numbered presets; the separate heart button adds it to Radio favorites in the side panel. Presets can be played from the page or directly at `/radio/1` through `/radio/6`. Favorites can be played from the side panel or directly at `/radio/fav/<station-name>`; the route matches exact names, partial name fragments, or fuzzy typos against saved favorites. Page controls ask for confirmation before starting Radio playback, while direct preset and favorite URLs intentionally take control immediately. Presets and favorites are stored independently in the `radio` object in `userconfig.json`.
 

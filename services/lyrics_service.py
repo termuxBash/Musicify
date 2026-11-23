@@ -58,15 +58,21 @@ def align_lyrics(transformed_lyrics, synced_lyrics, plain_lyrics=""):
     if not source_lines:
         return [(None, line) for line in transformed_lines]
 
-    last_source_index = len(source_lines) - 1
-    last_transformed_index = len(transformed_lines) - 1
+    timestamped_lines = parse_synced_lyrics(transformed_lyrics or "")
+    if timestamped_lines and TIMESTAMP_PATTERN.search(transformed_lyrics or ""):
+        return [(timestamp, text) for timestamp, text in timestamped_lines]
+
     aligned = []
     for index, text in enumerate(transformed_lines):
-        source_index = (
-            0
-            if last_transformed_index == 0
-            else round(index * last_source_index / last_transformed_index)
-        )
+        if len(transformed_lines) == len(source_lines):
+            source_index = index
+        elif len(transformed_lines) == 1:
+            source_index = 0
+        else:
+            source_index = round(
+                index * (len(source_lines) - 1) / (len(transformed_lines) - 1)
+            )
+            source_index = max(0, min(source_index, len(source_lines) - 1))
         aligned.append((source_lines[source_index][0], text))
     return aligned
 

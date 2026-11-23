@@ -15,6 +15,8 @@ import time
 import queue
 import logging
 import io
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from core import settings
 
 logger = logging.getLogger(__name__)
@@ -67,16 +69,212 @@ def _log_process_stderr(process, label, redacted_values=(), is_decoder=False):
 
 
 class FFmpegService:
-    def __init__(self, icecast_url=ICECAST_URL):
+    def __init__(self, icecast_url=ICECAST_URL, cache_dir=None):
         self.icecast_url = icecast_url
         self.publisher_process = None
         self._publisher_lock = threading.RLock()
         self._last_publisher_start = 0.0
+        self.cache_dir = Path(cache_dir).expanduser() if cache_dir else self._default_cache_dir()
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Dedicated audio buffer queue for decoupled, continuous real-time pumping
         self._audio_queue = queue.Queue(maxsize=30)  # holds ~0.7s of audio buffer
         self._pump_thread = None
         self._pump_stop_event = threading.Event()
+
+    def _default_cache_dir(self):
+        configured_dir = getattr(settings, "DOWNLOAD_DIR", None)
+        if isinstance(configured_dir, str) and configured_dir.strip():
+            candidate = Path(configured_dir.strip()).expanduser()
+            if candidate.name.lower() != "ytdlp":
+                candidate = candidate / "ytdlp"
+            try:
+                candidate.mkdir(parents=True, exist_ok=True)
+                return candidate
+            except OSError:
+                pass
+
+        fallback = Path.home() / "Downloads" / "ytdlp"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+    def precache_song(self, song):
+        """Download a YouTube track with yt-dlp and return cache metadata."""
+        source_url = song.get("source_url") if isinstance(song, dict) else None
+        video_id = song.get("videoId") if isinstance(song, dict) else None
+        if not isinstance(video_id, str) or not video_id:
+            if isinstance(source_url, str) and source_url:
+                parsed_url = urlparse(source_url)
+                if parsed_url.hostname in {"youtu.be", "www.youtu.be"}:
+                    video_id = parsed_url.path.strip("/").split("/")[0] or None
+                else:
+                    video_id = (parse_qs(parsed_url.query).get("v") or [None])[0]
+        if not source_url and video_id:
+            source_url = f"https://www.youtube.com/watch?v={video_id}"
+        if not isinstance(source_url, str) or not source_url:
+            raise ValueError("Song has no YouTube source URL")
+
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        if isinstance(video_id, str) and video_id:
+            for cached_path in self.cache_dir.glob("*"):
+                if (
+                    cached_path.is_file()
+                    and cached_path.stat().st_size > 0
+                    and f"__{video_id}__" in cached_path.name
+                ):
+                    duration = self.get_media_duration(str(cached_path.resolve()))
+                    return {
+                        "path": str(cached_path.resolve()),
+                        "duration": duration,
+                        "downloaded_at": int(cached_path.stat().st_mtime),
+                        "reused": True,
+                    }
+
+        before = {path.resolve() for path in self.cache_dir.glob("*") if path.is_file()}
+        timestamp = int(time.time())
+        title = song.get("title") if isinstance(song, dict) else None
+        title = str(title).strip() if isinstance(title, str) and title.strip() else "Unknown"
+        video_key = video_id if isinstance(video_id, str) and video_id else "unknown"
+        output_template = str(
+            self.cache_dir / f"{timestamp}__{video_key}__%(title)s.%(ext)s"
+        )
+        command = [
+            sys.executable, "-m", "yt_dlp",
+            "--quiet", "--no-warnings", "--no-check-certificates",
+            "--remote-components", "ejs:github",
+            "--no-part", "--no-playlist",
+            "--format", "bestaudio",
+            "--restrict-filenames",
+            "--paths", str(self.cache_dir),
+            "--output", output_template,
+            "--print", "after_move:filepath",
+        ]
+        if settings.YOUTUBE_PLAYER_CLIENT:
+            command.extend([
+                "--extractor-args",
+                f"youtube:player_client={settings.YOUTUBE_PLAYER_CLIENT}",
+            ])
+        command.append(source_url)
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=30 * 60,
+        )
+        if result.returncode != 0:
+            error = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(error or f"yt-dlp exited with code {result.returncode}")
+
+        downloaded = None
+        for line in reversed((result.stdout or "").splitlines()):
+            candidate = Path(line.strip())
+            if candidate.is_file():
+                downloaded = candidate.resolve()
+                break
+
+        if downloaded is None:
+            after = [
+                path.resolve()
+                for path in self.cache_dir.glob("*")
+                if path.is_file() and path.resolve() not in before
+            ]
+            if after:
+                downloaded = max(after, key=lambda path: path.stat().st_mtime)
+        if downloaded is None:
+            raise RuntimeError("yt-dlp completed without producing a cache file")
+
+        duration = self.get_media_duration(str(downloaded))
+        return {
+            "path": str(downloaded),
+            "duration": duration,
+            "downloaded_at": timestamp,
+        }
+
+    def find_cached_song(self, target):
+        """Find an existing cache file matching a target's YouTube video ID."""
+        if not isinstance(target, dict):
+            return None
+
+        video_id = target.get("videoId")
+        source_url = target.get("source_url")
+        if not isinstance(video_id, str) or not video_id:
+            candidate_url = (
+                source_url
+                if isinstance(source_url, str) and source_url
+                else target.get("url")
+            )
+            if isinstance(candidate_url, str) and candidate_url:
+                parsed_url = urlparse(candidate_url)
+                if parsed_url.hostname in {"youtu.be", "www.youtu.be"}:
+                    video_id = parsed_url.path.strip("/").split("/")[0] or None
+                elif parsed_url.hostname and "youtube" in parsed_url.hostname:
+                    video_id = (parse_qs(parsed_url.query).get("v") or [None])[0]
+
+        if not isinstance(video_id, str) or not video_id:
+            return None
+
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        for cached_path in self.cache_dir.glob("*"):
+            if (
+                cached_path.is_file()
+                and cached_path.stat().st_size > 0
+                and f"__{video_id}__" in cached_path.name
+            ):
+                return str(cached_path.resolve())
+        return None
+
+    def get_media_duration(self, target):
+        if not isinstance(target, str) or not target:
+            return None
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    target,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                value = float((result.stdout or "").strip())
+                return value if value > 0 else None
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            pass
+        return None
+
+    def clear_cached_song(self, path):
+        if not isinstance(path, str) or not path:
+            return
+        try:
+            cached_path = Path(path)
+            if cached_path.is_file() and cached_path.parent.resolve() == self.cache_dir.resolve():
+                cached_path.unlink()
+        except OSError as error:
+            logger.warning("Could not delete cached song %s: %s", path, error)
+
+    def cleanup_cache(self, keep_paths=(), max_age_seconds=300):
+        keep = {
+            str(Path(path).resolve())
+            for path in keep_paths
+            if isinstance(path, str) and path
+        }
+        cutoff = time.time() - max_age_seconds
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            for path in self.cache_dir.glob("*"):
+                if not path.is_file():
+                    continue
+                try:
+                    if str(path.resolve()) not in keep and path.stat().st_mtime < cutoff:
+                        path.unlink()
+                except OSError as error:
+                    logger.warning("Could not clean cached song %s: %s", path, error)
+        except OSError as error:
+            logger.warning("Could not clean cache directory %s: %s", self.cache_dir, error)
 
     def start_publisher(self):
         """Starts a persistent FFmpeg publisher process streaming to Icecast and ensures the pump is running."""
@@ -216,9 +414,40 @@ class FFmpegService:
         """
         source_process = None
         stream_headers = target.get("stream_headers", {}) if isinstance(target, dict) else {}
-        target_url = target.get("url") if isinstance(target, dict) else target
+        cache_path = target.get("cache_path") if isinstance(target, dict) else None
+        if (
+            not isinstance(cache_path, str)
+            or not os.path.isfile(cache_path)
+            or os.path.getsize(cache_path) <= 0
+        ):
+            cached_path = self.find_cached_song(target)
+            if cached_path:
+                cache_path = cached_path
+                if isinstance(target, dict):
+                    target["cache_path"] = cached_path
+                    logger.info(
+                        "Using existing cache for '%s': %s",
+                        target.get("title", "Unknown"),
+                        cached_path,
+                    )
+        valid_cache_path = (
+            isinstance(cache_path, str)
+            and os.path.isfile(cache_path)
+            and os.path.getsize(cache_path) > 0
+        )
+        target_url = (
+            cache_path
+            if valid_cache_path
+            else target.get("url")
+        ) if isinstance(target, dict) else target
         source_url = target.get("source_url") if isinstance(target, dict) else None
         track_title = target.get("title", "Unknown") if isinstance(target, dict) else "stream"
+
+        if isinstance(cache_path, str) and not valid_cache_path:
+            logger.warning(
+                "Precached file is unavailable for '%s'; using the resolved stream.",
+                track_title,
+            )
 
         # Prefer yt-dlp only for URL resolution. Once a direct media URL is
         # available, let FFmpeg handle downloading and decoding itself.
@@ -251,19 +480,24 @@ class FFmpegService:
             )
             target_url = "pipe:0"
 
-        header_value = "".join(
-            f"{key}: {value}\r\n" for key, value in stream_headers.items()
-        )
         is_direct_http_url = (
             isinstance(target_url, str)
             and target_url.startswith(("http://", "https://"))
         )
+        header_args = []
+        if is_direct_http_url:
+            user_agent = stream_headers.get("User-Agent") or stream_headers.get("user-agent")
+            referer = stream_headers.get("Referer") or stream_headers.get("referer")
+            if user_agent:
+                header_args.extend(["-user_agent", str(user_agent)])
+            if referer:
+                header_args.extend(["-referer", str(referer)])
 
         cmd = [
             "ffmpeg",
             "-hide_banner",
             "-loglevel", "error",
-            *( ["-headers", header_value] if header_value and not source_process else [] ),
+            *header_args,
             *(
                 [
                     "-reconnect", "1",

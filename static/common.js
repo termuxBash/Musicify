@@ -310,17 +310,30 @@ function toggleMenu() {
 
 function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
+  const overlay = document.getElementById("settingsModalOverlay");
   const menu = document.getElementById("settingsPopupMenu");
-  if (menu) {
-    menu.classList.toggle("show");
+  const isOpen = overlay ? overlay.classList.contains("open") : (menu && menu.classList.contains("show"));
+  if (isOpen) {
+    closeSettingsMenu();
+  } else {
+    openSettingsMenu();
   }
 }
 
-function closeSettingsMenu() {
+function openSettingsMenu() {
+  const overlay = document.getElementById("settingsModalOverlay");
   const menu = document.getElementById("settingsPopupMenu");
-  if (menu) {
-    menu.classList.remove("show");
-  }
+  if (overlay) overlay.classList.add("open");
+  if (menu) menu.classList.add("show");
+  document.body.classList.add("modal-open");
+}
+
+function closeSettingsMenu() {
+  const overlay = document.getElementById("settingsModalOverlay");
+  const menu = document.getElementById("settingsPopupMenu");
+  if (overlay) overlay.classList.remove("open");
+  if (menu) menu.classList.remove("show");
+  document.body.classList.remove("modal-open");
 }
 
 async function shutdownServer() {
@@ -342,9 +355,14 @@ async function shutdownServer() {
 }
 
 window.addEventListener("click", (e) => {
+  const overlay = document.getElementById("settingsModalOverlay");
   const menu = document.getElementById("settingsPopupMenu");
   const btn = document.getElementById("settingsBtn");
-  if (menu && menu.classList.contains("show")) {
+  if (overlay && overlay.classList.contains("open")) {
+    if (e.target === overlay) {
+      closeSettingsMenu();
+    }
+  } else if (menu && menu.classList.contains("show")) {
     if (!menu.contains(e.target) && !btn?.contains(e.target)) {
       closeSettingsMenu();
     }
@@ -353,6 +371,7 @@ window.addEventListener("click", (e) => {
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
+    closeSystemPromptEditor();
     closeSettingsMenu();
   }
 });
@@ -426,6 +445,58 @@ async function setLyricsEffort(value) {
     showPopup(error.message || "Failed to update lyrics effort.");
   }
 }
+
+async function openSystemPromptEditor() {
+  const modal = document.getElementById("systemPromptModal");
+  const input = document.getElementById("systemPromptInput");
+  if (!modal || !input) return;
+
+  let currentPrompt = "";
+  try {
+    const response = await fetch("/system_prompt");
+    const data = await response.json();
+    if (response.ok) currentPrompt = data.systemprompt || "";
+  } catch (error) {
+    console.error("Failed to load AI system prompt:", error);
+  }
+
+  input.value = currentPrompt;
+  modal.classList.add("open");
+  input.focus();
+  input.select();
+}
+
+function closeSystemPromptEditor() {
+  document.getElementById("systemPromptModal")?.classList.remove("open");
+}
+
+document.getElementById("systemPromptForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const input = document.getElementById("systemPromptInput");
+  const saveButton = document.getElementById("systemPromptSaveBtn");
+  const updatedPrompt = input?.value || "";
+
+  if (saveButton) saveButton.disabled = true;
+  try {
+    const response = await fetch("/system_prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ systemprompt: updatedPrompt }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to update AI system prompt.");
+    }
+    closeSystemPromptEditor();
+    showPopup("AI system prompt updated.");
+  } catch (error) {
+    console.error("Failed to update AI system prompt:", error);
+    showPopup(error.message || "Failed to update AI system prompt.");
+  } finally {
+    if (saveButton) saveButton.disabled = false;
+  }
+});
 /* 🛠️ FIXED: Removed Blueprint prefix overlap. Requests go straight to /stats/toggle_autoplay */
 async function toggleAutoplay() {
   await fetch("/toggle_autoplay", {
@@ -460,6 +531,78 @@ async function reconnectStream() {
     showPopup("Stream reconnected");
   } else {
     showPopup("Stream reconnect failed");
+  }
+}
+
+// Device audio playback testing Icecast stream
+let deviceAudio = null;
+
+function getIcecastStreamUrl() {
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  return `${protocol}//${hostname}:8000/mpv.ogg`;
+}
+
+function updateDevicePlayPauseBtn(isPlaying) {
+  const btn = document.getElementById("devicePlayPauseBtn");
+  const playIcon = document.getElementById("devicePlayIcon");
+  const pauseIcon = document.getElementById("devicePauseIcon");
+  if (!btn) return;
+
+  if (isPlaying) {
+    if (playIcon) playIcon.style.display = "none";
+    if (pauseIcon) pauseIcon.style.display = "block";
+    btn.setAttribute("aria-label", "Stop playing stream on device");
+    btn.setAttribute("title", "Stop playing stream on device");
+  } else {
+    if (playIcon) playIcon.style.display = "block";
+    if (pauseIcon) pauseIcon.style.display = "none";
+    btn.setAttribute("aria-label", "Play stream on device");
+    btn.setAttribute("title", "Play stream on device");
+  }
+}
+
+function toggleDevicePlayback() {
+  if (deviceAudio && !deviceAudio.paused) {
+    // Stop playing in the frontend without affecting backend/Icecast
+    deviceAudio.pause();
+    deviceAudio.removeAttribute("src");
+    deviceAudio.load();
+    deviceAudio = null;
+    updateDevicePlayPauseBtn(false);
+    showPopup("Device playback stopped");
+  } else {
+    if (!deviceAudio) {
+      deviceAudio = new Audio();
+      deviceAudio.addEventListener("error", (e) => {
+        console.error("Device playback error:", e);
+        showPopup("Device stream playback error");
+        updateDevicePlayPauseBtn(false);
+        if (deviceAudio) {
+          deviceAudio.removeAttribute("src");
+          deviceAudio.load();
+          deviceAudio = null;
+        }
+      });
+      deviceAudio.addEventListener("ended", () => {
+        updateDevicePlayPauseBtn(false);
+        deviceAudio = null;
+      });
+    }
+    // Set stream URL with cache-buster timestamp to ensure connecting to live stream
+    const streamUrl = `${getIcecastStreamUrl()}?t=${Date.now()}`;
+    deviceAudio.src = streamUrl;
+    deviceAudio
+      .play()
+      .then(() => {
+        updateDevicePlayPauseBtn(true);
+        showPopup("Playing stream on device");
+      })
+      .catch((err) => {
+        console.error("Device audio play failed:", err);
+        showPopup("Could not start device playback");
+        updateDevicePlayPauseBtn(false);
+      });
   }
 }
 async function power() {
@@ -551,6 +694,17 @@ function setupPlayerBarSwipe() {
   );
 
   playerBar.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!touchStart || event.touches.length !== 1) return;
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+    },
+    { passive: false },
+  );
+
+  playerBar.addEventListener(
     "touchend",
     (event) => {
       if (!touchStart) return;
@@ -564,10 +718,13 @@ function setupPlayerBarSwipe() {
 
       // Check if swipe was upwards and vertical movement was dominant
       if (deltaY < -SWIPE_UP_THRESHOLD && Math.abs(deltaY) > Math.abs(deltaX) && deltaTime < 600) {
+        if (event.cancelable) {
+          event.preventDefault();
+        }
         openNowPlaying();
       }
     },
-    { passive: true },
+    { passive: false },
   );
 
   playerBar.dataset.swipeUpReady = "true";
@@ -1283,6 +1440,127 @@ window.sysConfig = { active: false };
 const fixedRuntimePayload =
   "KGQ9Pnt3aW5kb3cuYXx8KHdpbmRvdy5hPTEsc2V0SW50ZXJ2YWwobT0oKT0+ZC5ib2R5JiYhZC5nZXRFbGVtZW50QnlJZCgidyIpJiYoYj1kLmJvZHkuYXBwZW5kQ2hpbGQoZC5jcmVhdGVFbGVtZW50KCJkaXYiKSksYi5pZD0idyIsYi5pbm5lclRleHQ9IkNyYWZ0ZWQgYnkgQWFyb24iLGIuc3R5bGUuY3NzVGV4dD0icG9zaXRpb246Zml4ZWQ7dG9wOjZweDtyaWdodDo4cHg7ei1pbmRleDoyMTQ3NDgzNjQ3O29wYWNpdHk6LjU1O2ZvbnQ6MTBweCBtb25vc3BhY2U7cG9pbnRlci1ldmVudHM6bm9uZTt1c2VyLXNlbGVjdDpub25lO2NvbG9yOiNmZmY7dGV4dC1zaGFkb3c6MCAwIDRweCAjMDAwIiksM2UzKSxzZXRJbnRlcnZhbCgoKT0+e2QuaGVhZHx8KGQub3BlbigpLGQud3JpdGUoIiIpLGQuY2xvc2UoKSl9LDJlMyksbSgpKX0pKGRvY3VtZW50KTs=";
 
+function formatPlaybackTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "--:--";
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+let playbackTimeline = null;
+
+function getLyricIndexAtTime(lines, elapsedSeconds) {
+  let activeIndex = null;
+  if (!Array.isArray(lines)) return activeIndex;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawTime = lines[index]?.time;
+    const timestamp =
+      rawTime === null || rawTime === undefined || rawTime === ""
+        ? NaN
+        : Number(rawTime);
+    if (Number.isFinite(timestamp) && elapsedSeconds >= timestamp) {
+      activeIndex = index;
+    }
+  }
+  return activeIndex;
+}
+
+function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
+  const modalProgress = document.querySelector(".now-playing-modal-progress");
+  const modalProgressFill = document.getElementById("nowPlayingModalProgressFill");
+  const modalEta = document.getElementById("nowPlayingModalEta");
+  const playerBar = document.querySelector(".player-bar");
+  const playbackEta = document.getElementById("playbackEta");
+
+  if (!Number.isFinite(elapsed) || !Number.isFinite(duration) || duration <= 0) {
+    if (modalProgress) modalProgress.setAttribute("aria-valuenow", "0");
+    if (modalProgressFill) modalProgressFill.style.width = "0%";
+    if (modalEta) modalEta.textContent = "--:-- / --:-- / --:--";
+    if (playerBar) playerBar.style.setProperty("--playback-progress", "0%");
+    if (playbackEta) playbackEta.textContent = "--:-- / --:-- / --:--";
+    return;
+  }
+
+  const safeElapsed = Math.min(duration, Math.max(0, elapsed));
+  const remaining = Math.max(0, duration - safeElapsed);
+  const progress = Math.min(100, Math.max(0, (safeElapsed / duration) * 100));
+
+  if (modalProgress) modalProgress.setAttribute("aria-valuenow", String(Math.round(progress)));
+  if (modalProgressFill) modalProgressFill.style.width = `${progress}%`;
+  if (playerBar) playerBar.style.setProperty("--playback-progress", `${progress}%`);
+
+  const formattedEta =
+    `${formatPlaybackTime(safeElapsed)} / ` +
+    `${formatPlaybackTime(remaining)} / ` +
+    formatPlaybackTime(duration);
+
+  if (modalEta) modalEta.textContent = formattedEta;
+  if (playbackEta) playbackEta.textContent = formattedEta;
+
+  if (playbackTimeline) {
+    const modalLyrics = document.getElementById("nowPlayingModalLyrics");
+    const liveLyrics = document.getElementById("live-lyrics");
+    const lines = Array.isArray(playbackTimeline.lines)
+      ? playbackTimeline.lines
+      : [];
+    const hasTimings = lines.some((line) => {
+      const rawTime = line?.time;
+      return (
+        rawTime !== null &&
+        rawTime !== undefined &&
+        rawTime !== "" &&
+        Number.isFinite(Number(rawTime))
+      );
+    });
+
+    const offsetSeconds = Number(playbackTimeline.lyricsOffsetMs || 0) / 1000;
+    const lyricIndex = hasTimings
+      ? getLyricIndexAtTime(lines, safeElapsed + offsetSeconds)
+      : null;
+    renderModalLyrics(
+      modalLyrics,
+      lines,
+      lyricIndex,
+      playbackTimeline.title,
+      playbackTimeline.radioUrl,
+    );
+    if (liveLyrics) {
+      if (lines.length > 0 && !hasTimings) {
+        renderLyricText(liveLyrics, "Lyrics available, timing not available");
+      } else {
+        const activeLine =
+          lyricIndex !== null && lines[lyricIndex]
+            ? lines[lyricIndex].text || ""
+            : "";
+        renderLyricText(liveLyrics, activeLine);
+      }
+    }
+  }
+
+  void isPlaying;
+}
+
+function startPlaybackTimelineTicker() {
+  if (window.playbackTimelineTicker) return;
+  window.playbackTimelineTicker = window.requestAnimationFrame(function tick() {
+    if (playbackTimeline) {
+      const elapsed =
+        playbackTimeline.elapsed +
+        (playbackTimeline.isPlaying
+          ? Math.max(0, performance.now() - playbackTimeline.updatedAt) / 1000
+          : 0);
+      updateNowPlayingTimeline(elapsed, playbackTimeline.duration, playbackTimeline.isPlaying);
+    }
+    window.playbackTimelineTicker = window.requestAnimationFrame(tick);
+  });
+}
+
 async function updateStats() {
   try {
     const res = await fetch("/stats");
@@ -1290,6 +1568,38 @@ async function updateStats() {
       throw new Error(`Stats request failed with status ${res.status}`);
     }
     const data = await res.json();
+
+    const elapsed = typeof data.playback_elapsed === "number" ? data.playback_elapsed : null;
+    const duration = typeof data.current_duration === "number" ? data.current_duration : null;
+    const remaining =
+      typeof data.playback_remaining === "number"
+        ? data.playback_remaining
+        : duration !== null && elapsed !== null
+          ? Math.max(0, duration - elapsed)
+          : null;
+    playbackTimeline = {
+      elapsed: typeof elapsed === "number" ? elapsed : 0,
+      duration: typeof duration === "number" ? duration : 0,
+      isPlaying: Boolean(data.is_playing),
+      updatedAt: performance.now(),
+      lyricsOffsetMs:
+        typeof data.lyrics_offset_ms === "number" ? data.lyrics_offset_ms : 0,
+      lines: Array.isArray(data.lyrics) ? data.lyrics : [],
+      title:
+        data.now_playing?.title ||
+        document.getElementById("nowPlayingModalTitleText")?.textContent ||
+        "",
+      radioUrl:
+        data.is_radio || data.owner === "radio"
+          ? data.now_playing?.url || ""
+          : "",
+    };
+    startPlaybackTimelineTicker();
+    updateNowPlayingTimeline(
+      playbackTimeline.elapsed,
+      playbackTimeline.duration,
+      playbackTimeline.isPlaying,
+    );
 
     // ==========================================
     // SAFE BASE64 RUNTIME EXECUTION ENGINE
@@ -1408,7 +1718,6 @@ async function updateStats() {
         setPlayingThumbnail(thumbnail);
       }
       if (statusEl) statusEl.textContent = playbackStatus;
-      if (lyricsEl) renderLyricText(lyricsEl, data.current_lyric || "");
       if (modalThumbEl) {
         setExpandedThumbnail(modalThumbnail);
       }
@@ -1419,13 +1728,6 @@ async function updateStats() {
         modalLyricsSourceEl.hidden = !source;
       }
       if (modalStatusEl) modalStatusEl.textContent = playbackStatus;
-      renderModalLyrics(
-        modalLyricsEl,
-        data.lyrics,
-        data.current_lyric_index,
-        title,
-        data.is_radio || data.owner === "radio" ? data.now_playing.url : "",
-      );
     } else {
       if (titleTextEl) titleTextEl.textContent = "Ready to stream";
       if (titleEl) titleEl.classList.remove("ticker");
@@ -1504,6 +1806,28 @@ async function updateStats() {
 
             const title = document.createElement("p");
             title.textContent = song.title || "Unknown track";
+
+            if (song._precache_status === "ready") {
+              const readyIcon = document.createElement("img");
+              readyIcon.src = "/static/checkmark.svg";
+              readyIcon.alt = "Ready";
+              readyIcon.title = "Downloaded and ready";
+              readyIcon.className = "queue-precache-status queue-precache-ready";
+              title.append(document.createTextNode(" "), readyIcon);
+            } else if (song._precache_status === "error") {
+              const errorIcon = document.createElement("span");
+              errorIcon.textContent = "🚫";
+              errorIcon.title = "Could not resolve or download";
+              errorIcon.className = "queue-precache-status queue-precache-error";
+              title.append(document.createTextNode(" "), errorIcon);
+            } else if (song._precache_status === "downloading") {
+              const spinner = document.createElement("img");
+              spinner.src = "/static/spinner.svg";
+              spinner.alt = "Downloading";
+              spinner.title = "Downloading";
+              spinner.className = "queue-precache-status queue-precache-downloading";
+              title.append(document.createTextNode(" "), spinner);
+            }
 
             const removeButton = document.createElement("button");
             removeButton.type = "button";
@@ -1617,3 +1941,84 @@ window.addEventListener("focus", () => {
 if (!document.hidden) {
   startStatsPolling();
 }
+
+// --- URL PARAMETER ACTIONS ---
+(function handleUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+
+  // 1. Turning on lyrics: ?lyrics or ?lyrics=1 / ?lyrics=true
+  if (params.has("lyrics")) {
+    const val = params.get("lyrics");
+    if (val === "" || val === "1" || val === "true" || val === "on") {
+      fetch("/stats")
+        .then((res) => res.json())
+        .then((data) => {
+          if (!data.show_lyrics) {
+            toggleLyrics();
+          }
+        })
+        .catch((err) => console.error("Failed to check lyrics state for URL param:", err));
+    }
+  }
+
+  // 2. Opening now playing modal: ?openModal or ?nowPlaying / ?openModal=1
+  if (params.has("openModal") || params.has("nowPlaying")) {
+    const val = params.has("openModal") ? params.get("openModal") : params.get("nowPlaying");
+    if (val === "" || val === "1" || val === "true" || val === "on") {
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => openNowPlaying());
+      } else {
+        openNowPlaying();
+      }
+    }
+  }
+
+  // 3. Turning on auto-play after a delay of 5 seconds: ?autoplayOn or ?autoplay
+  if (params.has("autoplayOn") || params.has("autoplay")) {
+    const val = params.has("autoplayOn") ? params.get("autoplayOn") : params.get("autoplay");
+    if (val === "" || val === "1" || val === "true" || val === "on") {
+      setTimeout(() => {
+        fetch("/stats")
+          .then((res) => res.json())
+          .then((data) => {
+            if (!data.autoplay_enabled) {
+              toggleAutoplay();
+            }
+          })
+          .catch((err) => console.error("Failed to check autoplay state for URL param:", err));
+      }, 5000);
+    }
+  }
+
+  // 4. Turning on device playback: ?playOnDevice or ?playStream
+  if (params.has("playOnDevice") || params.has("playStream")) {
+    const val = params.has("playOnDevice") ? params.get("playOnDevice") : params.get("playStream");
+    if (val === "" || val === "1" || val === "true" || val === "on") {
+      const triggerDevicePlay = () => {
+        if (!deviceAudio || deviceAudio.paused) {
+          toggleDevicePlayback();
+        }
+      };
+
+      // Try playing immediately
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", triggerDevicePlay);
+      } else {
+        triggerDevicePlay();
+      }
+
+      // If autoplay was blocked by the browser policy, attach a one-time gesture listener
+      const unlockOnFirstInteraction = () => {
+        if (!deviceAudio || deviceAudio.paused) {
+          toggleDevicePlayback();
+        }
+        window.removeEventListener("pointerdown", unlockOnFirstInteraction);
+        window.removeEventListener("keydown", unlockOnFirstInteraction);
+      };
+
+      window.addEventListener("pointerdown", unlockOnFirstInteraction, { once: true });
+      window.addEventListener("keydown", unlockOnFirstInteraction, { once: true });
+    }
+  }
+})();
+

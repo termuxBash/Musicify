@@ -7,6 +7,27 @@ from unittest.mock import MagicMock
 import core.stream_manager as stream_manager
 from core.stream_manager import QueuePlayer
 from services.ffmpeg_service import FFmpegService, _log_process_stderr
+from core import settings
+
+
+def test_ffmpeg_default_cache_dir_uses_ytdlp_subdir(monkeypatch, tmp_path):
+    configured_dir = tmp_path / "downloads"
+    monkeypatch.setattr(settings, "DOWNLOAD_DIR", str(configured_dir))
+
+    service = FFmpegService(cache_dir=None)
+
+    assert service.cache_dir == configured_dir / "ytdlp"
+    assert service.cache_dir.is_dir()
+
+
+def test_ffmpeg_default_cache_dir_does_not_duplicate_ytdlp(monkeypatch, tmp_path):
+    configured_dir = tmp_path / "downloads" / "ytdlp"
+    monkeypatch.setattr(settings, "DOWNLOAD_DIR", str(configured_dir))
+
+    service = FFmpegService(cache_dir=None)
+
+    assert service.cache_dir == configured_dir
+    assert service.cache_dir.is_dir()
 
 
 def test_ffmpeg_service_publisher_lifecycle():
@@ -87,10 +108,11 @@ def test_decoder_prefers_resolved_direct_url(monkeypatch):
     assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == (
         "https://rr.example.test/videoplayback?id=abc"
     )
-    assert "-headers" in ffmpeg_cmd
-    headers = ffmpeg_cmd[ffmpeg_cmd.index("-headers") + 1]
-    assert "Referer: https://www.youtube.com/" in headers
-    assert "User-Agent: Musicify-Test" in headers
+    assert "-headers" not in ffmpeg_cmd
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-referer") + 1] == (
+        "https://www.youtube.com/"
+    )
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-user_agent") + 1] == "Musicify-Test"
     assert "-reconnect" in ffmpeg_cmd
     assert "youtube:player_client" not in " ".join(ffmpeg_cmd)
 
@@ -153,6 +175,150 @@ def test_decoder_passes_configured_yt_dlp_player_client(monkeypatch):
     assert yt_dlp_cmd[extractor_args_index + 1] == (
         "youtube:player_client=android"
     )
+
+
+def test_decoder_uses_downloaded_cache_file(monkeypatch, tmp_path):
+    cached_song = tmp_path / "timestamp-Cached track.webm"
+    cached_song.write_bytes(b"cached")
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        return MagicMock()
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService(cache_dir=tmp_path)
+
+    service.start_decoder({
+        "title": "Cached track",
+        "cache_path": str(cached_song),
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    })
+
+    ffmpeg_cmd = popen_calls[0][0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == str(cached_song)
+
+
+def test_decoder_finds_existing_cache_by_video_id(monkeypatch, tmp_path):
+    cached_song = tmp_path / "1700000000__abcdefghijk__Cached track.webm"
+    cached_song.write_bytes(b"cached")
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        return MagicMock()
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService(cache_dir=tmp_path)
+    target = {
+        "title": "Cached track",
+        "videoId": "abcdefghijk",
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    }
+
+    service.start_decoder(target)
+
+    ffmpeg_cmd = popen_calls[0][0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == str(cached_song)
+    assert target["cache_path"] == str(cached_song)
+
+
+def test_decoder_falls_back_when_cache_file_is_missing(monkeypatch, tmp_path):
+    popen_calls = []
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        return MagicMock()
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService(cache_dir=tmp_path)
+
+    service.start_decoder({
+        "title": "Stale cache",
+        "cache_path": str(tmp_path / "missing.webm"),
+        "url": "https://rr.example.test/videoplayback?id=abc",
+        "stream_headers": {
+            "Referer": "https://www.youtube.com/",
+            "User-Agent": "Musicify-Test",
+        },
+    })
+
+    ffmpeg_cmd = popen_calls[0][0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1] == (
+        "https://rr.example.test/videoplayback?id=abc"
+    )
+    assert "-headers" not in ffmpeg_cmd
+
+
+def test_precache_song_uses_path_glob_for_cache_files(monkeypatch, tmp_path):
+    cached_song = tmp_path / "timestamp-Cached track.webm"
+
+    def fake_run(command, **kwargs):
+        cached_song.write_bytes(b"cached")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=f"{cached_song}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        FFmpegService,
+        "get_media_duration",
+        lambda self, path: 200.0,
+    )
+    service = FFmpegService(cache_dir=tmp_path)
+
+    result = service.precache_song({
+        "title": "Cached track",
+        "videoId": "abcdefghijk",
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    })
+
+    assert result["path"] == str(cached_song)
+    assert result["duration"] == 200.0
+
+
+def test_precache_song_reuses_existing_video_id(monkeypatch, tmp_path):
+    cached_song = tmp_path / "1700000000__abcdefghijk__Cached track.webm"
+    cached_song.write_bytes(b"cached")
+    monkeypatch.setattr(
+        "services.ffmpeg_service.subprocess.run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("yt-dlp should not run for a reused cache")
+        ),
+    )
+    monkeypatch.setattr(
+        FFmpegService,
+        "get_media_duration",
+        lambda self, path: 200.0,
+    )
+    service = FFmpegService(cache_dir=tmp_path)
+
+    result = service.precache_song({
+        "title": "Cached track",
+        "videoId": "abcdefghijk",
+        "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    })
+
+    assert result["path"] == str(cached_song)
+    assert result["reused"] is True
+
+
+def test_queue_player_marks_failed_precache_and_moves_it_to_bottom(monkeypatch, tmp_path):
+    class MockFFmpeg:
+        def precache_song(self, song):
+            raise RuntimeError("video unavailable")
+
+    player = QueuePlayer(MockFFmpeg())
+    first = {"title": "First", "videoId": "abcdefghijk"}
+    second = {"title": "Second", "videoId": "12345678901"}
+    player.queue.extend([first, second])
+
+    player._precache_worker(first)
+
+    assert player.queue == [second, first]
+    assert first["_precache_status"] == "error"
 
 
 def test_queue_player_stops_publisher_after_idle_timeout(monkeypatch):

@@ -8,9 +8,10 @@ The QueuePlayer class encapsulates the core functionality of managing the playba
 import threading
 import time
 import logging
+import os
 import urllib.request
 import json
-from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL
+from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL, get_system_prompt
 from core.history_db import is_blacklisted_rick_roll, record_rick_roll_timestamp
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE = 17640
 SILENCE_CHUNK = bytes(CHUNK_SIZE)
 EMPTY_QUEUE_PUBLISHER_TIMEOUT = 120
+PRECACHE_REMAINING_SECONDS = 50
 
 class QueuePlayer:
 
@@ -33,7 +35,7 @@ class QueuePlayer:
         self.flask_app = flask_app
 
         self.queue = []
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
 
         self.current_process = None
         self.current_song = None
@@ -46,6 +48,12 @@ class QueuePlayer:
         self._autoplay_suppressed = False
         self.incogni_mode = False
         self.radio_handler = None
+        self._ready_cache = {}
+        self._precache_threads = set()
+        self._active_cache_path = None
+        self._playback_elapsed = 0.0
+        self._current_duration = None
+        self._playback_started_monotonic = None
 
     def _bump_playback_generation(self):
         with self.lock:
@@ -71,6 +79,14 @@ class QueuePlayer:
         with self.lock:
             self.queue.clear()
             self.current_song = None
+            cache_paths = list(self._ready_cache.values())
+        for cache_path in cache_paths:
+            if hasattr(self.ffmpeg, "clear_cached_song"):
+                self.ffmpeg.clear_cached_song(cache_path)
+        self._ready_cache.clear()
+        self._active_cache_path = None
+        self._playback_elapsed = 0.0
+        self._current_duration = None
         if hasattr(self.ffmpeg, "stop_publisher"):
             try:
                 self.ffmpeg.stop_publisher()
@@ -95,7 +111,14 @@ class QueuePlayer:
     def remove_from_queue(self, index):
         with self.lock:
             if 0 <= index < len(self.queue):
-                return self.queue.pop(index)
+                song = self.queue.pop(index)
+                cache_path = song.get("cache_path")
+                identity = self._song_identity(song)
+                self._ready_cache.pop(identity, None)
+                if cache_path:
+                    if hasattr(self.ffmpeg, "clear_cached_song"):
+                        self.ffmpeg.clear_cached_song(cache_path)
+                return song
         return None
 
     def move_to_front(self, index):
@@ -147,14 +170,133 @@ class QueuePlayer:
             queue_copy = list(self.queue)
             autoplay_status = self.autoplay_enabled
             is_playing = self.current_song is not None
+            elapsed = self._playback_elapsed
+            duration = self._current_duration
+            remaining = (
+                max(0.0, duration - elapsed)
+                if isinstance(duration, (int, float))
+                else None
+            )
 
         return {
             "queue": queue_copy,
             "current_song": self.current_song,
             "queue_size": len(queue_copy),
             "playing": is_playing,
-            "autoplay_enabled": autoplay_status  
+            "autoplay_enabled": autoplay_status,
+            "playback_elapsed": elapsed,
+            "current_duration": duration,
+            "playback_remaining": remaining,
         }
+
+    @staticmethod
+    def _song_identity(song):
+        if not isinstance(song, dict):
+            return ""
+        return str(
+            song.get("videoId")
+            or song.get("source_url")
+            or song.get("url")
+            or song.get("title")
+            or ""
+        )
+
+    def _mark_precache_status(self, song, status, cache_path=None, duration=None):
+        identity = self._song_identity(song)
+        with self.lock:
+            song["_precache_status"] = status
+            if cache_path:
+                song["cache_path"] = cache_path
+                self._ready_cache[identity] = cache_path
+            if isinstance(duration, (int, float)):
+                song["_duration"] = duration
+
+    def _precache_worker(self, song):
+        identity = self._song_identity(song)
+        try:
+            result = self.ffmpeg.precache_song(song)
+            cache_path = result.get("path") if isinstance(result, dict) else None
+            duration = result.get("duration") if isinstance(result, dict) else None
+            if not isinstance(cache_path, str) or not cache_path:
+                raise RuntimeError("Precache produced no file")
+            self._mark_precache_status(
+                song,
+                "ready",
+                cache_path=cache_path,
+                duration=duration,
+            )
+            logger.info("Precached queue song: %s", song.get("title", "Unknown"))
+        except Exception as error:
+            logger.warning(
+                "Could not precache '%s': %s",
+                song.get("title", "Unknown"),
+                error,
+            )
+            self._mark_precache_status(song, "error")
+            with self.lock:
+                for index, queued_song in enumerate(list(self.queue)):
+                    if queued_song is song:
+                        self.queue.pop(index)
+                        self.queue.append(queued_song)
+                        logger.info(
+                            "Moved failed precache song to bottom of queue: %s",
+                            queued_song.get("title", "Unknown"),
+                        )
+                        break
+            logger.info("Precache failed for queue song: %s", identity)
+        finally:
+            with self.lock:
+                self._precache_threads.discard(threading.current_thread())
+
+    def _ensure_next_precache(self):
+        with self.lock:
+            if not self.queue:
+                return
+            song = self.queue[0]
+            status = song.get("_precache_status")
+            if status in {"downloading", "ready", "error"}:
+                return
+            if not (song.get("source_url") or song.get("videoId")):
+                return
+
+            song["_precache_status"] = "downloading"
+            thread = threading.Thread(
+                target=self._precache_worker,
+                args=(song,),
+                daemon=True,
+                name="musicify-precache",
+            )
+            self._precache_threads.add(thread)
+        thread.start()
+
+    def _monitor_precache(self):
+        elapsed = self._playback_elapsed
+        if (
+            isinstance(self._current_duration, (int, float))
+            and self._current_duration - elapsed <= PRECACHE_REMAINING_SECONDS
+        ):
+            self._ensure_next_precache()
+
+    def _cleanup_finished_cache(self, song):
+        cache_path = song.get("cache_path") if isinstance(song, dict) else None
+        if cache_path:
+            if hasattr(self.ffmpeg, "clear_cached_song"):
+                self.ffmpeg.clear_cached_song(cache_path)
+            if self._active_cache_path == cache_path:
+                self._active_cache_path = None
+
+    def _cleanup_old_cache(self):
+        keep_paths = []
+        if isinstance(self._active_cache_path, str):
+            keep_paths.append(self._active_cache_path)
+        with self.lock:
+            keep_paths.extend(
+                path
+                for path in self._ready_cache.values()
+                if isinstance(path, str)
+            )
+        if hasattr(self.ffmpeg, "cleanup_cache"):
+            self.ffmpeg.cleanup_cache(keep_paths=keep_paths)
 
     def _get_next_song(self):
         with self.lock:
@@ -255,9 +397,7 @@ class QueuePlayer:
 
             gemini_prompt = (
                 f"Current playing track: '{full_title}'. "
-                "Recommend 3 songs that fit this vibe. "
-                "Constraint: Include 1 or 2 songs by the same artist as the current track, "
-                "but ensure at least 1 recommendation is from a different, matching artist (do not make all 3 by the same artist)."
+                f"{get_system_prompt()}"
             )
             gemini_tracks = get_gemini_recommendations(gemini_prompt)
             recommended_tracks = [
@@ -374,11 +514,42 @@ class QueuePlayer:
                             logger.info("Stopped FFmpeg publisher after 2 minutes with an empty queue.")
                         except Exception as pub_err:
                             logger.error("Failed to stop idle FFmpeg publisher: %s", pub_err)
-                time.sleep(1)
+                time.sleep(0.25)
                 continue
 
             queue_empty_since = None
             publisher_stopped_for_idle = False
+
+            previous_cache_path = self._active_cache_path
+            next_cache_path = song.get("cache_path") if isinstance(song, dict) else None
+            if isinstance(next_cache_path, str) and not os.path.isfile(next_cache_path):
+                logger.warning(
+                    "Precached file missing for '%s'; removing stale cache entry.",
+                    song.get("title", "Unknown"),
+                )
+                song.pop("cache_path", None)
+                identity = self._song_identity(song)
+                with self.lock:
+                    self._ready_cache.pop(identity, None)
+                next_cache_path = None
+            if (
+                isinstance(previous_cache_path, str)
+                and previous_cache_path != next_cache_path
+                and hasattr(self.ffmpeg, "clear_cached_song")
+            ):
+                self.ffmpeg.clear_cached_song(previous_cache_path)
+            self._active_cache_path = (
+                next_cache_path
+                if isinstance(next_cache_path, str)
+                else None
+            )
+            self._cleanup_old_cache()
+            self._playback_elapsed = 0.0
+            self._current_duration = (
+                song.get("_duration")
+                if isinstance(song.get("_duration"), (int, float))
+                else None
+            )
 
             # Detect blacklisted Rick Roll attempt each time it tries to play
             if is_blacklisted_rick_roll(song):
@@ -468,6 +639,14 @@ class QueuePlayer:
             try:
                 logger.info(f"Playing: {song.get('title', 'Unknown')}")
                 target = song
+                if self._current_duration is None and hasattr(self.ffmpeg, "get_media_duration"):
+                    duration_target = (
+                        target.get("cache_path")
+                        or target.get("url")
+                        or target.get("source_url")
+                    )
+                    if isinstance(duration_target, str):
+                        self._current_duration = self.ffmpeg.get_media_duration(duration_target)
                 
                 if hasattr(self.ffmpeg, "start_decoder"):
                     decoder = self.ffmpeg.start_decoder(target)
@@ -502,6 +681,9 @@ class QueuePlayer:
                         # Reached EOF of song
                         break
 
+                    self._playback_elapsed += len(chunk) / (44100 * 4)
+                    self._monitor_precache()
+
                     if hasattr(self.ffmpeg, "write_pcm"):
                         if self.ffmpeg.write_pcm(chunk) is False:
                             continue
@@ -525,6 +707,9 @@ class QueuePlayer:
                         playback_interrupted = True
                     self.current_process = None
                     self.current_song = None
+                    identity = self._song_identity(song)
+                    if self._ready_cache.get(identity) == song.get("cache_path"):
+                        self._ready_cache.pop(identity, None)
                 if decoder:
                     try:
                         return_code = decoder.poll()
