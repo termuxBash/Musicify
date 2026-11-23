@@ -1745,6 +1745,8 @@ body.center-player-page .main.shift {
   align-items: center;
   justify-content: center;
   background: #000c;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   padding: 0;
   z-index: 2600;
   opacity: 0;

@@ -190,6 +190,7 @@ function toggleMenu() {
   const main = document.getElementById("main");
   panel.classList.toggle("open");
   overlay.classList.toggle("show");
+  syncNowPlayingBounds();
   if (!panel.classList.contains("open")) {
     closeSettingsMenu();
   }
@@ -654,6 +655,7 @@ function setVolume(val) {
 
 function openNowPlaying() {
   const modal = document.getElementById("nowPlayingModal");
+  syncNowPlayingBounds();
   modal?.classList.add("open");
   setupNowPlayingSwipe();
 }
@@ -661,6 +663,37 @@ function openNowPlaying() {
 function closeNowPlaying() {
   document.getElementById("nowPlayingModal")?.classList.remove("open");
 }
+
+function syncNowPlayingBounds() {
+  const modal = document.getElementById("nowPlayingModal");
+  const panel = document.getElementById("sidePanel");
+  if (!modal || !panel) return;
+
+  if (window.innerWidth < 1024) {
+    modal.style.left = "";
+    modal.style.width = "";
+    modal.style.right = "";
+    return;
+  }
+
+  const panelRect = panel.getBoundingClientRect();
+  const panelVisibleWidth =
+    panelRect.right > panelRect.left && panelRect.left < window.innerWidth
+      ? Math.max(0, panelRect.right)
+      : 0;
+
+  if (panelVisibleWidth > 0) {
+    modal.style.left = `${panelVisibleWidth}px`;
+    modal.style.width = `calc(100% - ${panelVisibleWidth}px)`;
+    modal.style.right = "0";
+  } else {
+    modal.style.left = "";
+    modal.style.width = "";
+    modal.style.right = "";
+  }
+}
+
+window.addEventListener("resize", syncNowPlayingBounds);
 
 function setupPlayerBarSwipe() {
   const playerBar = document.querySelector(".player-bar");
