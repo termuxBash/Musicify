@@ -37,6 +37,12 @@ curl -fsSL https://deno.land/install.sh | sh
 5. Set `BOSE_IP` to the speaker's address. The setup helper detects the host address and uses it for `STREAM_URL` and the first `STREAM_FALLBACK_URLS` entry.
 Configure the bose is_on() to return true always incase of incompatibility with the speaker api
 
+For TV playback, install Android Platform Tools and make `adb` available on `PATH`:
+```bash
+sudo apt install android-tools-adb
+```
+Enable wireless debugging or network ADB on the Android TV, set `TV_ADB_IP` in `.env` to its `host:port` address (default `192.168.29.193:5555`), and authorize the initial ADB prompt on the TV. The **Play on TV** button in Settings connects to the TV and opens `http://<server-lan-ip>:<APP_PORT>/?tv`.
+
 6. Start Musicify:
 ```bash
 python3 app.py
@@ -60,6 +66,7 @@ Set these in your `.env` file to override runtime defaults:
 - `INCOGNI_MODE` to disable history recording by default (`true` / `false`).
 - `SONG_NAME_CLEANUP` for comma-separated title suffixes to remove.
 - `APP_HOST` and `APP_PORT` for the Flask server bind address.
+- `TV_ADB_IP` for the Android TV's ADB address, including port. Defaults to `192.168.29.193:5555`.
 - `YOUTUBE_API_KEY` for YouTube Data API access (required).
 - `BACKUP_YOUTUBE_API_KEY` for an optional second YouTube key.
 - `GEMINI_API_KEY` for AI recommendations (required for that feature).
@@ -86,11 +93,13 @@ You can pass query parameters to page URLs to trigger interface actions and togg
 | `openModal` | `nowPlaying` | Opens the Now Playing modal immediately on page load. |
 | `autoplayOn` | `autoplay` | Automatically enables auto-play after a 5-second delay if currently disabled. |
 | `playOnDevice` | `playStream` | Starts playing the Icecast audio stream directly on the current browser/device (triggers the device play/pause button). Due to browser autoplay policies, playback begins immediately or activates on the user's first interaction if blocked. |
+| `tv` | — | TV mode shortcut: enables lyrics, opens the Now Playing modal, enables autoplay, starts device playback, and applies the TV layout. |
 
 ### Example
 
 ```text
 http://<host-ip>:5000/?lyrics&openModal&autoplayOn&playOnDevice
+http://<host-ip>:5000/?tv
 ```
 *(Accepts bare flags like `?lyrics` or explicit values like `?lyrics=1` / `?lyrics=true`)*
 

@@ -337,6 +337,21 @@ function closeSettingsMenu() {
   document.body.classList.remove("modal-open");
 }
 
+async function playOnTV() {
+  showPopup("Connecting to TV...");
+  try {
+    const res = await fetch("/playOnTV", { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      showPopup(data.message || "Opening Musicify on the TV...");
+    } else {
+      showPopup(data.message || "Failed to connect to the TV.");
+    }
+  } catch (error) {
+    showPopup("Failed to contact the server.");
+  }
+}
+
 async function shutdownServer() {
   if (!confirm("Are you sure you want to shut down the Music Server?")) {
     return;
@@ -1976,82 +1991,105 @@ if (!document.hidden) {
 }
 
 // --- URL PARAMETER ACTIONS ---
+function detectDeviceEnvironment() {
+  const ua = navigator.userAgent || "";
+
+  const hasFinePointer = window.matchMedia?.("(pointer: fine)").matches ?? false;
+  const hasHoverSupport = window.matchMedia?.("(hover: hover)").matches ?? false;
+  const isTouchDevice = (navigator.maxTouchPoints || 0) > 0;
+  const isAndroid = /Android/i.test(ua);
+  const isTclTv = /(TCL TV|TCL Google TV|TCLSmartTV)/i.test(ua);
+  const isGenericAndroidTv =
+    /(Android TV|GoogleTV|SmartTV|BRAVIA|MiTV|SHIELD Android TV)/i.test(ua);
+
+  if (isAndroid && isTclTv) {
+    return { device: "TV", brand: "TCL", os: "Android/Google TV" };
+  }
+  if (isAndroid && isGenericAndroidTv) {
+    return { device: "TV", brand: "Generic/Other", os: "Android TV" };
+  }
+  if (!hasFinePointer && !hasHoverSupport && !isTouchDevice) {
+    return { device: "TV", brand: "Unknown", os: "TV Environment" };
+  }
+  return { device: "Laptop/Desktop", brand: "Generic", os: "Desktop OS" };
+}
+
 (function handleUrlParams() {
   const params = new URLSearchParams(window.location.search);
+  const isEnabledParam = (...names) =>
+    names.some((name) =>
+      params.has(name) &&
+      ["", "1", "true", "on"].includes(params.get(name))
+    );
+  const diagnostic = detectDeviceEnvironment();
+  const tvParamEnabled = isEnabledParam("tv");
+  const tvModeEnabled = tvParamEnabled || diagnostic.device === "TV";
+
+  if (diagnostic.device === "TV") {
+    document.documentElement.classList.add("is-tv-layout");
+  }
 
   // 1. Turning on lyrics: ?lyrics or ?lyrics=1 / ?lyrics=true
-  if (params.has("lyrics")) {
-    const val = params.get("lyrics");
-    if (val === "" || val === "1" || val === "true" || val === "on") {
-      fetch("/stats")
-        .then((res) => res.json())
-        .then((data) => {
-          if (!data.show_lyrics) {
-            toggleLyrics();
-          }
-        })
-        .catch((err) => console.error("Failed to check lyrics state for URL param:", err));
-    }
+  if (isEnabledParam("lyrics") || tvModeEnabled) {
+    fetch("/stats")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.show_lyrics) {
+          toggleLyrics();
+        }
+      })
+      .catch((err) => console.error("Failed to check lyrics state for URL param:", err));
   }
 
   // 2. Opening now playing modal: ?openModal or ?nowPlaying / ?openModal=1
-  if (params.has("openModal") || params.has("nowPlaying")) {
-    const val = params.has("openModal") ? params.get("openModal") : params.get("nowPlaying");
-    if (val === "" || val === "1" || val === "true" || val === "on") {
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", () => openNowPlaying());
-      } else {
-        openNowPlaying();
-      }
+  if (isEnabledParam("openModal", "nowPlaying") || tvModeEnabled) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => openNowPlaying());
+    } else {
+      openNowPlaying();
     }
   }
 
   // 3. Turning on auto-play after a delay of 5 seconds: ?autoplayOn or ?autoplay
-  if (params.has("autoplayOn") || params.has("autoplay")) {
-    const val = params.has("autoplayOn") ? params.get("autoplayOn") : params.get("autoplay");
-    if (val === "" || val === "1" || val === "true" || val === "on") {
-      setTimeout(() => {
-        fetch("/stats")
-          .then((res) => res.json())
-          .then((data) => {
-            if (!data.autoplay_enabled) {
-              toggleAutoplay();
-            }
-          })
-          .catch((err) => console.error("Failed to check autoplay state for URL param:", err));
-      }, 5000);
-    }
+  if (isEnabledParam("autoplayOn", "autoplay") || tvModeEnabled) {
+    setTimeout(() => {
+      fetch("/stats")
+        .then((res) => res.json())
+        .then((data) => {
+          if (!data.autoplay_enabled) {
+            toggleAutoplay();
+          }
+        })
+        .catch((err) => console.error("Failed to check autoplay state for URL param:", err));
+    }, 5000);
   }
 
   // 4. Turning on device playback: ?playOnDevice or ?playStream
-  if (params.has("playOnDevice") || params.has("playStream")) {
-    const val = params.has("playOnDevice") ? params.get("playOnDevice") : params.get("playStream");
-    if (val === "" || val === "1" || val === "true" || val === "on") {
-      const triggerDevicePlay = () => {
-        if (!deviceAudio || deviceAudio.paused) {
-          toggleDevicePlayback();
-        }
-      };
-
-      // Try playing immediately
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", triggerDevicePlay);
-      } else {
-        triggerDevicePlay();
+  if (isEnabledParam("playOnDevice", "playStream") || tvModeEnabled) {
+    const triggerDevicePlay = () => {
+      if (!deviceAudio || deviceAudio.paused) {
+        toggleDevicePlayback();
       }
+    };
 
-      // If autoplay was blocked by the browser policy, attach a one-time gesture listener
-      const unlockOnFirstInteraction = () => {
-        if (!deviceAudio || deviceAudio.paused) {
-          toggleDevicePlayback();
-        }
-        window.removeEventListener("pointerdown", unlockOnFirstInteraction);
-        window.removeEventListener("keydown", unlockOnFirstInteraction);
-      };
-
-      window.addEventListener("pointerdown", unlockOnFirstInteraction, { once: true });
-      window.addEventListener("keydown", unlockOnFirstInteraction, { once: true });
+    // Try playing immediately
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", triggerDevicePlay);
+    } else {
+      triggerDevicePlay();
     }
+
+    // If autoplay was blocked by the browser policy, attach a one-time gesture listener
+    const unlockOnFirstInteraction = () => {
+      if (!deviceAudio || deviceAudio.paused) {
+        toggleDevicePlayback();
+      }
+      window.removeEventListener("pointerdown", unlockOnFirstInteraction);
+      window.removeEventListener("keydown", unlockOnFirstInteraction);
+    };
+
+    window.addEventListener("pointerdown", unlockOnFirstInteraction, { once: true });
+    window.addEventListener("keydown", unlockOnFirstInteraction, { once: true });
   }
 })();
 

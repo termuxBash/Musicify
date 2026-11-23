@@ -189,3 +189,29 @@ def test_shutdown_still_powers_off_bose_for_other_owners(monkeypatch):
 
     assert response.status_code == 200
     assert power_off_calls == [True]
+
+
+def test_play_on_tv_opens_configured_url(monkeypatch):
+    app = create_power_app()
+    commands = []
+
+    monkeypatch.setattr(stats.settings, "TV_ADB_IP", "192.168.29.193:5555")
+    monkeypatch.setattr(stats.settings, "APP_PORT", 5000)
+    monkeypatch.setattr(stats, "_get_local_ip", lambda: "192.168.29.157")
+    monkeypatch.setattr(stats, "sleep", lambda _seconds: None)
+
+    def fake_adb(command):
+        commands.append(command)
+        if command[:2] == ["adb", "devices"]:
+            return 0, "192.168.29.193:5555\tdevice\n", ""
+        return 0, "success", ""
+
+    monkeypatch.setattr(stats, "_run_adb_command", fake_adb)
+
+    response = app.test_client().post("/playOnTV")
+
+    assert response.status_code == 200
+    assert response.get_json()["url"] == "http://192.168.29.157:5000/?tv"
+    assert ["adb", "connect", "192.168.29.193:5555"] in commands
+    assert "-d" in commands[-1]
+    assert "http://192.168.29.157:5000/?tv" in commands[-1]

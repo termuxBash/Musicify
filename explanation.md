@@ -215,6 +215,7 @@ Blueprint prefixes are registered in [create_app()](app.py#L47). Routes with no 
 | POST | `/lyrics_effort` | JSON: `lyrics_effort` equal to `LRCLIB`, `LYRICA`, or `GEMINI` | Persists and applies the maximum lyrics lookup stage. [set_lyrics_effort](core/stats.py#L158) |
 | POST | `/toggle_autoplay` | — | Toggles autoplay. [toggle_autoplay](core/stats.py#L178) |
 | POST | `/toggle_incogni` | — | Toggles the in-memory incognito flag used by autoplay/recommendations and by the web UI to choose its queue endpoint. It does not persist the flag. [toggle_incogni](core/stats.py#L189) |
+| POST | `/playOnTV` | — | Connects to `TV_ADB_IP`, detects the server's LAN IP and `APP_PORT`, then opens `http://<server-ip>:<port>/?tv` on the TV with an Android VIEW/BROWSABLE intent. Requires the `adb` system executable and an authorized TV ADB connection. [play_on_tv](core/stats.py) |
 | POST | `/shutdown` | — | Stops player/server and powers off Bose unless radio currently owns playback. [shutdown](core/stats.py#L199) |
 | GET | `/playlists` | — | Returns `.txt` playlist names from `PLAYLIST_DIR`. [playlists](core/stats.py#L222) |
 | POST | `/add_to_playlist` | JSON: `playlist` name and `song` object | Appends a title, title plus source, or special radio URL to a playlist file. A regular song object can provide `title` and `videoId` or `url`; radio items need a `Radio:(...)` title and HTTP(S) `url`. [add_to_playlist](core/stats.py#L238) |
@@ -328,6 +329,7 @@ The separate `extra_data` table is intentionally small: it stores `rick_roll_tim
 | Variable | Use |
 |---|---|
 | `APP_HOST`, `APP_PORT` | Flask bind host and port. Code defaults are `0.0.0.0` and `5000`. |
+| `TV_ADB_IP` | Android TV ADB address in `host:port` form. Default `192.168.29.193:5555`. |
 | `BOSE_IP` | SoundTouch speaker address. |
 | `STREAM_URL` | Primary Icecast URL used for speaker playback. On settings import, the app probes this and configured fallbacks and selects the first URL returning HTTP 200. |
 | `STREAM_FALLBACK_URLS` | Optional comma-separated fallback stream URLs. |
@@ -346,6 +348,12 @@ The separate `extra_data` table is intentionally small: it stores `rick_roll_tim
 | `MUSIC_ATLAS_KEY` | Read into settings and imported by the YouTube routes, but no active use was found in the repository's feature flow. |
 
 `STREAM_URL` fallback selection is performed while `core.settings` is imported, so it may make network requests during application startup. The configured Flask port is used by `app.run`; the informational URL printed in `app.py` is hard-coded and may not match `APP_PORT`.
+
+### Android TV playback
+
+The shared browser URL handler detects Android TV environments from the user agent and pointer/hover/touch capabilities. A detected TV or an enabled `tv` URL parameter runs the same TV mode once: it enables lyrics, opens the Now Playing modal, enables autoplay after the existing delay, starts device playback, and adds `is-tv-layout` to the document root. Individual TV aliases are not executed a second time when `tv` mode is already active.
+
+The Settings **Play on TV** button calls `POST /playOnTV`. The route uses the `TV_ADB_IP` setting, starts or connects ADB, verifies that the device is authorized and connected, determines the server LAN IP, and sends an Android VIEW/BROWSABLE intent for `http://<server-lan-ip>:<APP_PORT>/?tv`. ADB is a system executable and is not provided by `requirements.txt`; install Android Platform Tools and authorize the TV before using this feature.
 
 ### `userconfig.json`
 

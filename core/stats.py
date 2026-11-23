@@ -7,6 +7,8 @@ import os
 import random
 import re
 import signal
+import socket
+import subprocess
 import threading
 from time import sleep
 from urllib.parse import urlparse
@@ -221,6 +223,82 @@ def toggle_incogni():
     return jsonify({
         "status": "success",
         "incogni_mode": current_app.incogni_mode,
+    })
+
+
+def _run_adb_command(command):
+    try:
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10,
+        )
+        return result.returncode, result.stdout, result.stderr
+    except FileNotFoundError:
+        return -1, "", "adb executable not found"
+    except subprocess.TimeoutExpired:
+        return -1, "", "Command timed out"
+
+
+def _get_local_ip():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("8.8.8.8", 80))
+        return sock.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        sock.close()
+
+
+@stats_bp.route("/playOnTV", methods=["POST"])
+def play_on_tv():
+    device_ip = settings.TV_ADB_IP.strip()
+    if not device_ip:
+        return jsonify({"status": "error", "message": "TV_ADB_IP is not configured"}), 400
+
+    _run_adb_command(["adb", "start-server"])
+    connect_code, connect_stdout, connect_stderr = _run_adb_command(
+        ["adb", "connect", device_ip]
+    )
+    if connect_code != 0:
+        return jsonify({
+            "status": "error",
+            "message": connect_stderr.strip() or connect_stdout.strip() or "Failed to connect to the TV",
+        }), 502
+
+    sleep(1.5)
+    _, devices_stdout, devices_stderr = _run_adb_command(["adb", "devices"])
+    if not any(
+        line.split()[:2] == [device_ip, "device"]
+        for line in devices_stdout.splitlines()
+        if line.strip()
+    ):
+        if "unauthorized" in devices_stdout.lower():
+            message = "TV is unauthorized. Accept the ADB prompt on the TV."
+        elif devices_stderr.strip():
+            message = devices_stderr.strip()
+        else:
+            message = f"TV at {device_ip} is not connected"
+        return jsonify({"status": "error", "message": message}), 502
+
+    target_url = f"http://{_get_local_ip()}:{settings.APP_PORT}/?tv"
+    intent_code, intent_stdout, intent_stderr = _run_adb_command([
+        "adb", "-s", device_ip, "shell", "am", "start",
+        "-a", "android.intent.action.VIEW",
+        "-c", "android.intent.category.BROWSABLE",
+        "-d", target_url,
+    ])
+    if intent_code != 0:
+        message = intent_stderr.strip() or intent_stdout.strip() or "Failed to open the website on the TV"
+        return jsonify({"status": "error", "message": message}), 502
+
+    return jsonify({
+        "status": "success",
+        "message": "Opening Musicify on the TV",
+        "url": target_url,
     })
 
 

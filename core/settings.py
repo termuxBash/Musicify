@@ -268,6 +268,7 @@ def get_radio_config():
 #Server settings
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "5000"))
+TV_ADB_IP = os.getenv("TV_ADB_IP", "192.168.29.193:5555")
 
 # Bose SoundTouch settings
 BOSE_IP = os.getenv("BOSE_IP", "192.168.29.234")
