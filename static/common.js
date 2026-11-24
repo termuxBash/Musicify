@@ -1547,6 +1547,21 @@ function getLyricIndexAtTime(lines, elapsedSeconds) {
   return activeIndex;
 }
 
+function getEstimatedLyricIndex(lines, elapsedSeconds, durationSeconds) {
+  if (
+    !Array.isArray(lines) ||
+    lines.length === 0 ||
+    !Number.isFinite(elapsedSeconds) ||
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds <= 0
+  ) {
+    return null;
+  }
+
+  const progress = Math.min(1, Math.max(0, elapsedSeconds / durationSeconds));
+  return Math.min(lines.length - 1, Math.floor(progress * lines.length));
+}
+
 function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
   const modalProgress = document.querySelector(".now-playing-modal-progress");
   const modalProgressFill = document.getElementById("nowPlayingModalProgressFill");
@@ -1598,7 +1613,7 @@ function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
     const offsetSeconds = Number(playbackTimeline.lyricsOffsetMs || 0) / 1000;
     const lyricIndex = hasTimings
       ? getLyricIndexAtTime(lines, safeElapsed + offsetSeconds)
-      : null;
+      : getEstimatedLyricIndex(lines, safeElapsed + offsetSeconds, playbackTimeline.duration);
     renderModalLyrics(
       modalLyrics,
       lines,
@@ -1607,15 +1622,11 @@ function updateNowPlayingTimeline(elapsed, duration, isPlaying) {
       playbackTimeline.radioUrl,
     );
     if (liveLyrics) {
-      if (lines.length > 0 && !hasTimings) {
-        renderLyricText(liveLyrics, "Lyrics available, timing not available");
-      } else {
-        const activeLine =
-          lyricIndex !== null && lines[lyricIndex]
-            ? lines[lyricIndex].text || ""
-            : "";
-        renderLyricText(liveLyrics, activeLine);
-      }
+      const activeLine =
+        lyricIndex !== null && lines[lyricIndex]
+          ? lines[lyricIndex].text || ""
+          : "";
+      renderLyricText(liveLyrics, activeLine);
     }
   }
 
