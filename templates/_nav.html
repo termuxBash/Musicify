@@ -2,7 +2,7 @@
 
 <nav>
     <div class="menu-toggle" onclick="toggleMenu()">☰</div>
-    <a href="/" style="text-decoration:none; margin-right:auto;">
+    <a href="/" style="text-decoration:none;">
         <h3 style="color:var(--spotify-green); margin:0;">{{ page_title }}</h3>
     </a>
 
@@ -16,5 +16,12 @@
         </div>
     </div>
 
-    <div class="system-monitor">CPU: <span id="cpu-load" title="CPU status unavailable" aria-label="CPU status unavailable">🚫️</span></div>
 </nav>
+
+<div class="system-monitor" id="systemMonitor">
+    <div class="system-monitor-cpu">CPU: <span id="cpu-load" title="CPU status unavailable" aria-label="CPU status unavailable">🚫️</span></div>
+    <div class="system-monitor-clock" id="systemMonitorClock" aria-live="polite">
+        <span class="system-monitor-time" id="systemMonitorTime"></span>
+        <span class="system-monitor-date" id="systemMonitorDate"></span>
+    </div>
+</div>

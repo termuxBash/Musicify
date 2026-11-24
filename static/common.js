@@ -672,12 +672,40 @@ function openNowPlaying() {
   const modal = document.getElementById("nowPlayingModal");
   syncNowPlayingBounds();
   modal?.classList.add("open");
+  document.body.classList.add("now-playing-modal-open");
   setupNowPlayingSwipe();
 }
 
 function closeNowPlaying() {
   document.getElementById("nowPlayingModal")?.classList.remove("open");
+  document.body.classList.remove("now-playing-modal-open");
 }
+
+function updateSystemMonitorClock() {
+  const timeEl = document.getElementById("systemMonitorTime");
+  const dateEl = document.getElementById("systemMonitorDate");
+  if (!timeEl || !dateEl) return;
+
+  const now = new Date();
+  const time = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(now);
+  const weekday = new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+  }).format(now);
+  const day = String(now.getDate()).padStart(2, "0");
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const year = now.getFullYear();
+
+  timeEl.textContent = time;
+  dateEl.textContent = `${weekday}, ${day}/${month}/${year}`;
+}
+
+updateSystemMonitorClock();
+window.setInterval(updateSystemMonitorClock, 1000);
 
 function syncNowPlayingBounds() {
   const modal = document.getElementById("nowPlayingModal");
@@ -2036,6 +2064,9 @@ function detectDeviceEnvironment() {
   const tvModeEnabled = tvParamEnabled || diagnostic.device === "TV";
 
   if (diagnostic.device === "TV") {
+    document.documentElement.classList.add("is-tv-layout");
+  }
+  if (tvModeEnabled) {
     document.documentElement.classList.add("is-tv-layout");
   }
 

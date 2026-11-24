@@ -66,12 +66,47 @@ nav {
 }
 
 .system-monitor {
-  margin-left: auto;
+  position: fixed;
+  top: 17px;
+  right: 20px;
+  z-index: 2650;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   font-family: monospace;
   font-size: 0.8rem;
-  background: #2b52;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+.system-monitor-cpu {
   padding: 5px 10px;
   border-radius: 15px;
+  background: #2b52;
+}
+
+.system-monitor-clock {
+  display: none;
+  margin-top: 6px;
+  text-align: right;
+  text-shadow: 0 1px 4px #000;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-monitor-time,
+.system-monitor-date {
+  display: block;
+}
+
+.system-monitor-time {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.system-monitor-date {
+  margin-top: 2px;
+  color: #ddd;
+  font-size: 0.78rem;
 }
 
 /* ==========================================================================
@@ -84,7 +119,7 @@ nav {
   width: 300px;
   height: 100%;
   background: var(--panel-bg);
-  z-index: 2000;
+  z-index: 2700;
   transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 20px;
   box-shadow: 5px 0 15px #0008;
@@ -871,7 +906,7 @@ nav {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   z-index: 3000;
-  padding: 20px;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   box-sizing: border-box;
   opacity: 0;
   transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -887,7 +922,8 @@ nav {
 .settings-modal-card {
   position: relative;
   width: min(92vw, 560px);
-  max-height: calc(100vh - 40px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   background: #18181b;
   border: 1px solid #2e2e38;
   border-radius: 20px;
@@ -915,7 +951,8 @@ nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 5px 20px;
+  padding: 10px 20px;
+  flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
 }
@@ -964,6 +1001,9 @@ nav {
 .settings-modal-body {
   padding: 20px 24px 24px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -1158,15 +1198,20 @@ nav {
 
 @media (max-width: 480px) {
   .settings-modal-overlay {
-    padding: 12px;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   }
   .settings-modal-card {
     width: 100%;
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
     border-radius: 16px;
   }
-  .settings-modal-header,
+  .settings-modal-header {
+    padding: 10px 14px;
+  }
   .settings-modal-body {
-    padding: 16px;
+    padding: 12px 14px 16px;
+    gap: 14px;
   }
   .settings-grid {
     grid-template-columns: 1fr;
@@ -2163,10 +2208,13 @@ body.center-player-page .main.shift {
 }
 
 .nav-settings {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: flex-start;
   gap: 15px;
-  margin-right: 15px;
+  margin: 0;
 }
 
 .nav-setting {
@@ -2356,6 +2404,117 @@ input:checked + .slider:before {
   #vol-slider {
     width: 150px;
   }
+}
+
+html.is-tv-layout .system-monitor {
+  top: 20px;
+  right: 24px;
+  font-size: 1.15rem;
+}
+
+html.is-tv-layout .system-monitor-cpu {
+  padding: 8px 14px;
+  border-radius: 20px;
+}
+
+html.is-tv-layout body.now-playing-modal-open .system-monitor-clock {
+  display: block;
+}
+
+html.is-tv-layout .system-monitor-time {
+  font-size: 1.8rem;
+}
+
+html.is-tv-layout .system-monitor-date {
+  font-size: 1.05rem;
+}
+
+html.is-tv-layout .now-playing-modal {
+  align-items: flex-end;
+  justify-content: center;
+}
+
+html.is-tv-layout .now-playing-modal.open {
+  align-items: flex-end;
+}
+
+html.is-tv-layout .now-playing-modal-card {
+  width: min(calc(100% - 96px), 1200px);
+  max-height: calc(100vh - 60px);
+  height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 20px 32px max(20px, env(safe-area-inset-bottom));
+  border-radius: 24px 24px 0 0;
+  border-bottom: none;
+  overflow: hidden;
+}
+
+html.is-tv-layout .now-playing-modal-card::before {
+  display: none;
+}
+
+html.is-tv-layout .now-playing-modal-close {
+  top: 14px;
+  right: 18px;
+}
+
+html.is-tv-layout .now-playing-modal-thumb {
+  display: block;
+  width: auto;
+  height: clamp(140px, 24vh, 220px);
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 0 auto 10px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+html.is-tv-layout .now-playing-modal-status {
+  margin: 0 0 2px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+html.is-tv-layout .now-playing-modal-card h2 {
+  margin: 0 40px 10px;
+  font-size: 1.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+html.is-tv-layout .now-playing-modal-timeline {
+  margin: 0 0 8px;
+  flex-shrink: 0;
+}
+
+html.is-tv-layout .now-playing-modal-eta {
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+html.is-tv-layout .now-playing-modal-lyrics {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  padding: 14px 20px;
+}
+
+html.is-tv-layout .now-playing-modal-controls {
+  margin-top: 10px;
+  flex-shrink: 0;
+}
+
+html.is-tv-layout .now-playing-lyric-line {
+  min-height: 1.7em;
+  padding: 6px 8px;
+  font-size: clamp(1.25rem, 1.6vw, 1.75rem);
+  line-height: 1.55;
 }
 
 @media (orientation: portrait) {
