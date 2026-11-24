@@ -2072,7 +2072,10 @@ function detectDeviceEnvironment() {
     );
   const diagnostic = detectDeviceEnvironment();
   const tvParamEnabled = isEnabledParam("tv");
-  const tvModeEnabled = tvParamEnabled || diagnostic.device === "TV";
+  const tvMinimalParamEnabled = isEnabledParam("tvm");
+  const tvModeEnabled =
+    tvParamEnabled || tvMinimalParamEnabled || diagnostic.device === "TV";
+  const playbackStartingEnabled = !tvMinimalParamEnabled;
 
   if (diagnostic.device === "TV") {
     document.documentElement.classList.add("is-tv-layout");
@@ -2103,7 +2106,10 @@ function detectDeviceEnvironment() {
   }
 
   // 3. Turning on auto-play after a delay of 5 seconds: ?autoplayOn or ?autoplay
-  if (isEnabledParam("autoplayOn", "autoplay") || tvModeEnabled) {
+  if (
+    (isEnabledParam("autoplayOn", "autoplay") || tvModeEnabled) &&
+    playbackStartingEnabled
+  ) {
     setTimeout(() => {
       fetch("/stats")
         .then((res) => res.json())
@@ -2117,7 +2123,10 @@ function detectDeviceEnvironment() {
   }
 
   // 4. Turning on device playback: ?playOnDevice or ?playStream
-  if (isEnabledParam("playOnDevice", "playStream") || tvModeEnabled) {
+  if (
+    (isEnabledParam("playOnDevice", "playStream") || tvModeEnabled) &&
+    playbackStartingEnabled
+  ) {
     const triggerDevicePlay = () => {
       if (!deviceAudio || deviceAudio.paused) {
         toggleDevicePlayback();
