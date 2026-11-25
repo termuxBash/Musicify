@@ -1761,6 +1761,7 @@ async function updateStats() {
     }
 
     const titleEl = document.getElementById("playing-title");
+    const titleTrackEl = document.getElementById("playing-title-track");
     const titleTextEl = document.getElementById("playing-title-text");
     const thumbEl = document.getElementById("playing-thumb");
     const statusEl = document.getElementById("playing-status");
@@ -1792,11 +1793,26 @@ async function updateStats() {
             ? "BROADCASTING"
             : "PAUSED";
 
-      if (titleEl && titleTextEl) {
+      if (titleEl && titleTrackEl && titleTextEl) {
         titleTextEl.textContent = title;
+        const existingClone = titleTrackEl.querySelector(
+          ".ticker-item[aria-hidden='true']",
+        );
+        if (existingClone) existingClone.remove();
+        titleEl.classList.remove("ticker");
+
         requestAnimationFrame(() => {
-          titleEl.classList.add("ticker");
           const shouldTicker = titleTextEl.scrollWidth > titleEl.clientWidth;
+          if (shouldTicker) {
+            const clone = titleTextEl.cloneNode(true);
+            clone.removeAttribute("id");
+            clone.setAttribute("aria-hidden", "true");
+            titleTrackEl.appendChild(clone);
+            const duration = Math.max(9, +(titleTextEl.scrollWidth / 40).toFixed(1));
+            titleTrackEl.style.animationDuration = `${duration}s`;
+          } else {
+            titleTrackEl.style.animationDuration = "";
+          }
           titleEl.classList.toggle("ticker", shouldTicker);
         });
       }
@@ -1817,6 +1833,13 @@ async function updateStats() {
       if (modalStatusEl) modalStatusEl.textContent = playbackStatus;
     } else {
       if (titleTextEl) titleTextEl.textContent = "Ready to stream";
+      if (titleTrackEl) {
+        const existingClone = titleTrackEl.querySelector(
+          ".ticker-item[aria-hidden='true']",
+        );
+        if (existingClone) existingClone.remove();
+        titleTrackEl.style.animationDuration = "";
+      }
       if (titleEl) titleEl.classList.remove("ticker");
       if (thumbEl) thumbEl.src = defaultSpeakerThumb;
       if (statusEl) statusEl.textContent = "IDLE";

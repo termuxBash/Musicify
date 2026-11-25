@@ -1695,8 +1695,19 @@ body.center-player-page .main.shift {
   justify-content: center;
   padding: 10px 15px;
   z-index: 1000;
-  transition: height 0.2s ease;
+  transition: height 0.2s ease, left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   touch-action: none;
+}
+
+#sidePanel.open ~ * .player-bar,
+body:has(#sidePanel.open) .player-bar {
+  left: 300px;
+  width: calc(100% - 300px);
+}
+
+.now-playing-info {
+  overflow: hidden;
+  min-width: 0;
 }
 
 .player-bar::before {
@@ -1762,7 +1773,12 @@ body.center-player-page .main.shift {
   text-overflow: ellipsis;
 }
 
-.now-playing-info h4 span {
+.now-playing-info h4 .ticker-track {
+  display: block;
+  max-width: 100%;
+}
+
+.now-playing-info h4 .ticker-item {
   display: inline-block;
   overflow: hidden;
   max-width: 100%;
@@ -1770,12 +1786,19 @@ body.center-player-page .main.shift {
   white-space: nowrap;
 }
 
-.now-playing-info h4.ticker span {
+.now-playing-info h4.ticker .ticker-track {
+  display: flex;
+  max-width: none;
+  width: max-content;
+  animation: now-playing-ticker 9s linear infinite;
+}
+
+.now-playing-info h4.ticker .ticker-item {
+  flex-shrink: 0;
   max-width: none;
   overflow: visible;
   padding-right: 40px;
   text-overflow: clip;
-  animation: now-playing-ticker 9s linear infinite;
 }
 
 .now-playing-info p {
@@ -1986,13 +2009,11 @@ body.center-player-page .main.shift {
 }
 
 @keyframes now-playing-ticker {
-  0%,
-  12% {
+  from {
     transform: translateX(0);
   }
-  88%,
-  100% {
-    transform: translateX(-100%);
+  to {
+    transform: translateX(-50%);
   }
 }
 
@@ -2285,6 +2306,10 @@ input:checked + .slider:before {
   .main.shift {
     margin-left: 0;
   }
+  body:has(#sidePanel.open) .player-bar {
+    left: 0;
+    width: 100%;
+  }
 }
 
 @media (max-width: 540px) {
@@ -2372,11 +2397,30 @@ input:checked + .slider:before {
     margin-left: 350px;
     margin-right: auto;
   }
-  .player-bar {
+  /* Override the global sidePanel.open shift — panel is always visible here */
+  .player-bar,
+  #sidePanel.open ~ * .player-bar,
+  body:has(#sidePanel.open) .player-bar {
     left: 350px;
     width: calc(100% - 350px);
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr;
+    align-items: center;
     height: 90px;
+  }
+  .player-bar #live-lyrics {
+    grid-column: 1 / -1;
+  }
+  .player-bar .player-top {
+    grid-column: 1;
+    width: auto;
+    min-width: 0;
+    margin-bottom: 0;
+  }
+  .player-bar .player-bottom {
+    grid-column: 2;
+    width: auto;
   }
   #vol-slider {
     width: 150px;
@@ -2398,8 +2442,30 @@ input:checked + .slider:before {
     display: flex;
   }
   .player-bar {
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr;
+    align-items: center;
     height: 90px;
+  }
+  /* When side panel is open at this breakpoint, shift player bar past its full width */
+  #sidePanel.open ~ * .player-bar,
+  body:has(#sidePanel.open) .player-bar {
+    left: 350px;
+    width: calc(100% - 350px);
+  }
+  .player-bar #live-lyrics {
+    grid-column: 1 / -1;
+  }
+  .player-bar .player-top {
+    grid-column: 1;
+    width: auto;
+    min-width: 0;
+    margin-bottom: 0;
+  }
+  .player-bar .player-bottom {
+    grid-column: 2;
+    width: auto;
   }
   #vol-slider {
     width: 150px;
