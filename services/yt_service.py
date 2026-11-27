@@ -75,7 +75,7 @@ class YTService:
     def resolve_stream_info(youtube_url):
 
         with YoutubeDL({
-            "format": "bestaudio",
+            "format": "wa[ext=m4a]/ba[ext=m4a]",
             "quiet": True,
             'nocheckcertificate': True,
             "remote_components": ["ejs:github"],

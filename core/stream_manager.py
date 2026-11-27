@@ -54,6 +54,7 @@ class QueuePlayer:
         self._playback_elapsed = 0.0
         self._current_duration = None
         self._playback_started_monotonic = None
+        self._current_stream_stop_event = None
 
     def _bump_playback_generation(self):
         with self.lock:
@@ -135,6 +136,10 @@ class QueuePlayer:
 
     def skip(self):
         self._bump_playback_generation()
+        with self.lock:
+            stop_event = self._current_stream_stop_event
+        if stop_event is not None:
+            stop_event.set()
         if hasattr(self.ffmpeg, "clear_buffer"):
             try:
                 self.ffmpeg.clear_buffer()
@@ -297,6 +302,177 @@ class QueuePlayer:
             )
         if hasattr(self.ffmpeg, "cleanup_cache"):
             self.ffmpeg.cleanup_cache(keep_paths=keep_paths)
+
+    def _is_m4a_file(self, path):
+        return (
+            isinstance(path, str)
+            and path.lower().endswith(".m4a")
+            and os.path.isfile(path)
+            and os.path.getsize(path) > 0
+        )
+
+    def _should_use_aac_mode(self, song):
+        """Use ADTS AAC zero-reencode mode for online songs and .m4a files; default to ogg otherwise."""
+        if not isinstance(song, dict):
+            return isinstance(song, str) and song.lower().endswith(".m4a")
+        if song.get("source_url") or song.get("videoId"):
+            return True
+        for field in ("cache_path", "url"):
+            value = song.get(field)
+            if isinstance(value, str):
+                lower = value.lower()
+                if lower.endswith(".m4a") or lower.startswith(("http://", "https://")):
+                    return True
+        return False
+
+    def _trigger_bose_stream(self):
+        if self.bose and self.bose.get_status()["is_on"]:
+            try:
+                playing_info = self.bose.get_playing_url()
+                # Only re-initiate stream on Bose if it's not already playing our mount
+                if not (playing_info and playing_info.get("url") == STREAM_URL):
+                    self.bose.trigger_upnp_stream(STREAM_URL)
+            except Exception as bose_err:
+                logger.warning(f"Bose check error: {bose_err}")
+                self.bose.trigger_upnp_stream(STREAM_URL)
+
+    def _stream_m4a_track(self, song, song_generation):
+        """
+        Stream a cached or local .m4a file directly with zero re-encoding.
+        For uncached YouTube tracks, loop silence.m4a while precaching finishes.
+        Returns True if handled via .m4a direct streaming, False to fall back to start_decoder.
+        """
+        if not hasattr(self.ffmpeg, "stream_m4a_to_publisher"):
+            return False
+
+        cache_path = song.get("cache_path") if isinstance(song, dict) else None
+        if not self._is_m4a_file(cache_path) and hasattr(self.ffmpeg, "find_cached_song"):
+            found = self.ffmpeg.find_cached_song(song)
+            if self._is_m4a_file(found):
+                cache_path = found
+                song["cache_path"] = found
+
+        if not self._is_m4a_file(cache_path):
+            local_url = song.get("url") if isinstance(song, dict) else None
+            if self._is_m4a_file(local_url):
+                cache_path = local_url
+
+        skip_event = threading.Event()
+        with self.lock:
+            self._current_stream_stop_event = skip_event
+
+        try:
+            if not self._is_m4a_file(cache_path):
+                is_youtube = isinstance(song, dict) and (
+                    song.get("source_url") or song.get("videoId")
+                )
+                if not (is_youtube and hasattr(self.ffmpeg, "precache_song")):
+                    return False
+
+                track_ready_event = threading.Event()
+                precache_result = {}
+
+                def _run_precache():
+                    try:
+                        res = self.ffmpeg.precache_song(song)
+                        if isinstance(res, dict):
+                            precache_result.update(res)
+                    except Exception as err:
+                        logger.warning("On-demand precache failed for '%s': %s", song.get("title", "Unknown"), err)
+                    finally:
+                        track_ready_event.set()
+
+                threading.Thread(target=_run_precache, daemon=True, name="musicify-gap-precache").start()
+                if hasattr(self.ffmpeg, "stream_silence_adts"):
+                    wait_stop = threading.Event()
+
+                    def _watch_ready():
+                        while not wait_stop.is_set():
+                            if track_ready_event.is_set() or skip_event.is_set() or not self.running:
+                                wait_stop.set()
+                                return
+                            time.sleep(0.05)
+
+                    threading.Thread(target=_watch_ready, daemon=True).start()
+                    self.ffmpeg.stream_silence_adts(wait_stop)
+                    wait_stop.set()
+                else:
+                    silence_path = getattr(self.ffmpeg, "silence_m4a", None)
+                    if silence_path and os.path.isfile(str(silence_path)):
+                        while self.running and not track_ready_event.is_set() and not skip_event.is_set():
+                            with self.lock:
+                                if self._playback_generation != song_generation:
+                                    skip_event.set()
+                                    break
+                            wait_stop = threading.Event()
+
+                            def _watch_ready():
+                                while not wait_stop.is_set():
+                                    if track_ready_event.is_set() or skip_event.is_set() or not self.running:
+                                        wait_stop.set()
+                                        return
+                                    time.sleep(0.05)
+
+                            threading.Thread(target=_watch_ready, daemon=True).start()
+                            self.ffmpeg.stream_m4a_to_publisher(str(silence_path), wait_stop)
+                            wait_stop.set()
+                    else:
+                        while self.running and not track_ready_event.is_set() and not skip_event.is_set():
+                            with self.lock:
+                                if self._playback_generation != song_generation:
+                                    skip_event.set()
+
+                                    break
+                            track_ready_event.wait(0.1)
+
+                if skip_event.is_set() or not self.running:
+                    return True
+
+                cache_path = precache_result.get("path")
+                if not self._is_m4a_file(cache_path):
+                    return False
+                song["cache_path"] = cache_path
+                self._active_cache_path = cache_path
+                if isinstance(precache_result.get("duration"), (int, float)):
+                    song["_duration"] = precache_result["duration"]
+                    self._current_duration = precache_result["duration"]
+
+            if self._current_duration is None and hasattr(self.ffmpeg, "get_media_duration"):
+                self._current_duration = self.ffmpeg.get_media_duration(cache_path)
+
+            self._trigger_bose_stream()
+
+            playback_started = False
+            start_mono = time.monotonic()
+
+            def _on_bytes(_byte_count):
+                nonlocal playback_started
+                with self.lock:
+                    if self._playback_generation != song_generation:
+                        skip_event.set()
+                        return
+                self._playback_elapsed = time.monotonic() - start_mono
+                self._monitor_precache()
+                if not playback_started:
+                    with self.lock:
+                        if self._playback_generation != song_generation:
+                            skip_event.set()
+                            return
+                        self.current_song = song
+                    playback_started = True
+                    from core.stats import record_played_song
+                    record_played_song(song)
+
+            self.ffmpeg.stream_m4a_to_publisher(cache_path, skip_event, on_bytes=_on_bytes)
+            return True
+        finally:
+            with self.lock:
+                if self._current_stream_stop_event is skip_event:
+                    self._current_stream_stop_event = None
+                self.current_song = None
+                identity = self._song_identity(song)
+                if self._ready_cache.get(identity) == song.get("cache_path"):
+                    self._ready_cache.pop(identity, None)
 
     def _get_next_song(self):
         with self.lock:
@@ -639,6 +815,12 @@ class QueuePlayer:
             try:
                 logger.info(f"Playing: {song.get('title', 'Unknown')}")
                 target = song
+                if hasattr(self.ffmpeg, "stream_m4a_to_publisher"):
+                    desired_mode = "aac" if self._should_use_aac_mode(target) else "ogg"
+                    if hasattr(self.ffmpeg, "ensure_publisher"):
+                        self.ffmpeg.ensure_publisher(mode=desired_mode)
+                    if desired_mode == "aac" and self._stream_m4a_track(target, song_generation):
+                        continue
                 if self._current_duration is None and hasattr(self.ffmpeg, "get_media_duration"):
                     duration_target = (
                         target.get("cache_path")

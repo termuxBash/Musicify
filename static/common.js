@@ -556,7 +556,7 @@ let deviceAudio = null;
 function getIcecastStreamUrl() {
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
-  return `${protocol}//${hostname}:8000/mpv.ogg`;
+  return `${protocol}//${hostname}:8000/mpv.m4a`;
 }
 
 function updateDevicePlayPauseBtn(isPlaying) {

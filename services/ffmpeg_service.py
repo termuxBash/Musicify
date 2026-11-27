@@ -21,7 +21,8 @@ from core import settings
 
 logger = logging.getLogger(__name__)
 
-ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.ogg"
+ICECAST_URL = "icecast://source:hackme@127.0.0.1:8000/mpv.m4a"
+DEFAULT_SILENCE_M4A = Path(__file__).resolve().parent.parent / "silence.m4a"
 CHUNK_SIZE = 17640
 CHUNK_DURATION = 0.1
 SILENCE_CHUNK = bytes(CHUNK_SIZE)
@@ -69,18 +70,25 @@ def _log_process_stderr(process, label, redacted_values=(), is_decoder=False):
 
 
 class FFmpegService:
-    def __init__(self, icecast_url=ICECAST_URL, cache_dir=None):
+    def __init__(self, icecast_url=ICECAST_URL, cache_dir=None, silence_m4a=None, publisher_mode="ogg"):
         self.icecast_url = icecast_url
         self.publisher_process = None
+        self.publisher_mode = publisher_mode if publisher_mode in {"aac", "ogg"} else "ogg"
         self._publisher_lock = threading.RLock()
         self._last_publisher_start = 0.0
         self.cache_dir = Path(cache_dir).expanduser() if cache_dir else self._default_cache_dir()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.silence_m4a = (
+            Path(silence_m4a).expanduser() if silence_m4a else DEFAULT_SILENCE_M4A
+        )
+        self._silence_adts_bytes = None
+        self._silence_duration = 1.0
 
         # Dedicated audio buffer queue for decoupled, continuous real-time pumping
         self._audio_queue = queue.Queue(maxsize=30)  # holds ~0.7s of audio buffer
         self._pump_thread = None
         self._pump_stop_event = threading.Event()
+        self._direct_stream_active = threading.Event()
 
     def _default_cache_dir(self):
         configured_dir = getattr(settings, "DOWNLOAD_DIR", None)
@@ -143,7 +151,7 @@ class FFmpegService:
             "--quiet", "--no-warnings", "--no-check-certificates",
             "--remote-components", "ejs:github",
             "--no-part", "--no-playlist",
-            "--format", "bestaudio",
+            "--format", "wa[ext=m4a]/ba[ext=m4a]",
             "--restrict-filenames",
             "--paths", str(self.cache_dir),
             "--output", output_template,
@@ -276,36 +284,150 @@ class FFmpegService:
         except OSError as error:
             logger.warning("Could not clean cache directory %s: %s", self.cache_dir, error)
 
-    def start_publisher(self):
-        """Starts a persistent FFmpeg publisher process streaming to Icecast and ensures the pump is running."""
-        with self._publisher_lock:
-            self._stop_publisher_process()
-
-            cmd = [
+    def _publisher_cmd(self, mode=None):
+        active_mode = mode or self.publisher_mode
+        if active_mode == "aac":
+            return [
                 "ffmpeg",
                 "-hide_banner",
                 "-loglevel", "error",
-                "-f", "s16le",
-                "-ar", "44100",
-                "-ac", "2",
+                "-f", "aac",
                 "-i", "pipe:0",
                 "-vn",
-                "-threads", "1",
-                "-c:a", "libvorbis",
-                "-qscale:a", "3",
-                "-ac", "2",
-                "-ar", "44100",
-                "-content_type", "application/ogg",
-                "-f", "ogg",
-                self.icecast_url
+                "-c:a", "copy",
+                "-content_type", "audio/aac",
+                "-f", "adts",
+                self.icecast_url,
             ]
+        return [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-f", "s16le",
+            "-ar", "44100",
+            "-ac", "2",
+            "-i", "pipe:0",
+            "-vn",
+            "-threads", "1",
+            "-c:a", "libvorbis",
+            "-qscale:a", "3",
+            "-ac", "2",
+            "-ar", "44100",
+            "-content_type", "application/ogg",
+            "-f", "ogg",
+            self.icecast_url,
+        ]
 
-            logger.info("Starting persistent FFmpeg publisher to Icecast (%s)", self.icecast_url)
+    @staticmethod
+    def _extract_adts_slice(raw_adts: bytes, max_frames: int = 4):
+        """Return up to `max_frames` complete ADTS frames and their duration in seconds."""
+        pos = 0
+        count = 0
+        total = len(raw_adts)
+        while pos + 7 <= total and count < max_frames:
+            if raw_adts[pos] != 0xFF or (raw_adts[pos + 1] & 0xF0) != 0xF0:
+                break
+            frame_len = (
+                ((raw_adts[pos + 3] & 0x03) << 11)
+                | (raw_adts[pos + 4] << 3)
+                | ((raw_adts[pos + 5] & 0xE0) >> 5)
+            )
+            if frame_len < 7 or pos + frame_len > total:
+                break
+            pos += frame_len
+            count += 1
+        if count > 0:
+            return raw_adts[:pos], (count * 1024.0) / 44100.0
+        return raw_adts, CHUNK_DURATION
+
+    def _get_silence_adts(self):
+        """Return a short (~0.09s) cached ADTS AAC silence chunk extracted from silence.m4a."""
+        if self._silence_adts_bytes is not None:
+            return self._silence_adts_bytes, self._silence_duration
+
+        if self.silence_m4a.is_file():
+            try:
+                result = subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-hide_banner",
+                        "-loglevel", "error",
+                        "-i", str(self.silence_m4a),
+                        "-vn",
+                        "-c:a", "copy",
+                        "-f", "adts",
+                        "pipe:1",
+                    ],
+                    capture_output=True,
+                    timeout=10,
+                )
+                if result.returncode == 0 and result.stdout:
+                    chunk, duration = self._extract_adts_slice(result.stdout, max_frames=4)
+                    self._silence_adts_bytes = chunk
+                    self._silence_duration = duration
+                    return self._silence_adts_bytes, self._silence_duration
+            except (OSError, subprocess.TimeoutExpired) as error:
+                logger.warning("Could not extract ADTS from %s: %s", self.silence_m4a, error)
+
+        return SILENCE_CHUNK, CHUNK_DURATION
+
+    def stream_silence_adts(self, stop_event: threading.Event):
+        """Stream short (~0.09s) ADTS silence chunks at 1.0x pace until stop_event is set."""
+        if not self.ensure_publisher(mode="aac"):
+            return False
+
+        chunk, step_duration = self._get_silence_adts()
+        self._direct_stream_active.set()
+        next_time = time.monotonic()
+        try:
+            while not stop_event.is_set():
+                with self._publisher_lock:
+                    if (
+                        self.publisher_process
+                        and self.publisher_process.poll() is None
+                        and self.publisher_process.stdin
+                    ):
+                        self.publisher_process.stdin.write(chunk)
+                        self.publisher_process.stdin.flush()
+                    else:
+                        break
+                next_time += step_duration
+                sleep_time = next_time - time.monotonic()
+                if sleep_time > 0:
+                    stop_event.wait(sleep_time)
+                elif sleep_time < -0.5:
+                    next_time = time.monotonic()
+        except (BrokenPipeError, OSError) as e:
+            logger.warning("Publisher pipe error while streaming ADTS silence: %s", e)
+        finally:
+            self._direct_stream_active.clear()
+        return True
+
+    def start_publisher(self, mode=None):
+        """Starts a persistent FFmpeg publisher process streaming to Icecast and ensures the pump is running."""
+        with self._publisher_lock:
+            if mode in {"aac", "ogg"}:
+                self.publisher_mode = mode
+            self._stop_publisher_process()
+
+            cmd = self._publisher_cmd(self.publisher_mode)
+
+            logger.info(
+                "Starting persistent FFmpeg publisher (%s) to Icecast (%s)",
+                self.publisher_mode,
+                self.icecast_url,
+            )
             self.publisher_process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 preexec_fn=os.setsid
+            )
+            _log_process_stderr(
+                self.publisher_process,
+                "FFmpeg publisher",
+                (self.icecast_url,),
+                is_decoder=False,
             )
             self._last_publisher_start = time.monotonic()
 
@@ -334,11 +456,20 @@ class FFmpegService:
         next_time = time.monotonic()
 
         while not self._pump_stop_event.is_set():
-            # Get next audio chunk from queue or fall back to pure silence
+            if self._direct_stream_active.is_set():
+                time.sleep(0.05)
+                next_time = time.monotonic()
+                continue
+
+            # Get next audio chunk from queue or fall back to mode-appropriate silence
             try:
                 chunk = self._audio_queue.get_nowait()
+                step_duration = CHUNK_DURATION
             except queue.Empty:
-                chunk = SILENCE_CHUNK
+                if self.publisher_mode == "aac":
+                    chunk, step_duration = self._get_silence_adts()
+                else:
+                    chunk, step_duration = SILENCE_CHUNK, CHUNK_DURATION
 
             with self._publisher_lock:
                 if self.publisher_process is None or self.publisher_process.poll() is not None:
@@ -358,7 +489,7 @@ class FFmpegService:
                         self._stop_publisher_process()
 
             # Pace to exact real-time duration
-            next_time += CHUNK_DURATION
+            next_time += step_duration
             now = time.monotonic()
             sleep_time = next_time - now
             if sleep_time > 0:
@@ -369,12 +500,64 @@ class FFmpegService:
 
         logger.info("Audio pump thread stopped.")
 
-    def ensure_publisher(self):
-        """Ensures that the persistent FFmpeg publisher process and pump thread are alive."""
+    def stream_m4a_to_publisher(self, m4a_path: str, stop_event: threading.Event, on_bytes=None):
+        """Streams an existing .m4a file as ADTS into the persistent publisher with zero re-encoding."""
+        if not self.ensure_publisher(mode="aac"):
+            return False
+
+        demux_proc = subprocess.Popen(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel", "error",
+                "-re",
+                "-i", str(m4a_path),
+                "-vn",
+                "-c:a", "copy",
+                "-f", "adts",
+                "pipe:1",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setsid,
+        )
+        _log_process_stderr(demux_proc, f"ADTS demuxer for {Path(m4a_path).name}", is_decoder=True)
+
+        self._direct_stream_active.set()
+        wrote_any = False
+        try:
+            while not stop_event.is_set() and demux_proc.stdout:
+                data = demux_proc.stdout.read(4096)
+                if not data:
+                    break
+                with self._publisher_lock:
+                    if (
+                        self.publisher_process
+                        and self.publisher_process.poll() is None
+                        and self.publisher_process.stdin
+                    ):
+                        self.publisher_process.stdin.write(data)
+                        self.publisher_process.stdin.flush()
+                        wrote_any = True
+                if on_bytes:
+                    on_bytes(len(data))
+        except (BrokenPipeError, OSError) as e:
+            logger.warning("Publisher pipe error while streaming %s: %s", m4a_path, e)
+        finally:
+            self._direct_stream_active.clear()
+            self.kill_process(demux_proc)
+        return wrote_any
+
+    def ensure_publisher(self, mode=None):
+        """Ensures that the persistent FFmpeg publisher process and pump thread are alive in the requested mode."""
         with self._publisher_lock:
+            mode_changed = mode in {"aac", "ogg"} and mode != self.publisher_mode
+            if mode_changed:
+                self.clear_buffer()
+                return self.start_publisher(mode=mode)
             if self.publisher_process is None or self.publisher_process.poll() is not None:
                 if time.monotonic() - self._last_publisher_start >= 1.0:
-                    return self.start_publisher()
+                    return self.start_publisher(mode=mode)
             self._ensure_pump_thread()
             return self.publisher_process
 
@@ -383,14 +566,16 @@ class FFmpegService:
             return self.publisher_process is not None and self.publisher_process.poll() is None
 
     def write_pcm(self, data: bytes, timeout: float = 2.0) -> bool:
-        """Pushes raw PCM audio bytes to the pump's audio queue."""
+        """Pushes audio bytes to the pump's audio queue without dropping frames on backpressure."""
         self.ensure_publisher()
-        try:
-            self._audio_queue.put(data, timeout=timeout)
-            return True
-        except queue.Full:
-            logger.warning("Audio queue full; dropped PCM chunk.")
-            return False
+        while not self._pump_stop_event.is_set():
+            try:
+                self._audio_queue.put(data, timeout=timeout)
+                return True
+            except queue.Full:
+                if not self.is_publisher_alive():
+                    return False
+        return False
 
     def clear_buffer(self):
         """Purges any buffered audio (e.g. when skipping tracks)."""
@@ -463,7 +648,7 @@ class FFmpegService:
                     f"youtube:player_client={settings.YOUTUBE_PLAYER_CLIENT}",
                 ])
             yt_dlp_cmd.extend([
-                "--format", "bestaudio",
+                "--format", "wa[ext=m4a]/ba[ext=m4a]",
                 "--output", "-", source_url,
             ])
             source_process = subprocess.Popen(
@@ -493,10 +678,27 @@ class FFmpegService:
             if referer:
                 header_args.extend(["-referer", str(referer)])
 
+        if self.publisher_mode == "aac":
+            output_args = [
+                "-c:a", "aac",
+                "-ar", "44100",
+                "-ac", "2",
+                "-f", "adts",
+                "pipe:1",
+            ]
+        else:
+            output_args = [
+                "-f", "s16le",
+                "-ar", "44100",
+                "-ac", "2",
+                "pipe:1",
+            ]
+
         cmd = [
             "ffmpeg",
             "-hide_banner",
             "-loglevel", "error",
+            "-re",
             *header_args,
             *(
                 [
@@ -511,10 +713,7 @@ class FFmpegService:
             "-vn",
             "-af", "dynaudnorm=f=500:g=5:m=10:p=0.95",
             "-threads", "1",
-            "-f", "s16le",
-            "-ar", "44100",
-            "-ac", "2",
-            "pipe:1"
+            *output_args,
         ]
 
         decoder = subprocess.Popen(
