@@ -69,24 +69,38 @@ def stats():
         current_song = getattr(current_app, "radio_now_playing", None)
     current_title = current_song.get("title") if current_song else None
     lyrics_title = current_title if not radio_is_active else None
+    local_lyrics = local_is_active or bool(
+        current_song and current_song.get("_local_override")
+    )
+    lyrics_local_path = None
+    if local_lyrics and current_song:
+        lyrics_local_path = current_song.get("local_path") or current_song.get("url")
+    lyrics_video_id = current_song.get("videoId") if current_song else None
     
     # Reference the service tied directly to current_app context
     lyrics_svc = current_app.lyrics_service
 
     # Check if a new track started playing
-    lyrics_context = (playback_owner, lyrics_title)
+    lyrics_context = (
+        playback_owner,
+        lyrics_title,
+        lyrics_local_path,
+        lyrics_video_id,
+    )
     if getattr(current_app, "last_known_lyrics_context", None) != lyrics_context:
         current_app.last_known_lyrics_context = lyrics_context
         current_app.last_known_title = lyrics_title
-        if local_is_active:
-            lyrics_svc.reset(lyrics_title, max_effort="LRCLIB")
-        else:
-            lyrics_svc.reset(lyrics_title)
+        lyrics_svc.reset(
+            lyrics_title,
+            max_effort="LRCLIB" if local_lyrics else None,
+            local_path=lyrics_local_path,
+            video_id=lyrics_video_id,
+        )
     # If paused, shift back the clock baseline so lyrics don't keep running ahead
     if not is_playing and lyrics_svc.song_start_time is not None:
         lyrics_svc.shift_timeline(2)  # Match front-end poll loop interval
 
-    lyrics_source = "local" if local_is_active else "online"
+    lyrics_source = "local" if local_lyrics else "online"
     lyrics_state = lyrics_svc.get_lyrics_state(lyrics_source)
     show_lyrics = lyrics_svc.enabled and not radio_is_active
     if radio_is_active:
@@ -124,7 +138,21 @@ def toggle_lyrics():
         current_song = current_app.player.status().get("current_song")
         current_title = current_song.get("title") if current_song else None
         current_app.last_known_title = current_title
-        lyrics_svc.reset(current_title)
+        owner = current_app.playback.owner
+        local_lyrics = owner == "local" or bool(
+            current_song and current_song.get("_local_override")
+        )
+        local_path = (
+            (current_song.get("local_path") or current_song.get("url"))
+            if local_lyrics and current_song
+            else None
+        )
+        lyrics_svc.reset(
+            current_title,
+            max_effort="LRCLIB" if local_lyrics else None,
+            local_path=local_path,
+            video_id=current_song.get("videoId") if current_song else None,
+        )
     return jsonify({
         "status": "success",
         "show_lyrics": lyrics_svc.enabled and current_app.playback.owner != "radio"

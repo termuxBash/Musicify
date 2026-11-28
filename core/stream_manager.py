@@ -9,6 +9,7 @@ import threading
 import time
 import logging
 import os
+import sqlite3
 import urllib.request
 import json
 from core.settings import DEFAULT_AUTOPLAY_ENABLED, STREAM_URL, get_system_prompt
@@ -80,10 +81,6 @@ class QueuePlayer:
         with self.lock:
             self.queue.clear()
             self.current_song = None
-            cache_paths = list(self._ready_cache.values())
-        for cache_path in cache_paths:
-            if hasattr(self.ffmpeg, "clear_cached_song"):
-                self.ffmpeg.clear_cached_song(cache_path)
         self._ready_cache.clear()
         self._active_cache_path = None
         self._playback_elapsed = 0.0
@@ -113,12 +110,8 @@ class QueuePlayer:
         with self.lock:
             if 0 <= index < len(self.queue):
                 song = self.queue.pop(index)
-                cache_path = song.get("cache_path")
                 identity = self._song_identity(song)
                 self._ready_cache.pop(identity, None)
-                if cache_path:
-                    if hasattr(self.ffmpeg, "clear_cached_song"):
-                        self.ffmpeg.clear_cached_song(cache_path)
                 return song
         return None
 
@@ -209,6 +202,8 @@ class QueuePlayer:
     def _mark_precache_status(self, song, status, cache_path=None, duration=None):
         identity = self._song_identity(song)
         with self.lock:
+            if song.get("_local_override"):
+                return
             song["_precache_status"] = status
             if cache_path:
                 song["cache_path"] = cache_path
@@ -258,10 +253,16 @@ class QueuePlayer:
             if not self.queue:
                 return
             song = self.queue[0]
+        self._prefer_local_version(song)
+        with self.lock:
+            if not self.queue or self.queue[0] is not song:
+                return
             status = song.get("_precache_status")
             if status in {"downloading", "ready", "error"}:
                 return
-            if not (song.get("source_url") or song.get("videoId")):
+            if song.get("_local_override") or not (
+                song.get("source_url") or song.get("videoId")
+            ):
                 return
 
             song["_precache_status"] = "downloading"
@@ -281,14 +282,6 @@ class QueuePlayer:
             and self._current_duration - elapsed <= PRECACHE_REMAINING_SECONDS
         ):
             self._ensure_next_precache()
-
-    def _cleanup_finished_cache(self, song):
-        cache_path = song.get("cache_path") if isinstance(song, dict) else None
-        if cache_path:
-            if hasattr(self.ffmpeg, "clear_cached_song"):
-                self.ffmpeg.clear_cached_song(cache_path)
-            if self._active_cache_path == cache_path:
-                self._active_cache_path = None
 
     def _cleanup_old_cache(self):
         keep_paths = []
@@ -315,7 +308,9 @@ class QueuePlayer:
         """Use ADTS AAC zero-reencode mode for online songs and .m4a files; default to ogg otherwise."""
         if not isinstance(song, dict):
             return isinstance(song, str) and song.lower().endswith(".m4a")
-        if song.get("source_url") or song.get("videoId"):
+        if not song.get("_local_override") and (
+            song.get("source_url") or song.get("videoId")
+        ):
             return True
         for field in ("cache_path", "url"):
             value = song.get(field)
@@ -324,6 +319,34 @@ class QueuePlayer:
                 if lower.endswith(".m4a") or lower.startswith(("http://", "https://")):
                     return True
         return False
+
+    def _prefer_local_version(self, song):
+        """Replace a queued YouTube target with its known local file when available."""
+        if not isinstance(song, dict) or song.get("_local_override"):
+            return
+        video_id = song.get("videoId")
+        if not video_id:
+            return
+        try:
+            from core.history_db import get_preferred_local_path
+
+            local_path = get_preferred_local_path(video_id, song.get("title"))
+        except (OSError, sqlite3.Error) as error:
+            logger.warning(
+                "Could not look up local copy for '%s': %s",
+                song.get("title", "Unknown"),
+                error,
+            )
+            return
+        if local_path and os.path.isfile(local_path):
+            song["url"] = local_path
+            song["local_path"] = local_path
+            song["_local_override"] = True
+            song["_precache_status"] = "skipped_local"
+            song.pop("cache_path", None)
+            song.pop("_duration", None)
+            with self.lock:
+                self._ready_cache.pop(self._song_identity(song), None)
 
     def _trigger_bose_stream(self):
         if self.bose and self.bose.get_status()["is_on"]:
@@ -346,7 +369,11 @@ class QueuePlayer:
             return False
 
         cache_path = song.get("cache_path") if isinstance(song, dict) else None
-        if not self._is_m4a_file(cache_path) and hasattr(self.ffmpeg, "find_cached_song"):
+        if (
+            not (isinstance(song, dict) and song.get("_local_override"))
+            and not self._is_m4a_file(cache_path)
+            and hasattr(self.ffmpeg, "find_cached_song")
+        ):
             found = self.ffmpeg.find_cached_song(song)
             if self._is_m4a_file(found):
                 cache_path = found
@@ -363,7 +390,7 @@ class QueuePlayer:
 
         try:
             if not self._is_m4a_file(cache_path):
-                is_youtube = isinstance(song, dict) and (
+                is_youtube = isinstance(song, dict) and not song.get("_local_override") and (
                     song.get("source_url") or song.get("videoId")
                 )
                 if not (is_youtube and hasattr(self.ffmpeg, "precache_song")):
@@ -478,7 +505,9 @@ class QueuePlayer:
         with self.lock:
             if not self.queue:
                 return None
-            return self.queue.pop(0)
+            song = self.queue.pop(0)
+        self._prefer_local_version(song)
+        return song
 
     def _get_icecast_listeners(self):
         """Fetches the active listener count from Icecast's JSON endpoint."""
@@ -509,6 +538,7 @@ class QueuePlayer:
 
     def _trigger_autoplay(self, reference_song):
         """Generates lookahead track additions using Last.fm recommendations or local shuffles."""
+        self._cleanup_old_cache()
         full_title = reference_song.get("title", "Unknown")
         song_url = reference_song.get("url", "")
 
@@ -696,7 +726,6 @@ class QueuePlayer:
             queue_empty_since = None
             publisher_stopped_for_idle = False
 
-            previous_cache_path = self._active_cache_path
             next_cache_path = song.get("cache_path") if isinstance(song, dict) else None
             if isinstance(next_cache_path, str) and not os.path.isfile(next_cache_path):
                 logger.warning(
@@ -708,18 +737,11 @@ class QueuePlayer:
                 with self.lock:
                     self._ready_cache.pop(identity, None)
                 next_cache_path = None
-            if (
-                isinstance(previous_cache_path, str)
-                and previous_cache_path != next_cache_path
-                and hasattr(self.ffmpeg, "clear_cached_song")
-            ):
-                self.ffmpeg.clear_cached_song(previous_cache_path)
             self._active_cache_path = (
                 next_cache_path
                 if isinstance(next_cache_path, str)
                 else None
             )
-            self._cleanup_old_cache()
             self._playback_elapsed = 0.0
             self._current_duration = (
                 song.get("_duration")

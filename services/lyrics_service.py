@@ -6,6 +6,7 @@ import sqlite3
 import threading
 import time
 import unicodedata
+from pathlib import Path
 
 import requests
 
@@ -13,7 +14,13 @@ from google import genai  # type: ignore
 from google.genai import types as genai_types  # type: ignore
 
 from core import settings
-from core.history_db import get_lyrics_cache, log_gemini_usage, save_lyrics_cache
+from core.history_db import (
+    get_lyrics_cache,
+    log_gemini_usage,
+    save_lyrics_cache,
+    upsert_local_song,
+    upsert_song,
+)
 from services.lastfm_service import resolve_track
 
 logger = logging.getLogger(__name__)
@@ -158,7 +165,7 @@ class LyricsService:
         self._lock = threading.Lock()
         self._generation = 0
 
-    def reset(self, song_title, max_effort=None):
+    def reset(self, song_title, max_effort=None, local_path=None, video_id=None):
         """Reset the timeline and fetch lyrics asynchronously for a new track."""
         with self._lock:
             self._generation += 1
@@ -173,7 +180,7 @@ class LyricsService:
 
         threading.Thread(
             target=self._load_lyrics,
-            args=(song_title, generation, max_effort),
+            args=(song_title, generation, max_effort, local_path, video_id),
             daemon=True,
         ).start()
 
@@ -200,14 +207,19 @@ class LyricsService:
                 self.current_lyrics = lyrics
                 self.lyrics_source = source
 
-    def _load_lyrics(self, song_title, generation, max_effort=None):
+    def _load_lyrics(
+        self, song_title, generation, max_effort=None, local_path=None, video_id=None
+    ):
         with self._lock:
             lyrics_effort = self.lyrics_effort
         max_step = settings.LYRICS_EFFORT_LEVELS.index(lyrics_effort)
         if max_effort is not None:
             max_step = min(max_step, settings.LYRICS_EFFORT_LEVELS.index(max_effort))
 
-        clean_query = re.sub(r"\(.*?\)|\[.*?\]", "", song_title)
+        query_title = song_title
+        if local_path and Path(song_title).name == Path(local_path).name:
+            query_title = Path(local_path).stem
+        clean_query = re.sub(r"\(.*?\)|\[.*?\]", "", query_title)
         clean_query = re.sub(
             r"official music video|official video|video|lyrics",
             "",
@@ -223,8 +235,32 @@ class LyricsService:
             cache_artist = None
             cache_track = query
 
+        song_row_id = None
         try:
-            cached = get_lyrics_cache(cache_track, cache_artist)
+            if video_id:
+                song_row_id = upsert_song(
+                    video_id,
+                    song_title,
+                    track_name=cache_track,
+                    artist_name=cache_artist,
+                    local_path=local_path,
+                )
+            elif local_path:
+                song_row_id = upsert_local_song(
+                    local_path,
+                    song_title,
+                    track_name=cache_track,
+                    artist_name=cache_artist,
+                )
+        except (OSError, sqlite3.Error) as error:
+            logger.warning("Could not register song for lyrics %s: %s", query, error)
+
+        try:
+            cached = get_lyrics_cache(
+                cache_track,
+                cache_artist,
+                song_id=song_row_id,
+            )
         except (OSError, RuntimeError, sqlite3.Error) as error:
             logger.warning("Lyrics cache lookup failed for %s: %s", query, error)
             cached = None
@@ -238,6 +274,28 @@ class LyricsService:
         if not track:
             logger.warning("Could not resolve a track for lyrics: %s", query)
             return
+
+        if local_path or video_id:
+            try:
+                if video_id:
+                    song_row_id = upsert_song(
+                        video_id,
+                        song_title,
+                        track_name=track,
+                        artist_name=artist,
+                        local_path=local_path,
+                    )
+                else:
+                    song_row_id = upsert_local_song(
+                        local_path,
+                        song_title,
+                        track_name=track,
+                        artist_name=artist,
+                    )
+            except (OSError, sqlite3.Error) as error:
+                logger.warning(
+                    "Could not update song metadata for lyrics %s: %s", query, error
+                )
 
         best_lines = []
         best_source = None
@@ -316,7 +374,13 @@ class LyricsService:
 
         if best_lines and best_source:
             try:
-                save_lyrics_cache(cache_track, cache_artist, best_lines, best_source)
+                save_lyrics_cache(
+                    cache_track,
+                    cache_artist,
+                    best_lines,
+                    best_source,
+                    song_id=song_row_id,
+                )
             except (OSError, RuntimeError, sqlite3.Error) as error:
                 logger.warning("Could not cache lyrics for %s: %s", query, error)
 

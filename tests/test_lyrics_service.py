@@ -55,8 +55,10 @@ class LyricsServiceTests(unittest.TestCase):
             song_start_time = None
             lyrics_effort = "GEMINI"
 
-            def reset(self, title, max_effort=None):
-                self.reset_args = (title, max_effort)
+            def reset(
+                self, title, max_effort=None, local_path=None, video_id=None
+            ):
+                self.reset_args = (title, max_effort, local_path, video_id)
 
             def get_lyrics_state(self, source="online"):
                 self.offset_source = source
@@ -65,7 +67,10 @@ class LyricsServiceTests(unittest.TestCase):
         app = Flask(__name__)
         app.register_blueprint(stats_bp)
         app.player = SimpleNamespace(status=lambda: {
-            "current_song": {"title": "Local song"},
+            "current_song": {
+                "title": "Local song",
+                "url": "/music/local-song.mp3",
+            },
             "queue": [],
             "playing": True,
             "autoplay_enabled": False,
@@ -81,7 +86,10 @@ class LyricsServiceTests(unittest.TestCase):
         response = app.test_client().get("/stats")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(app.lyrics_service.reset_args, ("Local song", "LRCLIB"))
+        self.assertEqual(
+            app.lyrics_service.reset_args,
+            ("Local song", "LRCLIB", "/music/local-song.mp3", None),
+        )
         self.assertEqual(app.lyrics_service.offset_source, "local")
         self.assertEqual(app.lyrics_service.lyrics_effort, "GEMINI")
         self.assertEqual(response.json["lyrics_effort"], "GEMINI")

@@ -20,9 +20,10 @@ def test_init_db_creates_canonical_schema(tmp_path, monkeypatch):
             row["name"] for row in conn.execute("PRAGMA table_info(songs)").fetchall()
         }
         assert {
-            "id", "work_key", "youtube_id", "local_path", "preferred_source",
+            "id", "work_key", "youtube_id", "local_path",
             "track_name", "artist_name", "album_name", "duration_ms", "tags",
         } <= song_columns
+        assert "preferred_source" not in song_columns
 
     with history_db.get_lyrics_connection() as conn:
         lyric_tables = {
@@ -59,6 +60,46 @@ def test_history_entry_links_to_canonical_song(tmp_path, monkeypatch):
 
     assert song["youtube_id"] == "nZXRV4MezEw"
     assert song["track_name"] == "Cher - Believe"
+
+
+def test_local_song_merges_with_youtube_song_and_keeps_local_path(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(history_db, "PLAYLIST_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        history_db,
+        "_read_local_song_metadata",
+        lambda _path: {"duration_ms": 238000},
+    )
+    history_db.init_db()
+    local_path = str(tmp_path / "Believe.mp3")
+
+    local_id = history_db.upsert_local_song(
+        local_path,
+        "Believe.mp3",
+        track_name="Believe",
+        artist_name="Cher",
+    )
+    youtube_id = history_db.upsert_song(
+        "nZXRV4MezEw",
+        "Cher - Believe Official Video",
+        track_name="Believe",
+        artist_name="Cher",
+        duration_ms=0,
+    )
+
+    assert youtube_id == local_id
+    assert history_db.get_preferred_local_path(
+        "nZXRV4MezEw", "Cher - Believe"
+    ) == local_path
+    with history_db.get_connection() as conn:
+        song = conn.execute(
+            "SELECT youtube_id, local_path, duration_ms FROM songs WHERE id = ?",
+            (local_id,),
+        ).fetchone()
+    assert song["youtube_id"] == "nZXRV4MezEw"
+    assert song["local_path"] == local_path
+    assert song["duration_ms"] == 238000
 
 
 def test_deleting_last_history_reference_deletes_song(

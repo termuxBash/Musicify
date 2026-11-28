@@ -98,40 +98,45 @@ def test_lrclib_result_is_cached_when_no_higher_effort_is_requested(
     )
 
 
-def test_legacy_lyrics_are_moved_to_separate_compressed_database(
+def test_fetched_local_lyrics_register_the_local_file_and_link_cache(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(history_db, "PLAYLIST_DIR", str(tmp_path))
+    monkeypatch.setattr(history_db, "PLAYLIST_DIR", str(tmp_path / "db"))
     history_db.init_db()
-    with history_db.get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE lyrics (
-                id INTEGER PRIMARY KEY,
-                song_id INTEGER,
-                work_key TEXT NOT NULL UNIQUE,
-                lyrics TEXT,
-                source TEXT,
-                updated_at INTEGER
-            )
-        """)
-        conn.execute(
-            """
-            INSERT INTO lyrics (song_id, work_key, lyrics, source, updated_at)
-            VALUES (NULL, ?, ?, ?, ?)
-            """,
-            (
-                "artist track",
-                '[{"time":3.0,"text":"Previously cached"}]',
-                "Lyrica",
-                123,
-            ),
-        )
-
-    assert history_db.get_lyrics_cache("Track", "Artist") == (
-        [(3.0, "Previously cached")],
-        "Lyrica",
+    local_path = tmp_path / "Track.mp3"
+    local_path.write_bytes(b"local audio placeholder")
+    monkeypatch.setattr(
+        lyrics_service.LyricsService,
+        "_resolve_artist_and_track",
+        staticmethod(lambda _query: ("Artist", "Track")),
     )
+    monkeypatch.setattr(
+        lyrics_service.requests,
+        "get",
+        lambda *_args, **_kwargs: FakeResponse([{
+            "syncedLyrics": "[00:02.00] Local song lyric",
+            "plainLyrics": "Local song lyric",
+        }]),
+    )
+
+    service = lyrics_service.LyricsService(lyrics_effort="LRCLIB")
+    service._load_lyrics(
+        "Track.mp3",
+        0,
+        local_path=str(local_path),
+    )
+
     with history_db.get_connection() as conn:
-        assert conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='lyrics'"
-        ).fetchone() is None
+        song = conn.execute(
+            "SELECT id, local_path, work_key FROM songs WHERE local_path = ?",
+            (str(local_path),),
+        ).fetchone()
+    with history_db.get_lyrics_connection() as conn:
+        lyric = conn.execute(
+            "SELECT song_id FROM lyrics_db.lyrics WHERE work_key = ?",
+            ("track",),
+        ).fetchone()
+
+    assert song["local_path"] == str(local_path)
+    assert song["work_key"] == "artist track"
+    assert lyric["song_id"] == song["id"]

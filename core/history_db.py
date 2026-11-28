@@ -1,8 +1,8 @@
-"""core.history_db - SQLite-backed playback history manager for Musicify
-Manages history tables, CRUD operations, auto-migration, and timestamp conversions in history.sqlite3.
-"""
+"""core.history_db - SQLite-backed playback history manager for Musicify."""
 
+import subprocess
 import os
+import json
 import re
 import sqlite3
 import threading
@@ -218,7 +218,6 @@ def _ensure_core_schema():
                 youtube_id TEXT,
                 youtube_title TEXT,
                 local_path TEXT,
-                preferred_source TEXT NOT NULL DEFAULT 'youtube',
                 track_name TEXT NOT NULL,
                 artist_name TEXT,
                 album_name TEXT,
@@ -243,7 +242,7 @@ def _ensure_core_schema():
 
 
 def _ensure_lyrics_schema(conn):
-    """Create the compressed lyric table and move any legacy rows into it."""
+    """Create the compressed lyric table in the attached lyrics database."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS lyrics_db.lyrics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -254,58 +253,6 @@ def _ensure_lyrics_schema(conn):
             updated_at INTEGER NOT NULL DEFAULT (unixepoch())
         )
     """)
-
-    legacy_table = conn.execute("""
-        SELECT 1 FROM main.sqlite_master
-        WHERE type = 'table' AND name = 'lyrics'
-    """).fetchone()
-    if not legacy_table:
-        return
-
-    legacy_rows = conn.execute("""
-        SELECT song_id, work_key, lyrics, source, updated_at
-        FROM main.lyrics
-    """).fetchall()
-    conn.execute("SAVEPOINT migrate_lyrics")
-    try:
-        for row in legacy_rows:
-            lyrics = row["lyrics"]
-            if isinstance(lyrics, str):
-                lyrics_bytes = lyrics.encode("utf-8")
-            elif lyrics is None:
-                lyrics_bytes = None
-            else:
-                lyrics_bytes = bytes(lyrics)
-            compressed = zlib.compress(lyrics_bytes) if lyrics_bytes is not None else None
-            conn.execute("""
-                INSERT INTO lyrics_db.lyrics
-                    (song_id, work_key, lyrics, source, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(work_key) DO NOTHING
-            """, (
-                row["song_id"], row["work_key"], compressed,
-                row["source"], row["updated_at"],
-            ))
-
-            migrated = conn.execute("""
-                SELECT lyrics FROM lyrics_db.lyrics WHERE work_key = ?
-            """, (row["work_key"],)).fetchone()
-            migrated_bytes = (
-                zlib.decompress(migrated["lyrics"])
-                if migrated and migrated["lyrics"] is not None
-                else None
-            )
-            if migrated_bytes != lyrics_bytes:
-                raise RuntimeError(
-                    f"Could not verify migrated lyrics for {row['work_key']!r}"
-                )
-
-        conn.execute("DROP TABLE main.lyrics")
-        conn.execute("RELEASE migrate_lyrics")
-    except Exception:
-        conn.execute("ROLLBACK TO migrate_lyrics")
-        conn.execute("RELEASE migrate_lyrics")
-        raise
 
 
 def _attach_lyrics_database(conn):
@@ -346,7 +293,7 @@ def create_table(table_name):
     ``song_id`` carries a UNIQUE constraint so that the same YouTube video
     can never produce two rows in the same table regardless of how the song
     name was spelled at record time. ``song_pk`` links the row to the canonical
-    songs table while retaining the legacy YouTube ID column.
+    songs table while retaining the YouTube ID column.
     """
     clean = _safe_table(table_name, allow_create=True)
     _ensure_core_schema()
@@ -362,11 +309,6 @@ def create_table(table_name):
                 FOREIGN KEY (song_pk) REFERENCES songs(id) ON DELETE CASCADE
             );
         """)
-        existing_columns = {
-            row["name"] for row in conn.execute(f'PRAGMA table_info("{clean}")').fetchall()
-        }
-        if "song_pk" not in existing_columns:
-            conn.execute(f'ALTER TABLE "{clean}" ADD COLUMN song_pk INTEGER REFERENCES songs(id) ON DELETE CASCADE')
         conn.execute("""
             INSERT OR IGNORE INTO history_tables (table_name)
             VALUES (?);
@@ -390,7 +332,7 @@ def get_all_tables():
             WHERE type='table'
               AND name NOT LIKE 'sqlite_%'
               AND name NOT IN (
-                  'extra_data', 'gemini_usage', 'songs', 'lyrics', 'history_tables'
+                  'extra_data', 'gemini_usage', 'songs', 'history_tables'
               )
             ORDER BY name;
         """)
@@ -408,50 +350,6 @@ def init_db():
     active = get_active_table()
     if active != "history":
         create_table(active)
-
-    with get_connection() as conn:
-        table_rows = conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        ).fetchall()
-        for table_row in table_rows:
-            table_name = table_row["name"]
-            if table_name in (
-                "songs", "lyrics", "history_tables", "extra_data",
-                "gemini_usage",
-            ):
-                continue
-            if not _SAFE_TABLE_RE.fullmatch(table_name):
-                continue
-            conn.execute(
-                "INSERT OR IGNORE INTO history_tables (table_name) VALUES (?)",
-                (table_name,),
-            )
-        conn.commit()
-
-    registry = get_all_registered_tables()
-    for table_name in registry:
-        with get_connection() as conn:
-            columns = {
-                row["name"] for row in conn.execute(
-                    f'PRAGMA table_info("{table_name}")'
-                ).fetchall()
-            }
-            if "song_id" not in columns or "song_pk" not in columns:
-                continue
-            rows = conn.execute(
-                f'SELECT id, song_name, song_id FROM "{table_name}" '
-                'WHERE song_pk IS NULL'
-            ).fetchall()
-        for row in rows:
-            song_pk = upsert_song(row["song_id"], row["song_name"])
-            if song_pk is not None:
-                with get_connection() as conn:
-                    conn.execute(
-                        f'UPDATE "{table_name}" SET song_pk = ? WHERE id = ?',
-                        (song_pk, row["id"]),
-                    )
-                    conn.commit()
 
     # Initialize extra_data table for tracking blacklisted attempts
     with get_connection() as conn:
@@ -472,7 +370,7 @@ def _normalize_work_key(track_name, artist_name=None):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def get_lyrics_cache(track_name, artist_name=None):
+def get_lyrics_cache(track_name, artist_name=None, song_id=None):
     """Return cached lyric lines and their provider for a normalized work key."""
     import json
 
@@ -489,6 +387,17 @@ def get_lyrics_cache(track_name, artist_name=None):
             """,
             (work_key,),
         ).fetchone()
+        if row is None and song_id is not None:
+            row = conn.execute(
+                """
+                SELECT lyrics, source
+                FROM lyrics_db.lyrics
+                WHERE song_id = ?
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (song_id,),
+            ).fetchone()
     if not row or not row["lyrics"]:
         return None
 
@@ -509,7 +418,7 @@ def get_lyrics_cache(track_name, artist_name=None):
     return lyric_lines, row["source"] or "Cached"
 
 
-def save_lyrics_cache(track_name, artist_name, lyric_lines, source):
+def save_lyrics_cache(track_name, artist_name, lyric_lines, source, song_id=None):
     """Persist lyric lines as compact JSON under a normalized work key."""
     import json
 
@@ -524,10 +433,12 @@ def save_lyrics_cache(track_name, artist_name, lyric_lines, source):
     ).encode("utf-8")
     compressed = zlib.compress(payload)
     with get_lyrics_connection() as conn:
-        song = conn.execute(
-            "SELECT id FROM songs WHERE work_key = ? LIMIT 1",
-            (work_key,),
-        ).fetchone()
+        if song_id is None:
+            song = conn.execute(
+                "SELECT id FROM songs WHERE work_key = ? LIMIT 1",
+                (work_key,),
+            ).fetchone()
+            song_id = song["id"] if song else None
         conn.execute("""
             INSERT INTO lyrics_db.lyrics
                 (song_id, work_key, lyrics, source, updated_at)
@@ -538,7 +449,7 @@ def save_lyrics_cache(track_name, artist_name, lyric_lines, source):
                 source = excluded.source,
                 updated_at = unixepoch()
         """, (
-            song["id"] if song else None,
+            song_id,
             work_key,
             compressed,
             source,
@@ -548,8 +459,7 @@ def save_lyrics_cache(track_name, artist_name, lyric_lines, source):
 
 
 def upsert_song(video_id, title, track_name=None, artist_name=None, album_name=None,
-                duration_ms=None, listeners=None, tags=None, preferred_source="youtube",
-                local_path=None):
+                duration_ms=None, listeners=None, tags=None, local_path=None):
     """Insert or update a canonical song and return its stable integer ID."""
     _ensure_core_schema()
     sid = normalize_video_id(video_id)
@@ -566,29 +476,43 @@ def upsert_song(video_id, title, track_name=None, artist_name=None, album_name=N
 
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT id FROM songs WHERE youtube_id = ?",
+            "SELECT id, local_path FROM songs WHERE youtube_id = ?",
             (sid,),
         ).fetchone()
+        if row is None:
+            row = conn.execute(
+                """
+                SELECT id, local_path FROM songs
+                WHERE work_key = ?
+                ORDER BY local_path IS NOT NULL DESC, id
+                LIMIT 1
+                """,
+                (work_key,),
+            ).fetchone()
         if row:
             song_id = row["id"]
+            known_local_path = row["local_path"] or local_path
+            if known_local_path and os.path.isfile(known_local_path):
+                local_metadata = _read_local_song_metadata(known_local_path)
+                duration_ms = local_metadata.get("duration_ms") or duration_ms
             conn.execute("""
                 UPDATE songs
                 SET work_key = COALESCE(NULLIF(?, ''), work_key),
+                    youtube_id = COALESCE(youtube_id, ?),
                     youtube_title = COALESCE(NULLIF(?, ''), youtube_title),
                     local_path = COALESCE(?, local_path),
-                    preferred_source = ?,
                     track_name = COALESCE(NULLIF(?, ''), track_name),
                     artist_name = COALESCE(?, artist_name),
                     album_name = COALESCE(?, album_name),
-                    duration_ms = COALESCE(?, duration_ms),
+                    duration_ms = COALESCE(NULLIF(?, 0), duration_ms),
                     listeners = COALESCE(?, listeners),
                     tags = CASE WHEN ? <> '[]' THEN ? ELSE tags END
                 WHERE id = ?
             """, (
                 work_key,
+                sid,
                 title,
                 local_path,
-                preferred_source,
                 resolved_track,
                 artist_name,
                 album_name,
@@ -601,15 +525,14 @@ def upsert_song(video_id, title, track_name=None, artist_name=None, album_name=N
         else:
             cursor = conn.execute("""
                 INSERT INTO songs (
-                    work_key, youtube_id, youtube_title, local_path, preferred_source,
+                    work_key, youtube_id, youtube_title, local_path,
                     track_name, artist_name, album_name, duration_ms, listeners, tags
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 work_key,
                 sid,
                 title,
                 local_path,
-                preferred_source,
                 resolved_track,
                 artist_name,
                 album_name,
@@ -620,6 +543,150 @@ def upsert_song(video_id, title, track_name=None, artist_name=None, album_name=N
             song_id = cursor.lastrowid
         conn.commit()
         return song_id
+
+
+def _read_local_song_metadata(path):
+    """Read duration and common tags from a local media file using ffprobe."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-show_entries",
+                "format=duration:format_tags=artist,title,album:stream_tags=artist,title,album",
+                "-of", "json", path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            return {}
+        payload = json.loads(result.stdout or "{}")
+    except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+        logger.debug("Could not read local media metadata from %s: %s", path, error)
+        return {}
+
+    metadata = {}
+    format_data = payload.get("format")
+    if isinstance(format_data, dict):
+        try:
+            duration_seconds = float(format_data.get("duration"))
+            if duration_seconds > 0:
+                metadata["duration_ms"] = round(duration_seconds * 1000)
+        except (TypeError, ValueError):
+            pass
+        tags = format_data.get("tags")
+        if isinstance(tags, dict):
+            normalized_tags = {str(key).lower(): value for key, value in tags.items()}
+            for key, field in (("artist", "artist_name"), ("album", "album_name")):
+                if isinstance(normalized_tags.get(key), str):
+                    metadata[field] = normalized_tags[key]
+    return metadata
+
+
+def upsert_local_song(local_path, title, track_name=None, artist_name=None,
+                      album_name=None, duration_ms=None, listeners=None, tags=None):
+    """Store a local file and merge it with a matching YouTube-only song."""
+    if not isinstance(local_path, str) or not local_path.strip():
+        return None
+
+    path = os.path.abspath(os.path.expanduser(local_path.strip()))
+    media_metadata = (
+        _read_local_song_metadata(path)
+        if duration_ms is None or artist_name is None or album_name is None
+        else {}
+    )
+    if duration_ms is None:
+        duration_ms = media_metadata.get("duration_ms")
+    if artist_name is None:
+        artist_name = media_metadata.get("artist_name")
+    if album_name is None:
+        album_name = media_metadata.get("album_name")
+    resolved_track = (track_name or title or "").strip()
+    work_key = _normalize_work_key(resolved_track, artist_name)
+    if not work_key or not resolved_track:
+        return None
+
+    import json
+    tags_json = json.dumps(tags if isinstance(tags, list) else [])
+    _ensure_core_schema()
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM songs WHERE local_path = ?",
+            (path,),
+        ).fetchone()
+        if row is None:
+            row = conn.execute(
+                """
+                SELECT id FROM songs
+                WHERE work_key = ?
+                ORDER BY local_path IS NOT NULL DESC, id
+                LIMIT 1
+                """,
+                (work_key,),
+            ).fetchone()
+
+        if row:
+            song_id = row["id"]
+            conn.execute("""
+                UPDATE songs
+                SET work_key = ?,
+                    youtube_title = COALESCE(NULLIF(?, ''), youtube_title),
+                    local_path = ?,
+                    track_name = ?,
+                    artist_name = COALESCE(?, artist_name),
+                    album_name = COALESCE(?, album_name),
+                    duration_ms = COALESCE(?, duration_ms),
+                    listeners = COALESCE(?, listeners),
+                    tags = CASE WHEN ? <> '[]' THEN ? ELSE tags END
+                WHERE id = ?
+            """, (
+                work_key, title, path, resolved_track, artist_name, album_name,
+                duration_ms, listeners, tags_json, tags_json, song_id,
+            ))
+        else:
+            cursor = conn.execute("""
+                INSERT INTO songs (
+                    work_key, local_path, track_name,
+                    youtube_title, artist_name, album_name, duration_ms,
+                    listeners, tags
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                work_key, path, resolved_track, title, artist_name, album_name,
+                duration_ms, listeners if listeners is not None else 0, tags_json,
+            ))
+            song_id = cursor.lastrowid
+        conn.commit()
+        return song_id
+
+
+def get_preferred_local_path(video_id=None, title=None):
+    """Return a known local file for a YouTube song or normalized work title."""
+    sid = normalize_video_id(video_id)
+    work_key = _normalize_work_key(title or "")
+    _ensure_core_schema()
+    with get_connection() as conn:
+        row = None
+        if sid:
+            row = conn.execute(
+                """
+                SELECT local_path FROM songs
+                WHERE youtube_id = ? AND local_path IS NOT NULL
+                """,
+                (sid,),
+            ).fetchone()
+        if row is None and work_key:
+            row = conn.execute(
+                """
+                SELECT local_path FROM songs
+                WHERE work_key = ? AND local_path IS NOT NULL
+                ORDER BY id
+                LIMIT 1
+                """,
+                (work_key,),
+            ).fetchone()
+    return row["local_path"] if row else None
 
 
 def record_played_song(song, table_name=None):
@@ -673,6 +740,7 @@ def record_played_song(song, table_name=None):
         duration_ms=metadata.get("duration_ms"),
         listeners=metadata.get("listeners"),
         tags=metadata.get("tags"),
+        local_path=song.get("local_path"),
     )
 
     with get_connection() as conn:
