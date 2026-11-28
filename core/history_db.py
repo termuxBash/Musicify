@@ -346,6 +346,8 @@ def get_all_tables():
 def init_db():
     """Initialize canonical song tables, registry, and default history table."""
     _ensure_core_schema()
+    with get_lyrics_connection() as conn:
+        conn.commit()
     create_table("history")
     active = get_active_table()
     if active != "history":

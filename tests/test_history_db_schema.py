@@ -6,6 +6,7 @@ def test_init_db_creates_canonical_schema(tmp_path, monkeypatch):
 
     history_db.init_db()
 
+    assert (tmp_path / history_db.LYRICS_DB_FILENAME).is_file()
     with history_db.get_connection() as conn:
         tables = {
             row["name"]
