@@ -38,6 +38,20 @@ def test_init_db_creates_canonical_schema(tmp_path, monkeypatch):
         ).fetchall()[3]["type"] == "BLOB"
 
 
+def test_get_all_tables_uses_registered_tables(tmp_path, monkeypatch):
+    monkeypatch.setattr(history_db, "PLAYLIST_DIR", str(tmp_path))
+    history_db.init_db()
+    history_db.create_table("registered_playlist")
+    with history_db.get_connection() as conn:
+        conn.execute("CREATE TABLE unregistered_table (id INTEGER)")
+        conn.commit()
+
+    tables = history_db.get_all_tables()
+
+    assert "registered_playlist" in tables
+    assert "unregistered_table" not in tables
+
+
 def test_history_entry_links_to_canonical_song(tmp_path, monkeypatch):
     monkeypatch.setattr(history_db, "PLAYLIST_DIR", str(tmp_path))
     monkeypatch.setattr(history_db, "LASTFM_KEY", "", raising=False)

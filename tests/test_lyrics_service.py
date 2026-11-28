@@ -56,9 +56,20 @@ class LyricsServiceTests(unittest.TestCase):
             lyrics_effort = "GEMINI"
 
             def reset(
-                self, title, max_effort=None, local_path=None, video_id=None
+                self,
+                title,
+                max_effort=None,
+                local_path=None,
+                video_id=None,
+                incognito_mode=False,
             ):
-                self.reset_args = (title, max_effort, local_path, video_id)
+                self.reset_args = (
+                    title,
+                    max_effort,
+                    local_path,
+                    video_id,
+                    incognito_mode,
+                )
 
             def get_lyrics_state(self, source="online"):
                 self.offset_source = source
@@ -77,7 +88,7 @@ class LyricsServiceTests(unittest.TestCase):
         })
         app.playback = SimpleNamespace(owner="local")
         app.lyrics_service = FakeLyricsService()
-        app.incogni_mode = False
+        app.incogni_mode = True
         app.last_known_title = None
         get_status.return_value = SimpleNamespace(
             get_json=lambda: {"volume": 0, "is_on": False, "power_state": "off"}
@@ -88,7 +99,7 @@ class LyricsServiceTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             app.lyrics_service.reset_args,
-            ("Local song", "LRCLIB", "/music/local-song.mp3", None),
+            ("Local song", "LRCLIB", "/music/local-song.mp3", None, True),
         )
         self.assertEqual(app.lyrics_service.offset_source, "local")
         self.assertEqual(app.lyrics_service.lyrics_effort, "GEMINI")
@@ -431,6 +442,24 @@ class LyricsServiceTests(unittest.TestCase):
         self.assertEqual(result, "Konnichiwa | Hello\nSekai | World")
         call_kwargs = mock_client.models.generate_content.call_args
         self.assertIn("romanized lyrics | English translation", call_kwargs.kwargs["contents"])
+
+    @patch("services.lyrics_service.settings.GEMINI_API_KEY", "test-key")
+    @patch("services.lyrics_service.genai.Client")
+    @patch("services.lyrics_service.log_gemini_usage")
+    def test_incognito_romanization_skips_usage_logging(
+        self, mock_log_usage, mock_client_cls
+    ):
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.text = "Romanized | English"
+        mock_response.usage_metadata = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        result = romanize_lyrics("こんにちは", record_usage=False)
+
+        self.assertEqual(result, "Romanized | English")
+        mock_log_usage.assert_not_called()
 
     @patch("services.lyrics_service.resolve_track", return_value=("Rick Astley", "Never Gonna Give You Up"))
     @patch("services.lyrics_service.LASTFM_KEY", "test-key")

@@ -337,10 +337,11 @@ function closeSettingsMenu() {
   document.body.classList.remove("modal-open");
 }
 
-async function playOnTV() {
+async function playOnTV(withAudio = true) {
   showPopup("Connecting to TV...");
   try {
-    const res = await fetch("/playOnTV", { method: "POST" });
+    const url = withAudio ? "/playOnTV" : "/playOnTV?tvm";
+    const res = await fetch(url, { method: "POST" });
     const data = await res.json();
     if (res.ok) {
       showPopup(data.message || "Opening Musicify on the TV...");

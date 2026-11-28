@@ -185,7 +185,6 @@ class GeminiUsageTests(unittest.TestCase):
         self.assertEqual(res, "Romanized | English")
         mock_log_usage.assert_called_once_with(mock_usage, source_code=1)
 
-
 if __name__ == "__main__":
     unittest.main()
 

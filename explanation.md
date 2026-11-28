@@ -214,7 +214,7 @@ Blueprint prefixes are registered in [create_app()](app.py#L47). Routes with no 
 | POST | `/lyrics_offset` | JSON: integer `offset_ms`; optional `source` (`online` or `local`, default `online`) | Persists and applies one source's lyric offset. [set_lyrics_offset](core/stats.py#L132) |
 | POST | `/lyrics_effort` | JSON: `lyrics_effort` equal to `LRCLIB`, `LYRICA`, or `GEMINI` | Persists and applies the maximum lyrics lookup stage. [set_lyrics_effort](core/stats.py#L158) |
 | POST | `/toggle_autoplay` | — | Toggles autoplay. [toggle_autoplay](core/stats.py#L178) |
-| POST | `/toggle_incogni` | — | Toggles the in-memory incognito flag used by autoplay/recommendations and by the web UI to choose its queue endpoint. It does not persist the flag. [toggle_incogni](core/stats.py#L189) |
+| POST | `/toggle_incogni` | — | Toggles the in-memory incognito flag used by autoplay/recommendations and by the web UI to choose its queue endpoint. Lyric lookups still read cached lyrics but do not register songs, cache fetched lyrics, or log Gemini usage while enabled. It does not persist the flag. [toggle_incogni](core/stats.py#L189) |
 | POST | `/playOnTV` | — | Connects to `TV_ADB_IP`, detects the server's LAN IP and `APP_PORT`, then opens `http://<server-ip>:<port>/?tv` on the TV with an Android VIEW/BROWSABLE intent. Requires the `adb` system executable and an authorized TV ADB connection. [play_on_tv](core/stats.py) |
 | POST | `/shutdown` | — | Stops player/server and powers off Bose unless radio currently owns playback. [shutdown](core/stats.py#L199) |
 | GET | `/playlists` | — | Returns `.txt` playlist names from `PLAYLIST_DIR`. [playlists](core/stats.py#L222) |
@@ -351,9 +351,9 @@ The separate `extra_data` table is intentionally small: it stores `rick_roll_tim
 
 ### Android TV playback
 
-The shared browser URL handler detects Android TV environments from the user agent and pointer/hover/touch capabilities. A detected TV or an enabled `tv` URL parameter runs the same TV mode once: it enables lyrics, opens the Now Playing modal, enables autoplay after the existing delay, starts device playback, and adds `is-tv-layout` to the document root. Individual TV aliases are not executed a second time when `tv` mode is already active.
+The shared browser URL handler detects Android TV environments from the user agent and pointer/hover/touch capabilities. A detected TV or an enabled `tv`/`tvm` URL parameter enables TV layout and opens the Now Playing modal. `tv` also enables autoplay after the existing delay and starts device playback, while `tvm` leaves audio playback stopped. Individual TV aliases are not executed a second time when TV mode is already active.
 
-The Settings **Play on TV** button calls `POST /playOnTV`. The route uses the `TV_ADB_IP` setting, starts or connects ADB, verifies that the device is authorized and connected, determines the server LAN IP, and sends an Android VIEW/BROWSABLE intent for `http://<server-lan-ip>:<APP_PORT>/?tv`. Ten seconds later, a daemon thread sends `adb -s <TV_ADB_IP> shell input keyevent KEYCODE_ENTER` so the TV can complete first-load browser interaction. ADB is a system executable and is not provided by `requirements.txt`; install Android Platform Tools and authorize the TV before using this feature.
+The Settings **Play on TV with audio** button calls `POST /playOnTV` and opens `http://<server-lan-ip>:<APP_PORT>/local/?tv`, which enables TV playback including audio. **Play on TV** calls `POST /playOnTV?tvm` and opens the same interface with `?tvm`, which leaves audio playback stopped. The route uses the `TV_ADB_IP` setting, starts or connects ADB, verifies that the device is authorized and connected, and determines the server LAN IP. Ten seconds later, a daemon thread sends `adb -s <TV_ADB_IP> shell input keyevent KEYCODE_ENTER` so the TV can complete first-load browser interaction. ADB is a system executable and is not provided by `requirements.txt`; install Android Platform Tools and authorize the TV before using this feature.
 
 ### `userconfig.json`
 

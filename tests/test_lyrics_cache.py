@@ -140,3 +140,84 @@ def test_fetched_local_lyrics_register_the_local_file_and_link_cache(
     assert song["local_path"] == str(local_path)
     assert song["work_key"] == "artist track"
     assert lyric["song_id"] == song["id"]
+
+
+def test_incognito_fetch_reads_lyrics_without_writing_song_or_lyrics(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(history_db, "PLAYLIST_DIR", str(tmp_path / "db"))
+    history_db.init_db()
+    local_path = tmp_path / "Track.mp3"
+    local_path.write_bytes(b"local audio placeholder")
+    monkeypatch.setattr(
+        lyrics_service.LyricsService,
+        "_resolve_artist_and_track",
+        staticmethod(lambda _query: ("Artist", "Track")),
+    )
+    monkeypatch.setattr(
+        lyrics_service.requests,
+        "get",
+        lambda *_args, **_kwargs: FakeResponse([{
+            "syncedLyrics": "[00:02.00] Private lyric",
+            "plainLyrics": "Private lyric",
+        }]),
+    )
+
+    service = lyrics_service.LyricsService(lyrics_effort="LRCLIB")
+    service._load_lyrics(
+        "Track.mp3",
+        0,
+        local_path=str(local_path),
+        incognito_mode=True,
+    )
+
+    assert service.current_lyrics == [(2.0, "Private lyric")]
+    with history_db.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM songs").fetchone()[0] == 0
+    with history_db.get_lyrics_connection() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM lyrics_db.lyrics"
+        ).fetchone()[0] == 0
+
+
+def test_incognito_fetch_can_read_cached_lyrics_without_song_registration(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(history_db, "PLAYLIST_DIR", str(tmp_path / "db"))
+    history_db.init_db()
+    history_db.save_lyrics_cache(
+        "Track",
+        "Artist",
+        [(1.0, "Cached lyric")],
+        "LRCLIB",
+    )
+
+    def unexpected_registration(*_args, **_kwargs):
+        raise AssertionError("Incognito lookups must not register songs")
+
+    monkeypatch.setattr(
+        lyrics_service,
+        "upsert_song",
+        unexpected_registration,
+    )
+    monkeypatch.setattr(
+        lyrics_service,
+        "upsert_local_song",
+        unexpected_registration,
+    )
+
+    def unexpected_request(*_args, **_kwargs):
+        raise AssertionError("Cached lyrics must avoid provider requests")
+
+    monkeypatch.setattr(lyrics_service.requests, "get", unexpected_request)
+    service = lyrics_service.LyricsService(lyrics_effort="LRCLIB")
+    service._load_lyrics(
+        "Artist - Track",
+        0,
+        video_id="abcdefghijk",
+        incognito_mode=True,
+    )
+
+    assert service.current_lyrics == [(1.0, "Cached lyric")]
+    with history_db.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM songs").fetchone()[0] == 0

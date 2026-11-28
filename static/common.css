@@ -1172,6 +1172,19 @@ nav {
   white-space: nowrap;
 }
 
+.tv-action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.tv-action-buttons .settings-action-btn {
+  flex: 1;
+  min-width: 0;
+  padding-right: 8px;
+  padding-left: 8px;
+  white-space: normal;
+}
+
 .system-prompt-modal {
   z-index: 4000;
 }

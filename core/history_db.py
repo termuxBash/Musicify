@@ -275,18 +275,6 @@ def get_lyrics_connection():
     return conn
 
 
-def get_all_registered_tables():
-    """Return history table names from the registry."""
-    _ensure_core_schema()
-    with get_connection() as conn:
-        return [
-            row["table_name"]
-            for row in conn.execute(
-                "SELECT table_name FROM history_tables ORDER BY table_name"
-            ).fetchall()
-        ]
-
-
 def create_table(table_name):
     """Create a history table if it doesn't already exist.
 
@@ -323,20 +311,15 @@ def create_table(table_name):
 
 
 def get_all_tables():
-    """Return a list of all custom tables currently in history.sqlite3."""
+    """Return registered history tables."""
     init_db()
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT name FROM sqlite_master
-            WHERE type='table'
-              AND name NOT LIKE 'sqlite_%'
-              AND name NOT IN (
-                  'extra_data', 'gemini_usage', 'songs', 'history_tables'
-              )
-            ORDER BY name;
-        """)
-        tables = [row["name"] for row in cursor.fetchall()]
+        tables = [
+            row["table_name"]
+            for row in conn.execute(
+                "SELECT table_name FROM history_tables ORDER BY table_name"
+            ).fetchall()
+        ]
     if "history" not in tables:
         create_table("history")
         tables.insert(0, "history")

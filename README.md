@@ -41,7 +41,7 @@ For TV playback, install Android Platform Tools and make `adb` available on `PAT
 ```bash
 sudo apt install android-tools-adb
 ```
-Enable wireless debugging or network ADB on the Android TV, set `TV_ADB_IP` in `.env` to its `host:port` address (default `192.168.29.193:5555`), and authorize the initial ADB prompt on the TV. The **Play on TV** button in Settings connects to the TV and opens `http://<server-lan-ip>:<APP_PORT>/?tv`.
+Enable wireless debugging or network ADB on the Android TV, set `TV_ADB_IP` in `.env` to its `host:port` address (default `192.168.29.193:5555`), and authorize the initial ADB prompt on the TV. The Settings buttons open the TV interface with audio (**Play on TV with audio**, `?tv`) or without starting audio playback (**Play on TV**, `?tvm`).
 
 6. Start Musicify:
 ```bash

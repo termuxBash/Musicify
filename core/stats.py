@@ -95,6 +95,7 @@ def stats():
             max_effort="LRCLIB" if local_lyrics else None,
             local_path=lyrics_local_path,
             video_id=lyrics_video_id,
+            incognito_mode=current_app.incogni_mode,
         )
     # If paused, shift back the clock baseline so lyrics don't keep running ahead
     if not is_playing and lyrics_svc.song_start_time is not None:
@@ -152,6 +153,7 @@ def toggle_lyrics():
             max_effort="LRCLIB" if local_lyrics else None,
             local_path=local_path,
             video_id=current_song.get("videoId") if current_song else None,
+            incognito_mode=current_app.incogni_mode,
         )
     return jsonify({
         "status": "success",
@@ -320,7 +322,11 @@ def play_on_tv():
             message = f"TV at {device_ip} is not connected"
         return jsonify({"status": "error", "message": message}), 502
 
-    target_url = f"http://{_get_local_ip()}:{settings.APP_PORT}/local/?tv"
+    tv_param = "tvm" if (
+        "tvm" in request.args
+        and request.args.get("tvm", "").lower() in {"", "1", "true", "on"}
+    ) else "tv"
+    target_url = f"http://{_get_local_ip()}:{settings.APP_PORT}/local/?{tv_param}"
     intent_code, intent_stdout, intent_stderr = _run_adb_command([
         "adb", "-s", device_ip, "shell", "am", "start",
         "-a", "android.intent.action.VIEW",

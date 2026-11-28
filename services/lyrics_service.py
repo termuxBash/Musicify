@@ -97,7 +97,7 @@ def is_non_english_script(lyrics):
     )
 
 
-def romanize_lyrics(lyrics):
+def romanize_lyrics(lyrics, record_usage=True):
     """Romanize and translate lyrics with Gemini, preserving source line structure."""
     if not lyrics or not lyrics.strip() or not settings.GEMINI_API_KEY:
         return None
@@ -128,7 +128,7 @@ LYRICS:
             ),
         )
         usage = response.usage_metadata
-        if usage:
+        if usage and record_usage:
             log_gemini_usage(usage, source_code=1)
         formatted_lyrics = response.text
         if not isinstance(formatted_lyrics, str):
@@ -165,7 +165,14 @@ class LyricsService:
         self._lock = threading.Lock()
         self._generation = 0
 
-    def reset(self, song_title, max_effort=None, local_path=None, video_id=None):
+    def reset(
+        self,
+        song_title,
+        max_effort=None,
+        local_path=None,
+        video_id=None,
+        incognito_mode=False,
+    ):
         """Reset the timeline and fetch lyrics asynchronously for a new track."""
         with self._lock:
             self._generation += 1
@@ -180,7 +187,14 @@ class LyricsService:
 
         threading.Thread(
             target=self._load_lyrics,
-            args=(song_title, generation, max_effort, local_path, video_id),
+            args=(
+                song_title,
+                generation,
+                max_effort,
+                local_path,
+                video_id,
+                incognito_mode,
+            ),
             daemon=True,
         ).start()
 
@@ -208,7 +222,13 @@ class LyricsService:
                 self.lyrics_source = source
 
     def _load_lyrics(
-        self, song_title, generation, max_effort=None, local_path=None, video_id=None
+        self,
+        song_title,
+        generation,
+        max_effort=None,
+        local_path=None,
+        video_id=None,
+        incognito_mode=False,
     ):
         with self._lock:
             lyrics_effort = self.lyrics_effort
@@ -236,24 +256,25 @@ class LyricsService:
             cache_track = query
 
         song_row_id = None
-        try:
-            if video_id:
-                song_row_id = upsert_song(
-                    video_id,
-                    song_title,
-                    track_name=cache_track,
-                    artist_name=cache_artist,
-                    local_path=local_path,
-                )
-            elif local_path:
-                song_row_id = upsert_local_song(
-                    local_path,
-                    song_title,
-                    track_name=cache_track,
-                    artist_name=cache_artist,
-                )
-        except (OSError, sqlite3.Error) as error:
-            logger.warning("Could not register song for lyrics %s: %s", query, error)
+        if not incognito_mode:
+            try:
+                if video_id:
+                    song_row_id = upsert_song(
+                        video_id,
+                        song_title,
+                        track_name=cache_track,
+                        artist_name=cache_artist,
+                        local_path=local_path,
+                    )
+                elif local_path:
+                    song_row_id = upsert_local_song(
+                        local_path,
+                        song_title,
+                        track_name=cache_track,
+                        artist_name=cache_artist,
+                    )
+            except (OSError, sqlite3.Error) as error:
+                logger.warning("Could not register song for lyrics %s: %s", query, error)
 
         try:
             cached = get_lyrics_cache(
@@ -275,7 +296,7 @@ class LyricsService:
             logger.warning("Could not resolve a track for lyrics: %s", query)
             return
 
-        if local_path or video_id:
+        if not incognito_mode and (local_path or video_id):
             try:
                 if video_id:
                     song_row_id = upsert_song(
@@ -363,7 +384,11 @@ class LyricsService:
                 if is_non_english_script(transformed_lyrics)
                 else ""
             )
-            gemini_lyrics = romanize_lyrics(gemini_source) if gemini_source else None
+            gemini_lyrics = (
+                romanize_lyrics(gemini_source, record_usage=not incognito_mode)
+                if gemini_source
+                else None
+            )
 
         if gemini_lyrics:
             gemini_lines = align_lyrics(gemini_lyrics, synced_lyrics, plain_lyrics)
@@ -372,7 +397,7 @@ class LyricsService:
                 best_lines = gemini_lines
                 best_source = "Gemini"
 
-        if best_lines and best_source:
+        if best_lines and best_source and not incognito_mode:
             try:
                 save_lyrics_cache(
                     cache_track,

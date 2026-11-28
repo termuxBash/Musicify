@@ -227,3 +227,9 @@ def test_play_on_tv_opens_configured_url(monkeypatch):
     assert "http://192.168.29.157:5000/local/?tv" in commands[-1]
     assert delayed_threads[0]["target"] is stats._press_enter_after_page_load
     assert delayed_threads[0]["args"] == ("192.168.29.193:5555",)
+
+    muted_response = app.test_client().post("/playOnTV?tvm")
+
+    assert muted_response.status_code == 200
+    assert muted_response.get_json()["url"] == "http://192.168.29.157:5000/local/?tvm"
+    assert "http://192.168.29.157:5000/local/?tvm" in commands[-1]
