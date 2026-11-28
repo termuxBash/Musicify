@@ -576,3 +576,109 @@ def test_decoder_stderr_is_logged_with_stream_url_redacted(caplog):
 
     assert "Could not open <stream-url>" in caplog.text
     assert "signature=secret" not in caplog.text
+
+
+def test_publisher_cmd_uses_zero_reencode_aac_to_fragmented_mp4():
+    service = FFmpegService(icecast_url="icecast://source:hackme@127.0.0.1:8000/mpv.m4a")
+    aac_cmd = service._publisher_cmd(mode="aac")
+    ogg_cmd = service._publisher_cmd(mode="ogg")
+
+    assert aac_cmd[:5] == ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f"]
+    assert aac_cmd[aac_cmd.index("-f") + 1] == "aac"
+    assert aac_cmd[aac_cmd.index("-c:a") + 1] == "copy"
+    assert aac_cmd[aac_cmd.index("-content_type") + 1] == "audio/aac"
+    assert aac_cmd[-3:] == ["-f", "adts", "icecast://source:hackme@127.0.0.1:8000/mpv.m4a"]
+
+    assert ogg_cmd[ogg_cmd.index("-c:a") + 1] == "libvorbis"
+    assert ogg_cmd[ogg_cmd.index("-content_type") + 1] == "application/ogg"
+    assert ogg_cmd[-3:] == ["-f", "ogg", "icecast://source:hackme@127.0.0.1:8000/mpv.m4a"]
+
+
+def test_stream_m4a_to_publisher_copies_adts_without_reencode(monkeypatch, tmp_path):
+    m4a_file = tmp_path / "song.m4a"
+    m4a_file.write_bytes(b"fake-m4a")
+    popen_calls = []
+
+    fake_publisher = MagicMock()
+    fake_publisher.poll.return_value = None
+    fake_publisher.stdin = io.BytesIO()
+
+    fake_demux = MagicMock()
+    fake_demux.stdout = io.BytesIO(b"ADTS_FRAME_BYTES")
+    fake_demux.stderr = io.BytesIO(b"")
+
+    def fake_popen(cmd, **kwargs):
+        popen_calls.append(cmd)
+        return fake_demux
+
+    monkeypatch.setattr("services.ffmpeg_service.subprocess.Popen", fake_popen)
+    service = FFmpegService(cache_dir=tmp_path)
+    service.publisher_process = fake_publisher
+    service._ensure_pump_thread = lambda: None
+
+    stop_event = threading.Event()
+    result = service.stream_m4a_to_publisher(str(m4a_file), stop_event)
+
+    assert result is True
+    assert len(popen_calls) == 1
+    demux_cmd = popen_calls[0]
+    assert demux_cmd[demux_cmd.index("-c:a") + 1] == "copy"
+    assert demux_cmd[demux_cmd.index("-f") + 1] == "adts"
+    assert demux_cmd[demux_cmd.index("-i") + 1] == str(m4a_file)
+    assert fake_publisher.stdin.getvalue() == b"ADTS_FRAME_BYTES"
+
+
+def test_queue_player_streams_silence_m4a_while_precaching_then_switches_to_track(tmp_path):
+    silence_file = tmp_path / "silence.m4a"
+    silence_file.write_bytes(b"silence")
+    cached_file = tmp_path / "track.m4a"
+    cached_file.write_bytes(b"track")
+    streamed = []
+    precache_gate = threading.Event()
+
+    class MockM4aFFmpeg:
+        def __init__(self):
+            self.silence_m4a = silence_file
+
+        def ensure_publisher(self):
+            return object()
+
+        def stop_publisher(self):
+            pass
+
+        def find_cached_song(self, _song):
+            return None
+
+        def precache_song(self, _song):
+            precache_gate.wait(timeout=2)
+            return {"path": str(cached_file), "duration": 120.0}
+
+        def stream_m4a_to_publisher(self, m4a_path, stop_event, on_bytes=None):
+            streamed.append(m4a_path)
+            if m4a_path == str(silence_file):
+                precache_gate.set()
+                stop_event.wait(timeout=1)
+            else:
+                if on_bytes:
+                    on_bytes(4096)
+            return True
+
+    player = QueuePlayer(MockM4aFFmpeg(), autoplay_enabled=False)
+    player.running = True
+    handled = player._stream_m4a_track(
+        {"title": "Uncached YT", "source_url": "https://www.youtube.com/watch?v=abcdefghijk"},
+        song_generation=0,
+    )
+
+    assert handled is True
+    assert str(silence_file) in streamed
+    assert streamed[-1] == str(cached_file)
+
+
+def test_get_silence_adts_slices_to_short_chunk():
+    service = FFmpegService()
+    chunk, duration = service._get_silence_adts()
+
+    assert len(chunk) > 0
+    assert len(chunk) < 500
+    assert 0.05 <= duration <= 0.15

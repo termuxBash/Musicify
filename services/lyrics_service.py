@@ -2,6 +2,7 @@
 
 import logging
 import re
+import sqlite3
 import threading
 import time
 import unicodedata
@@ -12,7 +13,7 @@ from google import genai  # type: ignore
 from google.genai import types as genai_types  # type: ignore
 
 from core import settings
-from core.history_db import log_gemini_usage
+from core.history_db import get_lyrics_cache, log_gemini_usage, save_lyrics_cache
 from services.lastfm_service import resolve_track
 
 logger = logging.getLogger(__name__)
@@ -214,11 +215,32 @@ class LyricsService:
             flags=re.IGNORECASE,
         )
         query = " ".join(clean_query.split()).strip()
+        if " - " in query:
+            cache_artist, cache_track = query.split(" - ", 1)
+            cache_artist = cache_artist.strip()
+            cache_track = cache_track.strip()
+        else:
+            cache_artist = None
+            cache_track = query
+
+        try:
+            cached = get_lyrics_cache(cache_track, cache_artist)
+        except (OSError, RuntimeError, sqlite3.Error) as error:
+            logger.warning("Lyrics cache lookup failed for %s: %s", query, error)
+            cached = None
+        if cached:
+            cached_lines, cached_source = cached
+            self._publish_lyrics(generation, cached_lines, cached_source)
+            logger.info("Loaded %d cached lyric lines for %s.", len(cached_lines), query)
+            return
+
         artist, track = self._resolve_artist_and_track(query)
         if not track:
             logger.warning("Could not resolve a track for lyrics: %s", query)
             return
 
+        best_lines = []
+        best_source = None
         synced_lyrics = ""
         plain_lyrics = ""
         try:
@@ -241,6 +263,8 @@ class LyricsService:
         lrclib_lines = align_lyrics("", synced_lyrics, plain_lyrics)
         if lrclib_lines:
             self._publish_lyrics(generation, lrclib_lines, "LRCLIB")
+            best_lines = lrclib_lines
+            best_source = "LRCLIB"
 
         transformed_lyrics = ""
         if max_step >= 1 and artist:
@@ -268,6 +292,9 @@ class LyricsService:
         lyrica_lines = align_lyrics(transformed_lyrics, synced_lyrics, plain_lyrics)
         if transformed_lyrics.strip():
             self._publish_lyrics(generation, lyrica_lines, "Lyrica")
+            if lyrica_lines:
+                best_lines = lyrica_lines
+                best_source = "Lyrica"
 
         gemini_lyrics = None
         if max_step >= 2:
@@ -283,6 +310,15 @@ class LyricsService:
         if gemini_lyrics:
             gemini_lines = align_lyrics(gemini_lyrics, synced_lyrics, plain_lyrics)
             self._publish_lyrics(generation, gemini_lines, "Gemini")
+            if gemini_lines:
+                best_lines = gemini_lines
+                best_source = "Gemini"
+
+        if best_lines and best_source:
+            try:
+                save_lyrics_cache(cache_track, cache_artist, best_lines, best_source)
+            except (OSError, RuntimeError, sqlite3.Error) as error:
+                logger.warning("Could not cache lyrics for %s: %s", query, error)
 
         with self._lock:
             if generation == self._generation:
